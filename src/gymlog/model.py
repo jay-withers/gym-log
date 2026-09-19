@@ -56,6 +56,12 @@ class Exercise:
     sets: int = 0
     rep_low: int = 0
     rep_high: int = 0
+    # The target for each set in turn, when they differ. The sheet writes these
+    # as `10/12/12`, meaning the first set is a ten and the next two are twelves,
+    # and collapsing that to a 10-12 range loses which set is which. Empty means
+    # every set shares `rep_low`-`rep_high`; `rep_low`/`rep_high` stay the min
+    # and max of these, so the progression rule needs no knowledge of them.
+    rep_targets: tuple[int, ...] = ()
     rest_seconds: int = 0
     # The smallest useful jump *for this movement*. Per-exercise rather than
     # global because the logged weights are mixed — 7.5, 55, 24 and 5 all came
@@ -66,6 +72,18 @@ class Exercise:
     # first real session supersedes it. Not a log entry: it carries no date, and
     # inventing one would put a lie at the head of the history.
     seed_weight: float | None = None
+
+    def target_for(self, position: int) -> int:
+        """The rep target for set `position`, 0-based.
+
+        Falls back to `rep_low` rather than raising for a position the sheet did
+        not describe: a block edited by hand in the portal can carry fewer
+        targets than sets, and a session form that renders is better than one
+        that 500s over a placeholder.
+        """
+        if position < len(self.rep_targets):
+            return self.rep_targets[position]
+        return self.rep_low
 
     @property
     def tracked(self) -> bool:
@@ -86,6 +104,8 @@ class Exercise:
             "rest_seconds": self.rest_seconds,
             "increment": self.increment,
         }
+        if self.rep_targets:
+            payload["rep_targets"] = list(self.rep_targets)
         if self.seed_weight is not None:
             payload["seed_weight"] = self.seed_weight
         return payload
@@ -98,6 +118,7 @@ class Exercise:
             sets=int(payload.get("sets", 0) or 0),
             rep_low=int(payload.get("rep_low", 0) or 0),
             rep_high=int(payload.get("rep_high", 0) or 0),
+            rep_targets=tuple(int(r) for r in payload.get("rep_targets", []) or ()),
             rest_seconds=int(payload.get("rest_seconds", 0) or 0),
             increment=float(payload.get("increment", 2.5) or 2.5),
             seed_weight=(
@@ -204,6 +225,11 @@ class Entry:
     exercise: str
     sets: tuple[SetLog, ...] = ()
     note: str = ""
+    # How long it took, for a movement timed rather than counted — the sled push
+    # and the sandbag lunges. Optional even for those: the finisher is performed
+    # whether or not anyone started a clock, so 0 means untimed, not zero
+    # seconds, and `sets` stays empty because there is no load to record.
+    seconds: int = 0
 
     def to_json(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -213,7 +239,16 @@ class Entry:
         }
         if self.note:
             payload["note"] = self.note
+        if self.seconds:
+            payload["seconds"] = self.seconds
         return payload
+
+    @property
+    def time_label(self) -> str:
+        """`90` -> `1:30`, `45` -> `0:45`. Empty when untimed."""
+        if not self.seconds:
+            return ""
+        return f"{self.seconds // 60}:{self.seconds % 60:02d}"
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Entry:
@@ -222,6 +257,7 @@ class Entry:
             exercise=str(payload.get("exercise", "")),
             sets=tuple(SetLog.from_json(s) for s in payload.get("sets", []) if isinstance(s, dict)),
             note=str(payload.get("note", "")),
+            seconds=int(payload.get("seconds", 0) or 0),
         )
 
 
@@ -284,7 +320,9 @@ class Log:
         """The most recent performance of `exercise`, with the date it happened."""
         for session in self.sessions_for(exercise):
             for entry in session.entries:
-                if entry.exercise == exercise and entry.sets:
+                # `or entry.seconds`: the finisher records a time and no sets,
+                # and it is still the last thing that happened on that movement.
+                if entry.exercise == exercise and (entry.sets or entry.seconds):
                     return entry, session.date
         return None
 

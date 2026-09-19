@@ -11,7 +11,7 @@ from datetime import date
 
 import pytest
 
-from gymlog.importer import _rep_range, _rest_seconds, import_workbook
+from gymlog.importer import _rep_targets, _rest_seconds, import_workbook
 
 WORKBOOK = pathlib.Path("/Users/jay/Git/Gym_3.xlsx")
 
@@ -38,23 +38,73 @@ def test_the_prescription_survives_the_round_trip(block):
     chest = block.days["A"].exercises[0]
     assert chest.name == "Low-to-High Cable Flyes"
     assert chest.sets == 3
-    assert (chest.rep_low, chest.rep_high) == (10, 12)
+    # The `Reps` beside `Weight` says 15, not the 10-12 beside `Sets`.
+    assert (chest.rep_low, chest.rep_high) == (15, 15)
     assert chest.seed_weight == 7.5
     # "60-70secs" -> the midpoint.
     assert chest.rest_seconds == 65
+
+
+def test_the_reps_come_from_the_column_beside_weight(block):
+    """The sheet has two `Reps` columns and the second is the one worked to.
+
+    Chest reads `10-12` beside `Sets` and `15` beside `Weight`. Reading the
+    first would prescribe a range that has not been trained to in some time.
+    """
+    by_name = {e.name: e for e in block.days["A"].exercises}
+    assert (
+        by_name["Low-to-High Cable Flyes"].rep_low,
+        by_name["Low-to-High Cable Flyes"].rep_high,
+    ) == (15, 15)
+    assert (by_name["DB Step Ups"].rep_low, by_name["DB Step Ups"].rep_high) == (10, 10)
+
+
+def test_a_slashed_value_is_one_target_per_set(block):
+    """`10/12/12` is a ten then two twelves, in that order."""
+    triceps = {e.slot: e for e in block.days["A"].exercises}["triceps"]
+    assert triceps.name == "Overhead Cable Tricep Ext"
+    assert triceps.rep_targets == (10, 12, 12)
+    # The range still spans them, so double progression needs no special case.
+    assert (triceps.rep_low, triceps.rep_high) == (10, 12)
+    assert [triceps.target_for(i) for i in range(triceps.sets)] == [10, 12, 12]
+
+
+def test_a_flat_value_stores_no_per_set_targets(block):
+    """`15` across three sets is what `rep_low`/`rep_high` already say."""
+    chest = block.days["A"].exercises[0]
+    assert chest.rep_targets == ()
+    assert [chest.target_for(i) for i in range(chest.sets)] == [15, 15, 15]
+
+
+def test_every_slashed_row_in_the_sheet_is_read_in_order(block):
+    """The five rows that carry per-set reps, as the workbook actually has them."""
+    found = {
+        e.name: e.rep_targets for day in block.days.values() for e in day.exercises if e.rep_targets
+    }
+    assert found == {
+        "Overhead Cable Tricep Ext": (10, 12, 12),
+        "EZ-Bar Curls": (10, 10, 12),
+        "DB Rear Delt Flyes": (12, 12, 15),
+        "Rope Pushdowns": (10, 10, 12),
+        "Incline DB Bicep Curls": (10, 12, 12),
+    }
 
 
 def test_the_finisher_is_untracked(block):
     finisher = block.days["A"].exercises[-1]
     assert finisher.name == "Sled Push"
     assert not finisher.tracked
+    # Timed rather than loaded, so the sheet gives it no reps to import.
+    assert finisher.rep_targets == ()
+    assert block.days["B"].exercises[-1].name == "Sandbag Lunges"
 
 
 def test_no_session_is_fabricated_from_the_achieved_reps(block):
     """The sheet's achieved-reps cells carry no date. They must not become history.
 
-    They are read only as `seed_weight`; inventing a session date would put a lie
-    at the head of the log this application exists to keep honest.
+    The reps and weight inform the *prescription* and the seed weight; neither
+    becomes a dated entry, because inventing a session date would put a lie at
+    the head of the log this application exists to keep honest.
     """
     assert block.days["A"].exercises[0].seed_weight == 7.5
 
@@ -80,11 +130,21 @@ def test_an_empty_workbook_is_refused(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("raw", "expected"),
-    [("10-12", (10, 12)), ("8-10", (8, 10)), ("12", (12, 12)), ("", (0, 0)), ("AMRAP", (0, 0))],
+    ("raw", "sets", "expected"),
+    [
+        ("10/12/12", 3, (10, 12, 12)),
+        ("15", 3, (15, 15, 15)),
+        # Fewer numbers than sets: padded with the last rather than refused.
+        ("10/12", 3, (10, 12, 12)),
+        # More than sets: truncated.
+        ("10/12/12/12", 3, (10, 12, 12)),
+        ("", 3, ()),
+        ("AMRAP", 3, ()),
+        ("12", 0, ()),
+    ],
 )
-def test_rep_ranges(raw, expected):
-    assert _rep_range(raw) == expected
+def test_rep_targets(raw, sets, expected):
+    assert _rep_targets(raw, sets) == expected
 
 
 @pytest.mark.parametrize(

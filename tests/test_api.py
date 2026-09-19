@@ -217,3 +217,68 @@ def test_a_write_that_loses_its_race_is_reported_not_swallowed(client, seeded, m
         "/session/A", data={"date": "2026-09-15", "reps_0_0": "12", "weight_0_0": "7.5"}
     )
     assert response.status_code == 409
+
+
+# --- the finisher ------------------------------------------------------------
+
+
+def test_a_finisher_time_is_recorded(client, seeded):
+    """Sled Push takes no load, but a time gets entered when it is remembered."""
+    login(client)
+    client.post("/session/A", data={"date": "2026-09-15", "seconds_1": "1:30"})
+
+    log, _etag = store.load()
+    finisher = log.sessions[-1].entries[-1]
+    assert finisher.exercise == "Sled Push"
+    assert finisher.sets == ()
+    assert finisher.seconds == 90
+    assert finisher.time_label == "1:30"
+
+
+def test_a_finisher_time_alone_counts_as_having_done_it(client, seeded):
+    """No tick box, just a time. Typing one is the stronger statement of the two."""
+    login(client)
+    response = client.post("/session/A", data={"date": "2026-09-15", "seconds_1": "45"})
+    assert response.status_code == 303
+
+    log, _etag = store.load()
+    assert log.sessions[-1].entries[-1].seconds == 45
+
+
+def test_a_ticked_finisher_with_no_time_is_still_recorded(client, seeded):
+    """The time is optional. Ticking it off without one must keep working."""
+    login(client)
+    client.post("/session/A", data={"date": "2026-09-15", "done_1": "1"})
+
+    log, _etag = store.load()
+    finisher = log.sessions[-1].entries[-1]
+    assert finisher.note == "done"
+    assert finisher.seconds == 0
+    assert finisher.time_label == ""
+
+
+def test_an_unticked_untimed_finisher_is_not_recorded(client, seeded):
+    """Neither field filled in is the same as not having done it."""
+    login(client)
+    response = client.post("/session/A", data={"date": "2026-09-15"})
+    assert response.status_code == 303
+    assert "empty=1" in response.headers["location"]
+
+
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [
+        ("90", 90),
+        ("1:30", 90),
+        ("2m", 120),
+        ("1m30", 90),
+        ("0:45", 45),
+        ("", 0),
+        # Unparseable is untimed, not a refused session.
+        ("ages", 0),
+    ],
+)
+def test_the_time_field_takes_what_a_phone_keyboard_makes_easy(typed, expected):
+    from gymlog.api.routes import _seconds
+
+    assert _seconds(typed) == expected
