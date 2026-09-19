@@ -166,9 +166,9 @@ Ordering-sensitive:
 Every workflow is a thin caller of a reusable workflow in
 [jay-withers/workflows](https://github.com/jay-withers/workflows), pinned by
 commit SHA with the tag as a comment. Required checks are set in `github-repos`,
-not here: `pre-commit / Pre-commit`, `test / Test`, `terraform / Terraform` and
-`terraform-plan`. Read them off `gh pr checks` rather than inferring them.
-
-Only `dev` is planned, because only `dev` exists on the platform.
+not here: `pre-commit / Pre-commit`, `test / Test` and `terraform / Terraform`.
+Read them off `gh pr checks` rather than inferring them. Terraform plans are
+run manually with Azure access because the shared platform environment is
+resolved through a data source.
 
 Generated Terraform reference: [`terraform/README.md`](terraform/README.md).
