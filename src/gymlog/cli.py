@@ -1,9 +1,13 @@
-"""One entrypoint — `gymlog serve|import|show`.
+"""One entrypoint — `gymlog serve|import|show|seed`.
 
 `serve` is the workload; `import` and `show` are operator commands that run
 against the real blob, so they need `STATE_CONTAINER_URL` and a credential with
 `Storage Blob Data Contributor` on the container — which whoever applied the
 Terraform already has.
+
+`seed` is the opposite: it exists only for local work, writes a sample log in
+exactly the shape the blob holds, and refuses to run at all when
+`STATE_CONTAINER_URL` is set.
 
 Note Terraform deliberately sets **no** `command`: the Dockerfile's `ENTRYPOINT`
 names this console script, and duplicating that name in Terraform creates a
@@ -81,6 +85,13 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("show", help="print the log as JSON")
 
+    seed = sub.add_parser("seed", help="write a sample log for local work")
+    seed.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite an existing local log",
+    )
+
     args = parser.parse_args(argv)
 
     _configure_logging()
@@ -95,6 +106,8 @@ def main(argv: list[str] | None = None) -> int:
             return _import(args)
         if args.command == "show":
             return _show()
+        if args.command == "seed":
+            return _seed(args)
     finally:
         telemetry.flush()
 
@@ -131,6 +144,40 @@ def _import(args: argparse.Namespace) -> int:
         block.name,
         counts,
         len(log.blocks),
+    )
+    return 0
+
+
+def _seed(args: argparse.Namespace) -> int:
+    """Write a sample log to the *local* file, for working on the app offline.
+
+    **Refuses point blank when STATE_CONTAINER_URL is set.** `store.save` writes
+    wherever it is pointed, and pointing this at the deployed container would
+    replace a real training history with invented sessions — the one thing this
+    application exists not to do. A flag to override is deliberately absent:
+    unset the variable for the length of one command instead.
+    """
+    from . import store
+    from .seed import sample_log
+
+    if settings().state_container_url:
+        logging.getLogger("gymlog").error(
+            "refusing to seed: STATE_CONTAINER_URL is set, and this would overwrite "
+            "the real log with invented sessions. Run it without that variable."
+        )
+        return 1
+
+    path = store.local_path()
+    if path.exists() and not args.force:
+        logging.getLogger("gymlog").error(
+            "refusing to seed: %s already exists. Pass --force to replace it.", path
+        )
+        return 1
+
+    log = sample_log()
+    store.save(log)
+    logging.getLogger("gymlog").info(
+        "seeded %s — %d block(s), %d session(s)", path, len(log.blocks), len(log.sessions)
     )
     return 0
 
