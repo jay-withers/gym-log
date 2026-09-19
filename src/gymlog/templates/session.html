@@ -3,80 +3,81 @@
 {% block subtitle %}{{ label }} · week {{ week }}{% endblock %}
 {% block body %}
 
-<form method="post" action="/session/{{ day }}" data-logged="{{ 1 if already_logged else 0 }}">
+{# Each exercise is its own form, posting on its own. Nested forms are not a
+   thing in HTML, so this is a list of forms rather than one form of sections -
+   which is also what lets a save be a plain submit with no JavaScript. #}
+
+<div class="last" id="progress">{{ done }} of {{ cards | length }} recorded today</div>
+
+{% for card in cards %}
+{% set e = card.exercise %}
+{% set rec = card.recorded %}
+<form method="post" action="/session/{{ day }}/{{ card.index }}"
+      class="card {% if rec %}recorded{% endif %}" id="e{{ card.index }}"
+      data-logged="{{ 1 if rec else 0 }}">
   <input type="hidden" name="date" value="{{ today }}">
 
-  <div class="banner" id="restored" hidden>
-    Picked up where you left off. <strong>Nothing is saved until you press
-    Save session.</strong>
-  </div>
+  <div class="slot">{{ e.slot }}{% if rec %} · saved{% endif %}</div>
+  <div class="name">{{ e.name }}</div>
 
-  {% for card in cards %}
-  {% set e = card.exercise %}
-  <div class="card">
-    <div class="slot">{{ e.slot }}</div>
-    <div class="name">{{ e.name }}</div>
-
-    {% if card.suggestion %}
-      {# The card is name, target, inputs — nothing else. The suggestion still
-         drives both placeholders, so what to reach for is in the boxes being
-         typed into rather than on a line above them restating it. #}
-      {% if e.rep_range_label %}
-      <div class="target {% if card.suggestion.stalled %}stalled{% endif %}">
-        Target <b>{{ e.rep_range_label }} reps</b>
-        {% if e.rep_targets and e.rep_targets | unique | list | length > 1 %}
-          <span class="per-set">· per set {{ e.rep_targets | join("/") }}</span>
-        {% endif %}
-      </div>
+  {% if card.suggestion %}
+    {% if e.rep_range_label %}
+    <div class="target {% if card.suggestion.stalled and not rec %}stalled{% endif %}">
+      Target <b>{{ e.rep_range_label }} reps</b>
+      {% if e.rep_targets and e.rep_targets | unique | list | length > 1 %}
+        <span class="per-set">· per set {{ e.rep_targets | join("/") }}</span>
       {% endif %}
+    </div>
+    {% endif %}
 
-      <div class="sets">
-        {% for position in range(e.sets) %}
-        <div class="set">
-          <span>{{ position + 1 }}</span>
-          {# The sheet's `10/12/12` is a different target per set, so the
-             placeholder follows the set once there is no history to progress
-             from. Once there is, the suggestion is the same number for every
-             set by design - double progression moves all of them together. #}
-          <input type="number" name="reps_{{ card.index }}_{{ position }}"
-                 placeholder="{% if card.last %}{{ card.suggestion.reps }}{% else %}{{ e.target_for(position) }}{% endif %} reps"
-                 inputmode="numeric" min="0" max="999">
-          <input type="number" name="weight_{{ card.index }}_{{ position }}"
-                 placeholder="{{ card.suggestion.weight_label }} kg"
-                 inputmode="decimal" step="0.5" min="0">
-        </div>
-        {% endfor %}
+    <div class="sets">
+      {% for position in range(e.sets) %}
+      {% set logged = rec.sets[position] if rec and position < rec.sets | length else None %}
+      <div class="set">
+        <span>{{ position + 1 }}</span>
+        <input type="number" name="reps_{{ card.index }}_{{ position }}"
+               value="{{ logged.reps if logged else '' }}"
+               placeholder="{% if card.last %}{{ card.suggestion.reps }}{% else %}{{ e.target_for(position) }}{% endif %} reps"
+               inputmode="numeric" min="0" max="999">
+        <input type="number" name="weight_{{ card.index }}_{{ position }}"
+               value="{{ '%g' % logged.weight if logged else '' }}"
+               placeholder="{{ card.suggestion.weight_label }} kg"
+               inputmode="decimal" step="0.5" min="0">
       </div>
+      {% endfor %}
+    </div>
 
+    <div class="row">
+      <button type="submit">{% if rec %}Update{% else %}Save{% endif %}</button>
       {% if e.rest_seconds %}
       <button type="button" class="btn ghost" data-rest="{{ e.rest_seconds }}">
         Rest {{ e.rest_seconds }}s
       </button>
       {% endif %}
-    {% else %}
-      {# The finisher takes no load and no reps, but it is timed. Both fields
-         are optional: either one on its own records that it was done. #}
-      {% if card.last and card.last.time_label %}
-        <div class="last">{{ card.last_date }}: {{ card.last.time_label }}</div>
-      {% endif %}
-      <label class="last">
-        <input type="checkbox" name="done_{{ card.index }}" value="1"> Done
-      </label>
-      <div class="sets">
-        <div class="set">
-          <span>time</span>
-          <input type="text" name="seconds_{{ card.index }}"
-                 placeholder="{{ card.last.time_label if card.last and card.last.time_label else '90 or 1:30' }}"
-                 inputmode="numeric" autocomplete="off">
-        </div>
+    </div>
+  {% else %}
+    {# The finisher: no load and no reps, but it is timed when remembered. #}
+    <div class="sets">
+      <div class="set">
+        <span>time</span>
+        <input type="text" name="seconds_{{ card.index }}"
+               value="{{ rec.time_label if rec and rec.seconds else '' }}"
+               placeholder="{{ card.last.time_label if card.last and card.last.time_label else '90 or 1:30' }}"
+               inputmode="numeric" autocomplete="off">
       </div>
-    {% endif %}
-  </div>
-  {% endfor %}
-
-  <button type="submit">Save session</button>
-  <a class="btn ghost" href="/">Cancel</a>
+    </div>
+    <label class="last">
+      <input type="checkbox" name="done_{{ card.index }}" value="1"
+             {% if rec %}checked{% endif %}> Done
+    </label>
+    <div class="row">
+      <button type="submit">{% if rec %}Update{% else %}Save{% endif %}</button>
+    </div>
+  {% endif %}
 </form>
+{% endfor %}
+
+<a class="btn ghost" href="/" style="margin-top:20px">Finish</a>
 
 <div class="timer" id="timer" hidden>
   <strong id="remaining">0:00</strong>
@@ -98,9 +99,9 @@
 // an append-only log is a lie about what was performed, and merging partial
 // sessions is a far larger change than keeping a draft on the device.
 (function () {
-  var form = document.querySelector('form[action^="/session/"]');
-  if (!form) { return; }
+  document.querySelectorAll('form[action^="/session/"]').forEach(setUp);
 
+  function setUp(form) {
   var key = 'gymlog:draft:' + form.getAttribute('action');
   var dateField = form.querySelector('input[name="date"]');
   var banner = document.getElementById('restored');
@@ -156,6 +157,7 @@
   restore();
   form.addEventListener('input', save);
   form.addEventListener('change', save);
+  }
 })();
 </script>
 

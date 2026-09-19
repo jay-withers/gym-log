@@ -128,9 +128,14 @@ def test_the_manifest_is_not_gated(client):
 
 
 def test_logging_a_session_records_only_what_was_filled_in(client, seeded):
+    """Two saves, one session.
+
+    Each exercise posts on its own, and they accumulate into the one session
+    for the day rather than one session each.
+    """
     login(client)
     response = client.post(
-        "/session/A",
+        "/session/A/0",
         data={
             "date": "2026-09-15",
             "reps_0_0": "12",
@@ -141,10 +146,10 @@ def test_logging_a_session_records_only_what_was_filled_in(client, seeded):
             # must not be recorded as a set of zero.
             "reps_0_2": "",
             "weight_0_2": "",
-            "done_1": "1",
         },
     )
     assert response.status_code == 303
+    client.post("/session/A/1", data={"date": "2026-09-15", "done_1": "1"})
 
     log, _ = store.load()
     assert len(log.sessions) == 1
@@ -154,20 +159,24 @@ def test_logging_a_session_records_only_what_was_filled_in(client, seeded):
     assert entries[1].sets == ()
 
 
-def test_an_entirely_empty_session_is_not_recorded(client, seeded):
+def test_an_exercise_with_nothing_in_it_is_not_recorded(client, seeded):
     """Recording it would put a zero-rep entry in the history and drag every
-    subsequent suggestion down."""
+    subsequent suggestion down.
+
+    It must also not start a session: a save that recorded nothing would
+    otherwise leave an empty session in the log for the day.
+    """
     login(client)
-    response = client.post("/session/A", data={"date": "2026-09-15"})
+    response = client.post("/session/A/0", data={"date": "2026-09-15"})
     assert response.status_code == 303
-    assert response.headers["location"].endswith("empty=1")
+    assert "empty=0" in response.headers["location"]
     assert store.load()[0].sessions == ()
 
 
 def test_the_suggestion_moves_after_a_session(client, seeded):
     login(client)
     client.post(
-        "/session/A",
+        "/session/A/0",
         data={
             "date": "2026-09-15",
             "reps_0_0": "12",
@@ -190,7 +199,7 @@ def test_rotating_keeps_the_slot_and_the_history(client, seeded):
     """The single thing the spreadsheet could not do."""
     login(client)
     client.post(
-        "/session/A",
+        "/session/A/0",
         data={"date": "2026-09-15", "reps_0_0": "12", "weight_0_0": "7.5"},
     )
     assert (
@@ -220,7 +229,7 @@ def test_a_write_that_loses_its_race_is_reported_not_swallowed(client, seeded, m
     monkeypatch.setattr(store, "update", conflict)
     login(client)
     response = client.post(
-        "/session/A", data={"date": "2026-09-15", "reps_0_0": "12", "weight_0_0": "7.5"}
+        "/session/A/0", data={"date": "2026-09-15", "reps_0_0": "12", "weight_0_0": "7.5"}
     )
     assert response.status_code == 409
 
@@ -231,7 +240,7 @@ def test_a_write_that_loses_its_race_is_reported_not_swallowed(client, seeded, m
 def test_a_finisher_time_is_recorded(client, seeded):
     """Sled Push takes no load, but a time gets entered when it is remembered."""
     login(client)
-    client.post("/session/A", data={"date": "2026-09-15", "seconds_1": "1:30"})
+    client.post("/session/A/1", data={"date": "2026-09-15", "seconds_1": "1:30"})
 
     log, _etag = store.load()
     finisher = log.sessions[-1].entries[-1]
@@ -244,7 +253,7 @@ def test_a_finisher_time_is_recorded(client, seeded):
 def test_a_finisher_time_alone_counts_as_having_done_it(client, seeded):
     """No tick box, just a time. Typing one is the stronger statement of the two."""
     login(client)
-    response = client.post("/session/A", data={"date": "2026-09-15", "seconds_1": "45"})
+    response = client.post("/session/A/1", data={"date": "2026-09-15", "seconds_1": "45"})
     assert response.status_code == 303
 
     log, _etag = store.load()
@@ -254,7 +263,7 @@ def test_a_finisher_time_alone_counts_as_having_done_it(client, seeded):
 def test_a_ticked_finisher_with_no_time_is_still_recorded(client, seeded):
     """The time is optional. Ticking it off without one must keep working."""
     login(client)
-    client.post("/session/A", data={"date": "2026-09-15", "done_1": "1"})
+    client.post("/session/A/1", data={"date": "2026-09-15", "done_1": "1"})
 
     log, _etag = store.load()
     finisher = log.sessions[-1].entries[-1]
@@ -266,9 +275,14 @@ def test_a_ticked_finisher_with_no_time_is_still_recorded(client, seeded):
 def test_an_unticked_untimed_finisher_is_not_recorded(client, seeded):
     """Neither field filled in is the same as not having done it."""
     login(client)
-    response = client.post("/session/A", data={"date": "2026-09-15"})
+    response = client.post("/session/A/1", data={"date": "2026-09-15"})
     assert response.status_code == 303
+    # `empty=<index>`: the card that had nothing in it, so the page can scroll
+    # back to it rather than to the top.
     assert "empty=1" in response.headers["location"]
+
+    log, _ = store.load()
+    assert log.sessions == ()
 
 
 @pytest.mark.parametrize(
@@ -294,8 +308,8 @@ def test_the_time_field_takes_what_a_phone_keyboard_makes_easy(typed, expected):
 
 
 def _card(page: str, name: str) -> str:
-    """The markup for one exercise's card."""
-    for card in page.split('<div class="card">')[1:]:
+    """The markup for one exercise's card, which is now its own form."""
+    for card in page.split('<form method="post"')[1:]:
         if f">{name}<" in card:
             return card
     raise AssertionError(f"no card for {name}")
@@ -332,7 +346,7 @@ def test_falling_short_still_shows_on_the_stripped_card(client, seeded):
     """
     login(client)
     client.post(
-        "/session/A",
+        "/session/A/0",
         data={
             "date": "2026-09-15",
             "reps_0_0": "6",
@@ -358,7 +372,7 @@ def test_the_form_reports_that_nothing_is_logged_yet(client, seeded):
 def test_the_form_reports_a_session_already_logged_today(client, seeded):
     login(client)
     client.post(
-        "/session/A",
+        "/session/A/0",
         data={"date": date.today().isoformat(), "reps_0_0": "10", "weight_0_0": "7.5"},
     )
     assert 'data-logged="1"' in client.get("/session/A").text
@@ -372,7 +386,7 @@ def test_a_session_logged_on_another_date_does_not_clear_today_s_draft(client, s
     """
     login(client)
     client.post(
-        "/session/A",
+        "/session/A/0",
         data={"date": "2026-01-02", "reps_0_0": "10", "weight_0_0": "7.5"},
     )
     assert 'data-logged="0"' in client.get("/session/A").text
@@ -391,10 +405,112 @@ def test_a_conflict_leaves_the_form_reporting_nothing_logged(client, seeded, mon
     monkeypatch.setattr(store, "update", _boom)
     login(client)
     response = client.post(
-        "/session/A",
+        "/session/A/0",
         data={"date": date.today().isoformat(), "reps_0_0": "10", "weight_0_0": "7.5"},
     )
     assert response.status_code == 409
 
     monkeypatch.undo()
     assert 'data-logged="0"' in client.get("/session/A").text
+
+
+# --- saving one exercise at a time -------------------------------------------
+
+
+def test_six_saves_make_one_session(client, seeded):
+    """The unit is the training day, not the submit."""
+    login(client)
+    when = date.today().isoformat()
+    client.post("/session/A/0", data={"date": when, "reps_0_0": "10", "weight_0_0": "7.5"})
+    client.post("/session/A/1", data={"date": when, "done_1": "1"})
+
+    log, _ = store.load()
+    assert len(log.sessions) == 1
+    assert log.sessions[0].day == "A"
+    assert [e.exercise for e in log.sessions[0].entries] == ["Cable Flyes", "Sled Push"]
+
+
+def test_saving_the_same_exercise_again_replaces_it(client, seeded):
+    """An 11 typed where a 1 was meant is noticed on the next set."""
+    login(client)
+    when = date.today().isoformat()
+    client.post("/session/A/0", data={"date": when, "reps_0_0": "110", "weight_0_0": "7.5"})
+    client.post("/session/A/0", data={"date": when, "reps_0_0": "11", "weight_0_0": "7.5"})
+
+    log, _ = store.load()
+    assert len(log.sessions) == 1
+    entries = log.sessions[0].entries
+    assert len(entries) == 1
+    assert [s.reps for s in entries[0].sets] == [11]
+
+
+def test_re_saving_keeps_the_order_exercises_were_performed_in(client, seeded):
+    """A correction must not shuffle the log out of the order it happened."""
+    login(client)
+    when = date.today().isoformat()
+    client.post("/session/A/0", data={"date": when, "reps_0_0": "10", "weight_0_0": "7.5"})
+    client.post("/session/A/1", data={"date": when, "done_1": "1"})
+    client.post("/session/A/0", data={"date": when, "reps_0_0": "12", "weight_0_0": "7.5"})
+
+    log, _ = store.load()
+    assert [e.exercise for e in log.sessions[0].entries] == ["Cable Flyes", "Sled Push"]
+
+
+def test_a_saved_exercise_comes_back_as_values_not_placeholders(client, seeded):
+    """So that re-saving it is an edit rather than a fresh guess."""
+    login(client)
+    when = date.today().isoformat()
+    client.post("/session/A/0", data={"date": when, "reps_0_0": "11", "weight_0_0": "8"})
+
+    card = _card(client.get("/session/A").text, "Cable Flyes")
+    assert 'value="11"' in card
+    assert 'value="8"' in card
+    assert ">Update<" in card
+
+
+def test_a_suggestion_does_not_chase_the_set_just_typed_into_it(client, seeded):
+    """Today's own entries are excluded from what the suggestion is built on.
+
+    Without that, saving 12 at the top of the range would immediately re-suggest
+    against it, and the card would climb itself every time it was saved.
+    """
+    login(client)
+    when = date.today().isoformat()
+    for _ in range(3):
+        client.post(
+            "/session/A/0",
+            data={
+                "date": when,
+                "reps_0_0": "12",
+                "weight_0_0": "7.5",
+                "reps_0_1": "12",
+                "weight_0_1": "7.5",
+                "reps_0_2": "12",
+                "weight_0_2": "7.5",
+            },
+        )
+
+    # Still the first outing's seed weight: nothing before today to go on.
+    card = _card(client.get("/session/A").text, "Cable Flyes")
+    assert 'placeholder="7.5 kg"' in card
+
+
+def test_a_conflict_on_one_exercise_names_it(client, seeded, monkeypatch):
+    def _boom(_mutate):
+        raise store.ConflictError("changed elsewhere")
+
+    monkeypatch.setattr(store, "update", _boom)
+    login(client)
+    response = client.post(
+        "/session/A/0",
+        data={"date": date.today().isoformat(), "reps_0_0": "10", "weight_0_0": "7.5"},
+    )
+    assert response.status_code == 409
+    assert "Cable Flyes" in response.json()["detail"]
+
+
+def test_an_index_outside_the_day_goes_back_rather_than_erroring(client, seeded):
+    login(client)
+    response = client.post("/session/A/99", data={"date": date.today().isoformat()})
+    assert response.status_code == 303
+    assert response.headers["location"] == "/session/A"
