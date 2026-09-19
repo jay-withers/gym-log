@@ -1,0 +1,131 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+
+      - id: check-case-conflict
+
+      - id: check-merge-conflict
+
+      - id: check-symlinks
+
+      - id: check-yaml
+        args: ["--allow-multiple-documents"]
+
+      - id: end-of-file-fixer
+
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+      - id: check-shebang-scripts-are-executable
+
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+      - id: forbid-new-submodules
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # frozen: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: 914e7df21a07ef503a81201c76d2b11c789d3fca # frozen: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: 25d0a52aa8bc0fc242613346792dc8d726c13347 # frozen: v9.26.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies: ["@commitlint/config-conventional"]
+        args:
+          - --config
+          - commitlint.config.js
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: 745eface02aef23e168a8afb6b5737818efbea95 # frozen: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [--external-sources]
+
+  # ruff replaces both a linter and a formatter (black/isort/flake8). The
+  # config, including the rule selection, lives in pyproject.toml — ruff walks
+  # up from each file to find it, so nothing needs pointing at it from here.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 321478e58f4938179c6b86e4ddfa923d1547a49b # frozen: v0.16.6
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+
+      # Python only. The upstream hook's types_or includes `markdown`, so left
+      # alone it reformats Python code blocks inside .md files — it rewrote the
+      # aligned comments in docs/deployment-plan.md on its first run. Prose is
+      # not ruff's business.
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  - repo: local
+    hooks:
+      # Replaces the upstream hadolint-docker hook: that one calls
+      # `docker system info`, which fails whenever DOCKER_HOST is unset — and
+      # pre-commit run from `git commit` inherits a non-login shell, where the
+      # dev container's profile snippet has not run. A blocked commit depending
+      # on how the shell was started is not a trade worth making.
+      - id: hadolint
+        name: Lint Dockerfiles
+        description: Runs hadolint against every Dockerfile, resolving DOCKER_HOST first.
+        entry: scripts/hadolint.sh
+        language: script
+        files: (^|/)Dockerfile([^/]*)?$
+
+      - id: check-tf-standards
+        name: Check Terraform file layout standards
+        description: "Fails if a locals/variable/output/data block isn't in a matching locals*.tf/variables*.tf/outputs*.tf/data*.tf file, or a terraform{}/provider{} block isn't in versions.tf."
+        entry: scripts/check-tf-standards.sh
+        language: script
+        pass_filenames: false
+        files: \.tf$
+
+      # Replace TFLint/Checkov's upstream hooks entirely rather than adding a
+      # fixed entry per environment: these discover terraform/environments/*.tfvars
+      # at runtime, so a new environment's tfvars is covered automatically —
+      # no pre-commit config change needed — and rules that depend on concrete
+      # variable values (naming, tags, region-specific checks) are evaluated
+      # against what each environment actually deploys, not unresolved variables.
+      - id: tflint-per-env
+        name: TFLint (per environment)
+        description: Runs tflint against terraform/ once per terraform/environments/*.tfvars file.
+        entry: scripts/tflint-per-env.sh
+        language: script
+        pass_filenames: false
+        files: \.(tf|tfvars)$
+        exclude: \.terraform/.*$
+
+      - id: checkov-per-env
+        name: Checkov (per environment)
+        description: Runs checkov against terraform/ once per terraform/environments/*.tfvars file.
+        entry: scripts/checkov-per-env.sh
+        language: script
+        pass_filenames: false
+        files: \.(tf|tfvars)$
+        exclude: \.terraform/.*$
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: 253d99053f80e4a368175e93b36edb662e7e5135 # frozen: v1.109.1
+    hooks:
+      - id: terraform_fmt
+
+      - id: terraform_validate
+
+      - id: terraform_docs
+        args:
+          - --hook-config=--path-to-file=README.md
+          - --hook-config=--add-to-existing-file=true
+          - --hook-config=--create-file-if-not-exist=true

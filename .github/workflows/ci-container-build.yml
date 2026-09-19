@@ -1,0 +1,42 @@
+name: ci-container-build
+
+# Builds the image on a pull request, without pushing.
+#
+# The runners are amd64, which is what Container Apps runs, so this build is
+# native. A local `make build` on Apple Silicon has to emulate amd64 through
+# QEMU — CI proving the image builds on the target architecture is the point,
+# not a side effect.
+#
+# The mechanics live in jay-withers/workflows' docker.yml, which cd-publish
+# also calls. That shared call is what keeps this honest: as two hand-written
+# workflows they could drift on context, platform or cache scope, and a green
+# pull request would then prove less about the release than it looks like it
+# does. Here the only difference is `push`.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - src/**
+      - Dockerfile
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/ci-container-build.yml
+
+permissions:
+  contents: read
+
+jobs:
+  # push is left at its default of false: a pull request must never publish an
+  # image, and a fork's GITHUB_TOKEN could not push anyway. The cache is shared
+  # with cd-publish by image name, so a merge usually reuses the PR's layers.
+  #
+  # Deliberately **not** a required status check: the path filter above means a
+  # docs-only pull request never runs it, and a required check that never
+  # reports leaves the pull request pending for ever rather than failing it.
+  build:
+    permissions:
+      contents: read
+    uses: jay-withers/workflows/.github/workflows/docker.yml@e37b7fe5708196c79e0469510f5c50b26d157194 # v1.4.1
+    with:
+      images: |
+        [{"name": "gymlog", "context": "."}]

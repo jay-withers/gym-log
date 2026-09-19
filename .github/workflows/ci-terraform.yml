@@ -1,0 +1,111 @@
+name: ci-terraform
+
+# Terraform CI. `validate` comes from the shared workflow; `plan` stays here.
+#
+# The split is not arbitrary. jay-withers/workflows' terraform.yml deliberately
+# runs no plan job, and that decision holds for the repos it was written for:
+# in azure-landingzone and terraform-root-aks the root modules resolve each
+# other with data sources, so a plan against a not-yet-applied dependency fails
+# at plan time and reports a CI failure for something that is not a defect.
+# This configuration has that same shape — it resolves the shared platform with
+# a data source — which is why the matrix below is dev only rather than why the
+# plan is absent: dev is applied, so dev plans cleanly.
+#
+# Only `dev` is planned here, unlike the other Terraform repos which matrix
+# over dev/stg/prd. This configuration resolves the shared Container Apps
+# environment with a `data` source, so a plan against an environment the
+# platform has never been applied to fails at plan time — reporting a CI
+# failure for something that is not a defect. Only dev exists, so only dev
+# is planned. Add an environment here when the platform gains one.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # Credential-free init and validate. pull-requests: read is what the shared
+  # workflow's own path filter needs; it runs inside that workflow, so the
+  # permission has to be granted from here.
+  terraform:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: jay-withers/workflows/.github/workflows/terraform.yml@0a18e55d654e22fa54c4085547e4389896be6b7f # v1.4.0
+
+  # Plans against Azure using GitHub OIDC, once per environment. Skipped until
+  # the AZURE_CLIENT_ID repository variable is set (see README), so the check
+  # does not fail before Azure auth is configured — it is unset today, so these
+  # legs do not currently run. All three environments share one Azure
+  # subscription (ARM_SUBSCRIPTION_ID); split per-environment credentials here
+  # if that changes.
+  #
+  # The `changed` output reuses the shared workflow's path filter rather than
+  # declaring a second dorny/paths-filter here that would drift from it. The
+  # cost is ordering: `needs` waits for the whole called workflow, so this
+  # starts after validate rather than beside it. Deliberately not always(): if
+  # validate failed, init would fail here for the same reason and three legs of
+  # runner time would buy no information the required check has not already
+  # reported.
+  plan:
+    needs: terraform
+    if: needs.terraform.outputs.changed == 'true' && vars.AZURE_CLIENT_ID != ''
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev]
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Resolve Terraform version
+        id: tfversion
+        run: echo "version=$(cat "$GITHUB_WORKSPACE/.terraform-version")" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: ${{ steps.tfversion.outputs.version }}
+          terraform_wrapper: false
+
+      - name: Terraform init
+        run: terraform init -input=false -backend-config=backends/${{ matrix.environment }}.hcl
+
+      - name: Terraform plan
+        run: terraform plan -input=false -no-color -var-file=environments/${{ matrix.environment }}.tfvars
+
+  # Required status check for the plan job. The shared workflow's own gate
+  # ("terraform / Terraform") covers only what runs inside it, so plan needs an
+  # always-reporting job of its own or a failed plan could not block a merge.
+  #
+  # Skipped counts as success: a pull request touching no Terraform, and every
+  # pull request until AZURE_CLIENT_ID is set, must pass rather than hang. Mark
+  # this check ("terraform-plan") required in the ruleset alongside
+  # "terraform / Terraform".
+  terraform-plan:
+    needs: plan
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify the plan job
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+        run: |
+          echo "plan=$PLAN_RESULT"
+          if [ "$PLAN_RESULT" = "failure" ]; then
+            echo "::error::A Terraform plan leg failed."
+            exit 1
+          fi

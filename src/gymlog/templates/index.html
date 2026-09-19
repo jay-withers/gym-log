@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block subtitle %}{{ block.name }} · week {{ week }} of {{ block.weeks }}{% endblock %}
+{% block body %}
+
+{% if due %}
+<div class="banner">
+  Week {{ week }} of an {{ block.weeks }}-week block — time to rotate.
+  <a href="/block">Pick new exercises</a>.
+</div>
+{% endif %}
+
+<div class="row">
+  {% for key, day in block.days | dictsort %}
+    <a class="btn {% if key != next_day %}ghost{% endif %}" href="/session/{{ key }}">
+      {{ day.label or key }}{% if key == next_day %} · next{% endif %}
+    </a>
+  {% endfor %}
+</div>
+
+<h2 class="slot" style="margin-top:24px">History by slot</h2>
+<div class="chips">
+  {% for slot in slots %}
+    <a class="chip" href="/history/{{ slot }}">{{ slot }}</a>
+  {% endfor %}
+</div>
+
+<h2 class="slot">Recent sessions</h2>
+{% if recent %}
+<table>
+  <tr><th>Date</th><th>Day</th><th>Exercises</th></tr>
+  {% for session in recent %}
+  <tr>
+    <td>{{ session.date }}</td>
+    <td>{{ block.days[session.day].label if session.day in block.days else session.day }}</td>
+    <td>{{ session.entries | length }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="last">Nothing logged yet. The first session sets the baseline.</p>
+{% endif %}
+
+<a class="btn ghost" href="/block" style="margin-top:20px">Block settings</a>
+{% endblock %}

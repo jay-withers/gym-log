@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Block · gym-log{% endblock %}
+{% block subtitle %}{{ block.name }} · week {{ week }} of {{ block.weeks }}{% endblock %}
+{% block body %}
+
+{% if due %}
+<div class="banner">This block has run its {{ block.weeks }} weeks.</div>
+{% endif %}
+
+<form method="post" action="/block">
+  <div class="card">
+    <label class="slot" for="name">New block name</label>
+    <input type="text" id="name" name="name" placeholder="Block {{ block.weeks }}">
+    <label class="slot" for="started" style="display:block;margin-top:10px">Starting</label>
+    <input type="date" id="started" name="started" value="{{ today }}">
+  </div>
+
+  <p class="last">
+    Change whichever movements you want. Anything left as it is carries over.
+    Sets, rep range and rest come with the slot; history is keyed on the slot, so
+    swapping an exercise adds to the record rather than resetting it.
+  </p>
+
+  {% for key, day in block.days | dictsort %}
+  <div class="card">
+    <div class="slot">{{ day.label or key }}</div>
+    {% for e in day.exercises %}
+      <label class="slot" style="display:block;margin-top:10px">{{ e.slot }}</label>
+      <input type="text" name="name_{{ key }}_{{ loop.index0 }}" value="{{ e.name }}">
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <button type="submit">Start new block</button>
+  <a class="btn ghost" href="/">Cancel</a>
+</form>
+{% endblock %}

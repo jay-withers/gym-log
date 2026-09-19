@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}gym-log{% endblock %}
+{% block body %}
+<form method="post" action="/login" class="card">
+  {% if error %}<p class="reason stalled">{{ error }}</p>{% endif %}
+  <label class="slot" for="passcode">Passcode</label>
+  <input type="password" id="passcode" name="passcode" autocomplete="current-password"
+         autofocus inputmode="text">
+  <button type="submit">In</button>
+</form>
+{% endblock %}

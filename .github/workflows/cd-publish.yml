@@ -1,0 +1,64 @@
+name: cd-publish
+
+# Publishes the image to GHCR for a given tag. Invoked by cd-tag after a version
+# bump, or manually to (re)publish an existing tag.
+#
+# It exists as a workflow of its own rather than folding into cd-tag because the
+# workflow_dispatch trigger is the documented way to re-publish an existing tag
+# after a failed build, without minting a new version.
+#
+# Two tags are pushed, both immutable:
+#
+#   vX.Y.Z    the release this came from, for a deploy someone has to reason
+#             about later
+#   <sha>     the short commit SHA, which is what the Makefile's IMAGE_TAG
+#             defaults to
+#
+# Neither is ever moved. Container Apps only creates a revision when the
+# template changes, so re-pushing a moving tag would deploy nothing and report
+# success — the failure mode this avoids by construction.
+#
+# **A green publish is not evidence the tags are right.** A release through this
+# shared workflow once pushed the SHA tag and silently lost the version tag.
+# Check the registry after a release:
+#
+#   gh api user/packages/container/gym-log%2Fgymlog/versions?per_page=3 \
+#     --jq '.[] | "\(.updated_at) \(.metadata.container.tags|join(", "))"'
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Git tag to publish (e.g. v1.2.3)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing git tag to publish (e.g. v1.2.3)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # `ref` is the tag rather than the default checkout, and that is what makes
+  # tag-with-sha correct: on a workflow_call github.sha is the calling branch's
+  # head, not the tag, so resolving the short SHA from anything else would
+  # record a commit that was never built.
+  #
+  # packages: write has to be granted here — docker.yml declares no permissions
+  # of its own precisely so a caller can hand it more than read.
+  publish:
+    permissions:
+      contents: read
+      packages: write
+    uses: jay-withers/workflows/.github/workflows/docker.yml@e37b7fe5708196c79e0469510f5c50b26d157194 # v1.4.1
+    with:
+      images: |
+        [{"name": "gymlog", "context": "."}]
+      ref: ${{ inputs.version }}
+      push: true
+      tags: ${{ inputs.version }}
+      tag-with-sha: true
+      summary-note: Deploy with `make deploy IMAGE_TAG=${{ inputs.version }}`.

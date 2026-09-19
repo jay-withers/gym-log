@@ -1,0 +1,78 @@
+name: cd-tag
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # Bump the semver tag from the conventional commits since the last release
+  # (and create a matching GitHub release) via the shared release template.
+  tag:
+    permissions:
+      contents: write
+    uses: jay-withers/workflows/.github/workflows/release.yml@0a18e55d654e22fa54c4085547e4389896be6b7f # v1.4.0
+
+  # Whether the image actually needs rebuilding. The shared release.yml's
+  # `default-bump` is left at "patch" here, so `tag` bumps *some* version for
+  # every push with a new commit — patch for anything without a `feat`/
+  # breaking commit, not skipped — regardless of whether that push touched
+  # the application source. A terraform-only or docs-only change gets a
+  # version and a GitHub release the same as a code change does, and
+  # republishing the image for it would be a wasted build plus a moved
+  # IMAGE_TAG default with no code change behind it.
+  #
+  # Diffed against the previous *release tag*, not this push's own before/after
+  # range, so this is correct even in the one case `tag` genuinely produces no
+  # new version (default-bump set to false, or a push with no new commit at
+  # all): whatever image change such a push carried is still unreleased, and
+  # gets picked up by whichever later push finally does bump a version.
+  # Diffing only that later push's own range would silently drop it, so this
+  # walks back to the actual previous tag instead.
+  #
+  # The paths below must stay in step with ci-container-build.yml's filter
+  # and with the Dockerfile's COPY lines: something in the image but in
+  # neither list would change without ever triggering a rebuild.
+  changes:
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      apps: ${{ steps.diff.outputs.apps }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - id: diff
+        run: |
+          prev_tag=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          if [ -z "$prev_tag" ]; then
+            echo "no previous release tag — publishing unconditionally"
+            echo "apps=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$prev_tag"..HEAD -- src/ Dockerfile pyproject.toml uv.lock; then
+            echo "apps=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "apps=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Publish runs as a reusable workflow so the same job can be re-triggered
+  # manually (workflow_dispatch) against an existing tag if a build fails,
+  # without minting a new version.
+  #
+  # Guarded on both a tag actually having been created — true for nearly
+  # every push in practice, since default-bump is "patch" rather than false,
+  # but a push with no new commit or a future default-bump: false would
+  # produce no version to tag an image with — and on the image sources having
+  # actually changed since the previous release (see the `changes` job).
+  publish:
+    needs: [tag, changes]
+    if: needs.tag.outputs.tag != '' && needs.changes.outputs.apps == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/cd-publish.yml
+    with:
+      version: ${{ needs.tag.outputs.tag }}

@@ -1,0 +1,13 @@
+# Normalize line endings to LF on checkin, matching the mixed-line-ending
+# pre-commit hook and .editorconfig.
+* text=auto eol=lf
+
+# Common binary types — never normalize or diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary

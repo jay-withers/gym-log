@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ label }} · gym-log{% endblock %}
+{% block subtitle %}{{ label }} · week {{ week }}{% endblock %}
+{% block body %}
+
+<form method="post" action="/session/{{ day }}">
+  <input type="hidden" name="date" value="{{ today }}">
+
+  {% for card in cards %}
+  {% set e = card.exercise %}
+  <div class="card">
+    <div class="slot">{{ e.slot }}</div>
+    <div class="name">{{ e.name }}</div>
+
+    {% if card.suggestion %}
+      <div class="reason {% if card.suggestion.stalled %}stalled{% endif %}">
+        {{ card.suggestion.weight_label }}kg × {{ card.suggestion.reps }}
+        <span class="sub">— {{ card.suggestion.reason }}</span>
+      </div>
+      {% if card.last %}
+        <div class="last">
+          {{ card.last_date }}:
+          {% for s in card.last.sets %}{{ s.reps }}×{{ "%g" % s.weight }}kg{% if not loop.last %} · {% endif %}{% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="sets">
+        {% for position in range(e.sets) %}
+        <div class="set">
+          <span>{{ position + 1 }}</span>
+          <input type="number" name="reps_{{ card.index }}_{{ position }}"
+                 placeholder="{{ card.suggestion.reps }} reps"
+                 inputmode="numeric" min="0" max="999">
+          <input type="number" name="weight_{{ card.index }}_{{ position }}"
+                 placeholder="{{ card.suggestion.weight_label }} kg"
+                 inputmode="decimal" step="0.5" min="0">
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if e.rest_seconds %}
+      <button type="button" class="btn ghost" data-rest="{{ e.rest_seconds }}">
+        Rest {{ e.rest_seconds }}s
+      </button>
+      {% endif %}
+    {% else %}
+      <label class="last">
+        <input type="checkbox" name="done_{{ card.index }}" value="1"> Done
+      </label>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <button type="submit">Save session</button>
+  <a class="btn ghost" href="/">Cancel</a>
+</form>
+
+<div class="timer" id="timer" hidden>
+  <strong id="remaining">0:00</strong>
+  <span class="sub" id="timer-label"></span>
+  <button type="button" class="btn ghost" id="stop">Stop</button>
+</div>
+
+<script>
+// Rest timer. The spreadsheet had a Rest column that did nothing; this is the
+// whole of making it do something. Deliberately no Notification or Wake Lock
+// permission prompt - a number that counts down is enough, and a permission
+// dialog mid-session is worse than glancing at the screen.
+(function () {
+  var timer = document.getElementById('timer');
+  var remaining = document.getElementById('remaining');
+  var label = document.getElementById('timer-label');
+  var handle = null;
+  var endsAt = 0;
+
+  function render() {
+    // Recomputed from a wall-clock deadline rather than decremented, so a phone
+    // that slept mid-set does not come back believing it owes you two minutes.
+    var left = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
+    remaining.textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+    if (left <= 0) {
+      stop();
+      if (navigator.vibrate) { navigator.vibrate([200, 100, 200]); }
+    }
+  }
+
+  function stop() {
+    if (handle) { clearInterval(handle); handle = null; }
+    timer.hidden = true;
+  }
+
+  document.getElementById('stop').addEventListener('click', stop);
+
+  document.querySelectorAll('[data-rest]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      endsAt = Date.now() + parseInt(button.dataset.rest, 10) * 1000;
+      label.textContent = button.closest('.card').querySelector('.name').textContent;
+      timer.hidden = false;
+      render();
+      if (handle) { clearInterval(handle); }
+      handle = setInterval(render, 250);
+    });
+  });
+})();
+</script>
+{% endblock %}

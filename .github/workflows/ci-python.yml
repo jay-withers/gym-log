@@ -1,0 +1,51 @@
+name: ci-python
+
+# Runs the test suite on a pull request.
+#
+# The mechanics live in jay-withers/workflows, so every repo of ours gets the
+# same job and a fix lands once. Only what is specific to this repo is here.
+#
+# This matters most for the changes nobody reads: renovate.json sets
+# autoApprove, so a dependency bump reaches main without a human. A pyjwt or
+# httpx release that broke the GitHub App token exchange would otherwise merge
+# green and fail silently the following Monday.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  # For the coverage comment below. The reusable workflow declares no
+  # permissions of its own precisely so this is reachable — a called workflow
+  # can never hold more than its caller grants.
+  pull-requests: write
+
+jobs:
+  test:
+    # `extras: dev` is the input that matters: pytest sits in
+    # [project.optional-dependencies] and `uv run` installs dependency groups
+    # but not extras, so without it the run fails with a bare "Failed to spawn:
+    # pytest" after a successful-looking install — and only in CI, because
+    # locally `make install` has already put it in the venv.
+    #
+    # python-version matches the python:3.14 base in the Dockerfile, so a pass
+    # here is a pass on the interpreter Container Apps runs.
+    #
+    # Deliberately not path filtered: the suite takes under a second, and a
+    # required check skipped by a path filter never reports, which blocks a pull
+    # request rather than passing it.
+    uses: jay-withers/workflows/.github/workflows/python.yml@0a18e55d654e22fa54c4085547e4389896be6b7f # v1.4.0
+    with:
+      # The package is at the repository root; there is one deliverable and no
+      # apps/ nesting to point at.
+      working-directory: .
+      python-version: "3.14"
+      extras: dev
+      # Reported, never gated. The progression rule and the model are pure and
+      # should sit near 100%; the HTTP surface is covered through TestClient.
+      # A threshold would mostly measure how much of the Azure SDK path is
+      # mocked, which asserts the mock rather than the behaviour.
+      coverage: gymlog
+      coverage-pr-comment: true
+      # No `postgres` input: this project has no database. That is the whole
+      # reason the shared platform carries none.

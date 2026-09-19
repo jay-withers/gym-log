@@ -1,0 +1,27 @@
+# https://editorconfig.org
+# Baseline editor settings, aligned with the pre-commit hooks
+# (end-of-file-fixer, trailing-whitespace, mixed-line-ending --fix=lf).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Makefiles require real tabs for recipe lines.
+[Makefile]
+indent_style = tab
+
+# The trailing-whitespace hook uses --markdown-linebreak-ext=md, preserving
+# two-space hard line breaks in Markdown — don't strip them here either.
+[*.md]
+trim_trailing_whitespace = false
+
+# ruff formats Python at 4 spaces; the 2-space default above is for everything
+# else. Without this a hand-typed file disagrees with the formatter that will
+# rewrite it on commit.
+[*.py]
+indent_size = 4

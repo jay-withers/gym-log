@@ -1,0 +1,40 @@
+{
+  "name": "gym-log",
+  "image": "ghcr.io/jay-withers/dev-containers/terraform:v0.14.0@sha256:3a8ccebe3d6e9292faeb96db6c3a87ec13e3edb8b948d3acd2c2beaefbccf8d0",
+  "mounts": [
+    "source=${localEnv:HOME}/Git,target=/Users/jay/Git,type=bind",
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "hashicorp.terraform",
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "redhat.vscode-yaml",
+        "github.vscode-github-actions",
+        "github.vscode-pull-request-github",
+        "eamodio.gitlens",
+        "mhutchie.git-graph",
+        "editorconfig.editorconfig"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "[terraform]": {
+          "editor.defaultFormatter": "hashicorp.terraform"
+        },
+        "[terraform-vars]": {
+          "editor.defaultFormatter": "hashicorp.terraform"
+        },
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        },
+        "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv/bin/python"
+      }
+    }
+  },
+  "remoteUser": "vscode",
+  "postCreateCommand": "make install",
+  "postStartCommand": "sudo /usr/local/bin/docker-socket-setup"
+}
