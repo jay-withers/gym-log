@@ -75,3 +75,19 @@ variable "image_tag" {
     error_message = "image_tag must be an immutable tag, not latest/main/unset."
   }
 }
+
+# --- the custom domain --------------------------------------------------------
+
+variable "custom_domain_name" {
+  description = "Hostname to bind to the app with a free Azure-managed certificate, e.g. `gymlog.jaywithers.uk`. Empty creates neither the certificate nor the binding; the default `*.azurecontainerapps.io` URL always works either way. The CNAME (to that default FQDN) and the `asuid.<label>` TXT record (holding `custom_domain_verification_id`) must already resolve before apply, because Azure validates both during issuance — `make dns` prints them."
+  type        = string
+  default     = ""
+
+  validation {
+    # An apex domain cannot be a CNAME, and CNAME is the only validation method
+    # these resources use. Caught here rather than as an opaque DNS failure
+    # midway through certificate issuance.
+    condition     = var.custom_domain_name == "" || length(split(".", var.custom_domain_name)) > 2
+    error_message = "custom_domain_name must be a subdomain, not an apex domain: validation is by CNAME, which an apex record cannot hold."
+  }
+}

@@ -26,6 +26,8 @@
 | Name | Type |
 | ---- | ---- |
 | [azurerm_container_app.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/container_app) | resource |
+| [azurerm_container_app_custom_domain.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/container_app_custom_domain) | resource |
+| [azurerm_container_app_environment_managed_certificate.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/container_app_environment_managed_certificate) | resource |
 | [azurerm_key_vault.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/key_vault) | resource |
 | [azurerm_resource_group.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) | resource |
 | [azurerm_role_assignment.deployer_log_contributor](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
@@ -43,6 +45,7 @@
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_custom_domain_name"></a> [custom\_domain\_name](#input\_custom\_domain\_name) | Hostname to bind to the app with a free Azure-managed certificate, e.g. `gymlog.jaywithers.uk`. Empty creates neither the certificate nor the binding; the default `*.azurecontainerapps.io` URL always works either way. The CNAME (to that default FQDN) and the `asuid.<label>` TXT record (holding `custom_domain_verification_id`) must already resolve before apply, because Azure validates both during issuance — `make dns` prints them. | `string` | `""` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | Deployment environment. Drives resource naming, and selects which shared platform environment this project deploys onto. | `string` | n/a | yes |
 | <a name="input_image_registry"></a> [image\_registry](#input\_image\_registry) | Registry and repository prefix the image is pulled from. A public package on ghcr.io deliberately: a private one would need a `registry` block and a Key Vault-backed pull secret on the app, and there is no Azure Container Registry because ACR Basic is a flat monthly charge with no consumption tier. | `string` | `"ghcr.io/jay-withers/gym-log"` | no |
 | <a name="input_image_tag"></a> [image\_tag](#input\_image\_tag) | Image tag seeding the app's **first** revision only. Every deploy after that is `make deploy IMAGE_TAG=vX.Y.Z`, because the container's image and env sit under `ignore_changes` — so a plan against an existing deployment reports no change here even when the running image has moved on. Don't read a stale-looking default as the deployed version. | `string` | `"v0.0.1"` | no |
@@ -59,6 +62,8 @@
 | ---- | ----------- |
 | <a name="output_app_url"></a> [app\_url](#output\_app\_url) | The application's stable HTTPS URL. Bookmark this one; it survives deploys. |
 | <a name="output_container_app_name"></a> [container\_app\_name](#output\_container\_app\_name) | Name of the container app, which `make deploy` passes to `az containerapp update`. |
+| <a name="output_custom_domain_url"></a> [custom\_domain\_url](#output\_custom\_domain\_url) | The bound custom domain, if var.custom\_domain\_name is set. Empty otherwise. |
+| <a name="output_custom_domain_verification_id"></a> [custom\_domain\_verification\_id](#output\_custom\_domain\_verification\_id) | Domain verification ID, published as the `asuid.<label>` TXT record before apply. |
 | <a name="output_identity_client_id"></a> [identity\_client\_id](#output\_identity\_client\_id) | Client ID of the workload identity, which the container receives as `AZURE_CLIENT_ID` and uses to reach Key Vault and the log. |
 | <a name="output_key_vault_name"></a> [key\_vault\_name](#output\_key\_vault\_name) | Key Vault name, for populating APP-PASSCODE with `az keyvault secret set`. |
 | <a name="output_resource_group_name"></a> [resource\_group\_name](#output\_resource\_group\_name) | This project's resource group. |

@@ -32,3 +32,21 @@ output "state_container_url" {
   description = "Blob container holding the training log, for `make deploy` and for `gymlog import` run locally."
   value       = "${azurerm_storage_account.log.primary_blob_endpoint}${azurerm_storage_container.log.name}"
 }
+
+# --- the custom domain --------------------------------------------------------
+#
+# Both are empty when var.custom_domain_name is unset, so `make url` falls back
+# to app_url and `make dns` prints nothing to do.
+
+output "custom_domain_url" {
+  description = "The bound custom domain, if var.custom_domain_name is set. Empty otherwise."
+  value       = var.custom_domain_name != "" ? "https://${var.custom_domain_name}" : ""
+}
+
+# The value of the asuid.<label> TXT record. Azure checks it during binding to
+# prove the domain is ours, and it is stable for the life of the app.
+output "custom_domain_verification_id" {
+  description = "Domain verification ID, published as the `asuid.<label>` TXT record before apply."
+  value       = azurerm_container_app.this.custom_domain_verification_id
+  sensitive   = true
+}
