@@ -24,6 +24,18 @@
         </div>
       {% endif %}
 
+      {# The band to work within, above the inputs rather than buried in the
+         suggestion line: it is the thing being aimed at every set, whereas the
+         suggestion is only about the next one. #}
+      {% if e.rep_range_label %}
+      <div class="target">
+        Target <b>{{ e.rep_range_label }} reps</b>
+        {% if e.rep_targets and e.rep_targets | unique | list | length > 1 %}
+          <span class="per-set">· per set {{ e.rep_targets | join("/") }}</span>
+        {% endif %}
+      </div>
+      {% endif %}
+
       <div class="sets">
         {% for position in range(e.sets) %}
         <div class="set">

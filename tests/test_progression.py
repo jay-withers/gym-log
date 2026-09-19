@@ -66,12 +66,18 @@ def test_heaviest_set_is_the_working_weight():
     assert got.weight == 22.5
 
 
-def test_first_outing_uses_the_seed_weight_and_says_where_it_came_from():
+def test_first_outing_uses_the_seed_weight_without_dressing_it_up():
+    """The seed weight is offered as a starting point, not as a past session.
+
+    It carries no date, so `last` stays None and the reason says only that
+    nothing has been logged — no claim about where the number came from.
+    """
     got = suggest(exercise(seed_weight=7.5), None)
     assert got is not None
     assert got.weight == 7.5
     assert got.reps == 10
-    assert "spreadsheet" in got.reason
+    assert got.reason == "nothing logged yet"
+    assert got.last is None
     # Nothing is claimed to have been performed, because nothing was.
     assert got.last is None
     assert got.last_date == ""

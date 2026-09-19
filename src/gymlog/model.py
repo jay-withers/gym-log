@@ -54,13 +54,15 @@ class Exercise:
     slot: str
     name: str
     sets: int = 0
+    # The range to work within — the sheet's `Reps` beside `Sets`, `8-10` for DB
+    # Step Ups. This is what double progression climbs, and what the session
+    # screen shows above the inputs as the thing to aim at.
     rep_low: int = 0
     rep_high: int = 0
-    # The target for each set in turn, when they differ. The sheet writes these
-    # as `10/12/12`, meaning the first set is a ten and the next two are twelves,
-    # and collapsing that to a 10-12 range loses which set is which. Empty means
-    # every set shares `rep_low`-`rep_high`; `rep_low`/`rep_high` stay the min
-    # and max of these, so the progression rule needs no knowledge of them.
+    # The number to hit on each set in turn — the sheet's `Reps` beside `Weight`,
+    # written `10/12/12` when the sets differ. Held per set rather than reduced
+    # to a range because which set is which is the whole point of writing it
+    # that way. Empty for a movement the sheet gave no per-set numbers.
     rep_targets: tuple[int, ...] = ()
     rest_seconds: int = 0
     # The smallest useful jump *for this movement*. Per-exercise rather than
@@ -72,6 +74,15 @@ class Exercise:
     # first real session supersedes it. Not a log entry: it carries no date, and
     # inventing one would put a lie at the head of the history.
     seed_weight: float | None = None
+
+    @property
+    def rep_range_label(self) -> str:
+        """`8-10`, or a bare `10` when the range has no width. Empty if untracked."""
+        if not self.rep_high:
+            return ""
+        if self.rep_low == self.rep_high:
+            return str(self.rep_high)
+        return f"{self.rep_low}\u2013{self.rep_high}"
 
     def target_for(self, position: int) -> int:
         """The rep target for set `position`, 0-based.

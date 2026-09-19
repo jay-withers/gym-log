@@ -105,15 +105,17 @@ def suggest(
 def _first_outing(exercise: Exercise) -> Suggestion:
     """The suggestion before there is any history to go on.
 
-    `seed_weight` is the number off the spreadsheet at import. It is used exactly
-    once, and it is described honestly as "from the spreadsheet" rather than
-    presented as a previous session, because it carries no date.
+    `seed_weight` is the number carried in with the block. It is used exactly
+    once and never presented as a previous session, because it carries no date —
+    `Suggestion.last` stays None, so the screen shows no date beside it.
     """
     if exercise.seed_weight is not None:
         return Suggestion(
             weight=exercise.seed_weight,
             reps=exercise.rep_low,
-            reason=f"from the spreadsheet — {exercise.seed_weight:g}kg, no session logged yet",
+            # The screen already prints the weight and reps ahead of this, so
+            # repeating the number here just says it twice.
+            reason="nothing logged yet",
         )
     return Suggestion(
         weight=0.0,
