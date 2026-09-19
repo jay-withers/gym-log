@@ -155,6 +155,14 @@ def session_form(request: Request, day: str) -> Any:
             "week": block.week_of(_today()),
             "cards": cards,
             "today": _today().isoformat(),
+            # Whether today's session for this day is already in the log. The
+            # page uses it to decide that a draft held on the phone has landed
+            # and can be dropped — see the draft script in session.html. Asked
+            # of the server rather than assumed on submit, so a save that failed
+            # leaves the draft exactly where it was.
+            "already_logged": any(
+                s.day == day and s.date == _today().isoformat() for s in log.sessions
+            ),
         },
     )
 

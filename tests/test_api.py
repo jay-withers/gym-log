@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -342,3 +344,57 @@ def test_falling_short_still_shows_on_the_stripped_card(client, seeded):
         },
     )
     assert 'class="target stalled"' in _card(client.get("/session/A").text, "Cable Flyes")
+
+
+# --- the draft held on the phone ---------------------------------------------
+
+
+def test_the_form_reports_that_nothing_is_logged_yet(client, seeded):
+    """The flag the draft script reads to decide whether its draft has landed."""
+    login(client)
+    assert 'data-logged="0"' in client.get("/session/A").text
+
+
+def test_the_form_reports_a_session_already_logged_today(client, seeded):
+    login(client)
+    client.post(
+        "/session/A",
+        data={"date": date.today().isoformat(), "reps_0_0": "10", "weight_0_0": "7.5"},
+    )
+    assert 'data-logged="1"' in client.get("/session/A").text
+
+
+def test_a_session_logged_on_another_date_does_not_clear_today_s_draft(client, seeded):
+    """Only today's session for this day means the draft has landed.
+
+    Keyed on both, because a draft typed today must survive last week's session
+    being in the log — which it always is by the second week of a block.
+    """
+    login(client)
+    client.post(
+        "/session/A",
+        data={"date": "2026-01-02", "reps_0_0": "10", "weight_0_0": "7.5"},
+    )
+    assert 'data-logged="0"' in client.get("/session/A").text
+
+
+def test_a_conflict_leaves_the_form_reporting_nothing_logged(client, seeded, monkeypatch):
+    """A save that lost its race must not look like a save that landed.
+
+    The draft is dropped on the server saying the session is recorded, not on
+    the form being submitted, so a conflict keeps what was typed.
+    """
+
+    def _boom(_mutate):
+        raise store.ConflictError("changed elsewhere")
+
+    monkeypatch.setattr(store, "update", _boom)
+    login(client)
+    response = client.post(
+        "/session/A",
+        data={"date": date.today().isoformat(), "reps_0_0": "10", "weight_0_0": "7.5"},
+    )
+    assert response.status_code == 409
+
+    monkeypatch.undo()
+    assert 'data-logged="0"' in client.get("/session/A").text

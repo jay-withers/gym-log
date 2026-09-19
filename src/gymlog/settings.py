@@ -68,9 +68,11 @@ class Settings(BaseSettings):
     # public internet the moment ingress is external.
     require_passcode: bool = True
 
-    # Signs the session cookie. Absent means one is generated per process, which
-    # is correct locally and means a restart logs you out — acceptable for a
-    # single replica that restarts only on deploy.
+    # Signs the session cookie. Absent means the key is derived from the passcode
+    # instead — see `deps._signing_key`, which explains why: a per-process key
+    # would log the phone out on every deploy and every scale-from-zero, and at
+    # `min_replicas = 0` that is after every session. Setting this decouples the
+    # two, so rotating the passcode no longer invalidates outstanding sessions.
     cookie_secret: str = ""
 
     # Thirty days. Long on purpose: this is opened on a phone in a gym, and a
