@@ -134,3 +134,62 @@ resource "azurerm_container_app" "this" {
     ]
   }
 }
+
+# --- the custom domain --------------------------------------------------------
+#
+# Both resources are guarded by the same count on var.custom_domain_name. A
+# hostname binds to exactly one container app globally, so an unconditional
+# binding would make a second environment's plan claim the domain that dev
+# already holds, the moment one ever exists.
+#
+# **The certificate is created in the *platform's* resource group, not this
+# project's.** It is a child of the environment and takes its resource group
+# from the environment's id, so this is the one resource here that lands
+# outside azurerm_resource_group.this — the apply identity needs write access
+# there, which being subscription-scoped it has. Deleting this project does not
+# delete the platform, so the certificate is cleaned up by the count going back
+# to zero, not by the resource group going away.
+#
+# **Both DNS records must resolve before apply.** Azure validates them during
+# issuance and binding, not after: the CNAME for gymlog.jaywithers.uk pointing
+# at the app's default *.azurecontainerapps.io FQDN, and the TXT record at
+# asuid.gymlog carrying custom_domain_verification_id. `make dns` prints both
+# with their values filled in.
+resource "azurerm_container_app_environment_managed_certificate" "this" {
+  count = var.custom_domain_name != "" ? 1 : 0
+
+  name                         = replace(var.custom_domain_name, ".", "-")
+  container_app_environment_id = data.azurerm_container_app_environment.platform.id
+  subject_name                 = var.custom_domain_name
+  domain_control_validation    = "CNAME"
+
+  # Azure requires the hostname to already be registered on an app or route in
+  # the environment before it will issue the managed certificate.
+  depends_on = [azurerm_container_app_custom_domain.this]
+}
+
+resource "azurerm_container_app_custom_domain" "this" {
+  count = var.custom_domain_name != "" ? 1 : 0
+
+  name                     = var.custom_domain_name
+  container_app_id         = azurerm_container_app.this.id
+  certificate_binding_type = "Disabled"
+
+  # container_app_environment_certificate_id is deliberately unset. That field
+  # accepts a bring-your-own azurerm_container_app_environment_certificate
+  # only; passing a *managed* certificate's id 400s the plan, because its id
+  # carries a `managedCertificates` segment the provider's parser rejects
+  # (hashicorp/terraform-provider-azurerm#25788).
+  #
+  # **The apply cannot finish the bind, and says nothing about it.** It reports
+  # certificate_binding_type = "Disabled" with no error while
+  # `az containerapp hostname list` still shows BindingType Disabled: ARM's
+  # bind operation needs the certificate id in the request and the provider has
+  # no field to put it in (hashicorp/terraform-provider-azurerm#27362, open).
+  # Until it lands, `make bind-domain` is the manual step after any apply that
+  # recreates either of these two resources. A plan afterwards reports no diff,
+  # because the CLI sets the same binding type this resource already declares.
+  #
+  # market-agent hit and confirmed all of this first; the workaround is the
+  # same there.
+}
