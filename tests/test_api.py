@@ -176,8 +176,12 @@ def test_the_suggestion_moves_after_a_session(client, seeded):
             "weight_0_2": "7.5",
         },
     )
-    page = client.get("/session/A").text
-    assert "10kg" in page
+    # Every set at the top of 10-12, so the weight goes up and the reps drop
+    # back to the bottom. Asserted on the placeholders because that is now the
+    # only place the suggestion is rendered — the card carries no prose.
+    card = _card(client.get("/session/A").text, "Cable Flyes")
+    assert 'placeholder="10 kg"' in card
+    assert 'placeholder="10 reps"' in card
 
 
 def test_rotating_keeps_the_slot_and_the_history(client, seeded):
@@ -282,3 +286,59 @@ def test_the_time_field_takes_what_a_phone_keyboard_makes_easy(typed, expected):
     from gymlog.api.routes import _seconds
 
     assert _seconds(typed) == expected
+
+
+# --- the session card --------------------------------------------------------
+
+
+def _card(page: str, name: str) -> str:
+    """The markup for one exercise's card."""
+    for card in page.split('<div class="card">')[1:]:
+        if f">{name}<" in card:
+            return card
+    raise AssertionError(f"no card for {name}")
+
+
+def test_the_card_is_name_target_and_inputs_only(client, seeded):
+    """No suggestion prose above the boxes.
+
+    The suggestion still drives both placeholders, so what to reach for is in
+    the field being typed into rather than on a line restating it.
+    """
+    login(client)
+    card = _card(client.get("/session/A").text, "Cable Flyes")
+
+    assert 'class="target' in card
+    assert 'class="reason' not in card
+    assert "nothing logged yet" not in card
+    # Nor the previous session's line.
+    assert 'class="last"' not in card
+
+
+def test_the_target_line_shows_the_range(client, seeded):
+    login(client)
+    card = _card(client.get("/session/A").text, "Cable Flyes")
+    assert "Target" in card
+    assert "10\u201312 reps" in card
+
+
+def test_falling_short_still_shows_on_the_stripped_card(client, seeded):
+    """Losing the reason line must not lose the one warning that mattered.
+
+    A session below the bottom of the range holds the weight rather than adding
+    to it, and the card has to say so or it silently repeats the same number.
+    """
+    login(client)
+    client.post(
+        "/session/A",
+        data={
+            "date": "2026-09-15",
+            "reps_0_0": "6",
+            "weight_0_0": "7.5",
+            "reps_0_1": "6",
+            "weight_0_1": "7.5",
+            "reps_0_2": "6",
+            "weight_0_2": "7.5",
+        },
+    )
+    assert 'class="target stalled"' in _card(client.get("/session/A").text, "Cable Flyes")

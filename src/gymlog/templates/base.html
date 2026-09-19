@@ -38,6 +38,10 @@
   .reason.stalled { color: var(--warn); }
   .last { color: var(--dim); font-size: 13px; margin-bottom: 10px; }
   .target { color: var(--fg); font-size: 13px; margin-bottom: 8px; }
+  /* The one thing the stripped-back card still has to be able to shout: the
+     last session fell short of the range, so the weight is deliberately not
+     going up this time. */
+  .target.stalled { color: var(--warn); }
   .target b { font-weight: 600; }
   .target .per-set { color: var(--dim); }
   .sets { display: grid; gap: 8px; }
