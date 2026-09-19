@@ -69,9 +69,18 @@ def valid(token: str | None) -> bool:
 
 
 def check_passcode(presented: str) -> bool:
-    """Whether `presented` is the configured passcode."""
+    """Whether `presented` is the configured passcode.
+
+    Compared as bytes rather than as `str`: `hmac.compare_digest` raises
+    `TypeError` if *either* string holds a character outside ASCII, so a
+    passcode containing a `£` turned every login into a 500 rather than a
+    refusal. Encoding both sides first is also what makes the comparison
+    well-defined — two strings are equal here only if their UTF-8 is.
+    """
     expected = secret("APP-PASSCODE")
-    return bool(expected) and hmac.compare_digest(presented, expected)
+    return bool(expected) and hmac.compare_digest(
+        presented.encode("utf-8"), expected.encode("utf-8")
+    )
 
 
 def require_session(gymlog_session: str | None = Cookie(default=None)) -> None:

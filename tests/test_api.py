@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from gymlog import settings as settings_module
 from gymlog import store
 from gymlog.api.main import create_app
 from gymlog.model import Log
@@ -21,7 +22,13 @@ def client():
     # local `make run` over http works; httpx does not.
     #
     # follow_redirects off: a redirect is the assertion in most of these.
-    return TestClient(create_app(), base_url="https://testserver", follow_redirects=False)
+    #
+    # Entered as a context manager, not merely constructed: starlette runs the
+    # lifespan only for a client that is entered, so a plain `return` here left
+    # everything `lifespan` does — resolving the passcode at start-up — with no
+    # coverage at all while the suite stayed green.
+    with TestClient(create_app(), base_url="https://testserver", follow_redirects=False) as entered:
+        yield entered
 
 
 @pytest.fixture
@@ -67,6 +74,39 @@ def test_the_gate_is_closed_by_default(client):
 
 def test_a_wrong_passcode_is_refused(client):
     assert client.post("/login", data={"passcode": "wrong"}).status_code == 401
+
+
+@pytest.mark.parametrize("passcode", ["bench-100\u00a3", "\u2696\ufe0f-day"])
+def test_a_passcode_outside_ascii_is_compared_rather_than_crashing(monkeypatch, passcode):
+    """A `£` in the passcode used to 500 every login, right and wrong alike.
+
+    `hmac.compare_digest` refuses `str` operands holding any non-ASCII
+    character, and the passcode is whatever was typed into Key Vault. Nothing
+    validates it on the way in, so the comparison has to cope.
+    """
+    monkeypatch.setenv("APP_PASSCODE", passcode)
+    settings_module.secret.cache_clear()
+    settings_module.settings.cache_clear()
+
+    with TestClient(create_app(), base_url="https://testserver", follow_redirects=False) as client:
+        assert client.post("/login", data={"passcode": "wrong"}).status_code == 401
+        assert client.post("/login", data={"passcode": passcode}).status_code == 303
+
+
+def test_a_missing_passcode_fails_at_start_up_not_at_first_login(monkeypatch):
+    """The point of resolving the passcode in `lifespan`.
+
+    A replica that cannot read its passcode is of no use to anyone, so it should
+    fail to start — visibly, in the revision's logs — rather than start, pass its
+    liveness probe and refuse the one person who tries to log in.
+    """
+    monkeypatch.delenv("APP_PASSCODE", raising=False)
+    settings_module.secret.cache_clear()
+    settings_module.settings.cache_clear()
+
+    with pytest.raises(RuntimeError, match="APP-PASSCODE"):  # noqa: SIM117
+        with TestClient(create_app(), base_url="https://testserver"):
+            pass
 
 
 def test_the_right_passcode_opens_it(client, seeded):
