@@ -4,19 +4,20 @@ A `.xlsx` is a zip of XML, so this parses it with `zipfile` and `xml.etree` from
 the standard library rather than adding `openpyxl` to the runtime image for a
 one-off import that runs once per rotation at most.
 
-**There are two `Reps` columns and the second one is the real one.** The sheet
-has a `Reps` beside `Sets` and another beside `Weight`; the numbers actually
-worked to are the second, which is why that is the one read here. The first is
-left alone.
+**Both `Reps` columns are read, and they mean different things.**
 
     Part | Exercises | Sets | Reps | Rest | Reps     | Weight
     Chest| Low-to-High Cable Flyes | 3 | 10-12 | 60-70secs | 15       | 7.5
     Triceps | Overhead Cable Tricep Ext | 3 | 10-12 | 60secs | 10/12/12 | 15
 
-**A slashed value is one number per set**, in order: `10/12/12` is a ten then two
-twelves, not a range and not an average. `rep_low`/`rep_high` become the min and
-max of those, so the double-progression rule keeps working unchanged, and
-`rep_targets` keeps which set is which.
+The one beside `Sets` is the **range to work within** — `8-10` for DB Step Ups —
+and becomes `rep_low`/`rep_high`, which is what double progression climbs and
+what the session screen shows above the inputs.
+
+The one beside `Weight` is the **number hit on each set**, and becomes
+`rep_targets`. **A slashed value is one number per set**, in order: `10/12/12` is
+a ten then two twelves, not a range and not an average. Held per set because
+which set is which is the whole point of writing it that way.
 
 **It still imports no performance.** The `Weight` cell is read only as
 `seed_weight`, and nothing here is turned into a logged session: these cells
@@ -73,10 +74,10 @@ def _exercises(rows: list[list[str]]) -> list[Exercise]:
     out: list[Exercise] = []
     for row in rows[1:]:  # row 0 is the header
         cells = [c.strip() for c in row] + [""] * 7
-        # `_prescribed` is the `Reps` beside `Sets` and is deliberately unused —
-        # see the module docstring. The worked reps are the column beside
-        # `Weight`, which is `worked` here.
-        part, name, sets, _prescribed, rest, worked, weight = cells[:7]
+        # Two `Reps` columns, two different meanings — see the module docstring.
+        # `target_range` is the band to work within; `per_set` is the number hit
+        # on each set in turn.
+        part, name, sets, target_range, rest, per_set, weight = cells[:7]
         if not name:
             continue
         if not part:
@@ -84,22 +85,33 @@ def _exercises(rows: list[list[str]]) -> list[Exercise]:
             out.append(Exercise(slot="finisher", name=name))
             continue
         count = _int(sets)
-        targets = _rep_targets(worked, count)
+        low, high = _rep_range(target_range)
         out.append(
             Exercise(
                 slot=part.lower(),
                 name=name,
                 sets=count,
-                rep_low=min(targets) if targets else 0,
-                rep_high=max(targets) if targets else 0,
-                # Only worth storing when the sets actually differ; a flat
-                # `15/15/15` says nothing `rep_low`/`rep_high` does not.
-                rep_targets=targets if len(set(targets)) > 1 else (),
+                rep_low=low,
+                rep_high=high,
+                # Kept even when every set carries the same number: the range
+                # above no longer implies it, since the two columns are read
+                # from different cells and routinely disagree.
+                rep_targets=_rep_targets(per_set, count),
                 rest_seconds=_rest_seconds(rest),
                 seed_weight=_float(weight),
             )
         )
     return out
+
+
+def _rep_range(value: str) -> tuple[int, int]:
+    """`10-12` -> (10, 12); a bare `10` -> (10, 10); anything else -> (0, 0)."""
+    numbers = [int(n) for n in re.findall(r"\d+", value)]
+    if not numbers:
+        return 0, 0
+    if len(numbers) == 1:
+        return numbers[0], numbers[0]
+    return min(numbers), max(numbers)
 
 
 def _rep_targets(value: str, sets: int) -> tuple[int, ...]:

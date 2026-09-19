@@ -13,15 +13,16 @@
     <div class="name">{{ e.name }}</div>
 
     {% if card.suggestion %}
-      <div class="reason {% if card.suggestion.stalled %}stalled{% endif %}">
-        {{ card.suggestion.weight_label }}kg × {{ card.suggestion.reps }}
-        <span class="sub">— {{ card.suggestion.reason }}</span>
+      {# The card is name, target, inputs — nothing else. The suggestion still
+         drives both placeholders, so what to reach for is in the boxes being
+         typed into rather than on a line above them restating it. #}
+      {% if e.rep_range_label %}
+      <div class="target {% if card.suggestion.stalled %}stalled{% endif %}">
+        Target <b>{{ e.rep_range_label }} reps</b>
+        {% if e.rep_targets and e.rep_targets | unique | list | length > 1 %}
+          <span class="per-set">· per set {{ e.rep_targets | join("/") }}</span>
+        {% endif %}
       </div>
-      {% if card.last %}
-        <div class="last">
-          {{ card.last_date }}:
-          {% for s in card.last.sets %}{{ s.reps }}×{{ "%g" % s.weight }}kg{% if not loop.last %} · {% endif %}{% endfor %}
-        </div>
       {% endif %}
 
       <div class="sets">

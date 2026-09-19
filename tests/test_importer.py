@@ -38,25 +38,32 @@ def test_the_prescription_survives_the_round_trip(block):
     chest = block.days["A"].exercises[0]
     assert chest.name == "Low-to-High Cable Flyes"
     assert chest.sets == 3
-    # The `Reps` beside `Weight` says 15, not the 10-12 beside `Sets`.
-    assert (chest.rep_low, chest.rep_high) == (15, 15)
+    # The range to work within comes from the `Reps` beside `Sets`.
+    assert (chest.rep_low, chest.rep_high) == (10, 12)
+    assert chest.rep_range_label == "10\u201312"
     assert chest.seed_weight == 7.5
     # "60-70secs" -> the midpoint.
     assert chest.rest_seconds == 65
 
 
-def test_the_reps_come_from_the_column_beside_weight(block):
-    """The sheet has two `Reps` columns and the second is the one worked to.
+def test_the_two_reps_columns_land_in_different_fields(block):
+    """The sheet has two `Reps` columns and they are not the same thing.
 
-    Chest reads `10-12` beside `Sets` and `15` beside `Weight`. Reading the
-    first would prescribe a range that has not been trained to in some time.
+    Chest reads `10-12` beside `Sets` and `15` beside `Weight`: a range to work
+    within, and the number actually hit on each set. Both are kept, because
+    either one alone loses something the sheet was saying.
     """
     by_name = {e.name: e for e in block.days["A"].exercises}
-    assert (
-        by_name["Low-to-High Cable Flyes"].rep_low,
-        by_name["Low-to-High Cable Flyes"].rep_high,
-    ) == (15, 15)
-    assert (by_name["DB Step Ups"].rep_low, by_name["DB Step Ups"].rep_high) == (10, 10)
+
+    chest = by_name["Low-to-High Cable Flyes"]
+    assert (chest.rep_low, chest.rep_high) == (10, 12)
+    assert chest.rep_targets == (15, 15, 15)
+
+    # The one the range is asked about by name.
+    steps = by_name["DB Step Ups"]
+    assert (steps.rep_low, steps.rep_high) == (8, 10)
+    assert steps.rep_range_label == "8\u201310"
+    assert steps.rep_targets == (10, 10, 10)
 
 
 def test_a_slashed_value_is_one_target_per_set(block):
@@ -69,17 +76,34 @@ def test_a_slashed_value_is_one_target_per_set(block):
     assert [triceps.target_for(i) for i in range(triceps.sets)] == [10, 12, 12]
 
 
-def test_a_flat_value_stores_no_per_set_targets(block):
-    """`15` across three sets is what `rep_low`/`rep_high` already say."""
+def test_a_flat_value_is_still_stored_per_set(block):
+    """`15` across three sets is kept, because the range no longer implies it.
+
+    The two columns are read from different cells and routinely disagree —
+    chest is a 10-12 range worked at 15 — so dropping a flat value would lose
+    the disagreement rather than compress it.
+    """
     chest = block.days["A"].exercises[0]
-    assert chest.rep_targets == ()
+    assert chest.rep_targets == (15, 15, 15)
     assert [chest.target_for(i) for i in range(chest.sets)] == [15, 15, 15]
+
+
+def test_every_tracked_exercise_carries_a_range(block):
+    """A movement with no range has nothing for double progression to climb."""
+    for day in block.days.values():
+        for e in day.exercises:
+            if e.tracked:
+                assert e.rep_low > 0 and e.rep_high >= e.rep_low, e.name
+                assert e.rep_range_label, e.name
 
 
 def test_every_slashed_row_in_the_sheet_is_read_in_order(block):
     """The five rows that carry per-set reps, as the workbook actually has them."""
     found = {
-        e.name: e.rep_targets for day in block.days.values() for e in day.exercises if e.rep_targets
+        e.name: e.rep_targets
+        for day in block.days.values()
+        for e in day.exercises
+        if len(set(e.rep_targets)) > 1
     }
     assert found == {
         "Overhead Cable Tricep Ext": (10, 12, 12),
@@ -96,6 +120,7 @@ def test_the_finisher_is_untracked(block):
     assert not finisher.tracked
     # Timed rather than loaded, so the sheet gives it no reps to import.
     assert finisher.rep_targets == ()
+    assert finisher.rep_range_label == ""
     assert block.days["B"].exercises[-1].name == "Sandbag Lunges"
 
 
