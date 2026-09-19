@@ -22,7 +22,7 @@ from fastapi import Depends, FastAPI, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..settings import settings
+from ..settings import secret, settings
 from . import deps, routes
 
 logger = logging.getLogger(__name__)
@@ -30,13 +30,15 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Start-up does as little as possible.
+    """Resolve the passcode once when the process starts.
 
-    `min_replicas = 0` means every visit may be a cold start, and the person
-    waiting is standing in a gym. Nothing is read here: the log is fetched on the
-    first request that needs it, and storage being briefly unreachable should
-    fail that request rather than prevent the app starting at all.
+    `secret` is cached after this call, so a changed Key Vault value takes
+    effect on the next container start rather than on an arbitrary first
+    request. Storage remains lazy: a brief blob outage should fail a request,
+    not prevent the app starting.
     """
+    if settings().require_passcode:
+        secret("APP-PASSCODE")
     yield
 
 
