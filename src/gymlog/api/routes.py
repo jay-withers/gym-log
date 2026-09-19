@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import pathlib
+import re
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -192,12 +193,24 @@ def _entries(day: Day, form: Any) -> tuple[Entry, ...]:
     A set with no reps is a set that was not performed — the form always renders
     the full prescription, and stopping at two sets of three is ordinary. Only
     what was filled in is recorded.
+
+    The finisher is the exception to the shape rather than to the rule: it is
+    timed rather than loaded, so a time on its own counts as having done it and
+    the tick box is not also required.
     """
     out: list[Entry] = []
     for index, exercise in enumerate(day.exercises):
         if not exercise.tracked:
-            if form.get(f"done_{index}"):
-                out.append(Entry(slot=exercise.slot, exercise=exercise.name, note="done"))
+            seconds = _seconds(form.get(f"seconds_{index}"))
+            if form.get(f"done_{index}") or seconds:
+                out.append(
+                    Entry(
+                        slot=exercise.slot,
+                        exercise=exercise.name,
+                        note="done",
+                        seconds=seconds,
+                    )
+                )
             continue
 
         sets: list[SetLog] = []
@@ -285,6 +298,7 @@ async def rotate(request: Request) -> Any:
                     sets=exercise.sets,
                     rep_low=exercise.rep_low,
                     rep_high=exercise.rep_high,
+                    rep_targets=exercise.rep_targets,
                     rest_seconds=exercise.rest_seconds,
                     increment=exercise.increment,
                     # No seed weight: a changed movement starts from what gets
@@ -320,6 +334,32 @@ def _next_day(log: Any, block: Block) -> str:
         if session.day in keys:
             return keys[(keys.index(session.day) + 1) % len(keys)]
     return keys[0]
+
+
+def _seconds(value: Any) -> int:
+    """A finisher's time, as seconds. 0 means nothing was entered.
+
+    Accepts what a phone keyboard makes easy mid-session: `90`, `1:30`, `2m`,
+    `1m30`. A bare number is seconds, because the sheet's Rest column already
+    trained the habit of writing seconds. Anything unparseable is treated as
+    untimed rather than rejected — the finisher is optional, and losing the
+    whole session to a typo in a field nobody had to fill in would be absurd.
+    """
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return 0
+    if ":" in raw:
+        minutes, _, rest = raw.partition(":")
+        parts = [minutes, rest]
+    elif "m" in raw:
+        minutes, _, rest = raw.partition("m")
+        parts = [minutes, rest.rstrip("s")]
+    else:
+        return max(0, int(m.group()) if (m := re.search(r"\d+", raw)) else 0)
+    try:
+        return max(0, int(parts[0] or 0) * 60 + int(parts[1] or 0))
+    except ValueError:
+        return 0
 
 
 def _int(value: Any) -> int | None:

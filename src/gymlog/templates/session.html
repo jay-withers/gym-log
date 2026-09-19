@@ -28,8 +28,12 @@
         {% for position in range(e.sets) %}
         <div class="set">
           <span>{{ position + 1 }}</span>
+          {# The sheet's `10/12/12` is a different target per set, so the
+             placeholder follows the set once there is no history to progress
+             from. Once there is, the suggestion is the same number for every
+             set by design - double progression moves all of them together. #}
           <input type="number" name="reps_{{ card.index }}_{{ position }}"
-                 placeholder="{{ card.suggestion.reps }} reps"
+                 placeholder="{% if card.last %}{{ card.suggestion.reps }}{% else %}{{ e.target_for(position) }}{% endif %} reps"
                  inputmode="numeric" min="0" max="999">
           <input type="number" name="weight_{{ card.index }}_{{ position }}"
                  placeholder="{{ card.suggestion.weight_label }} kg"
@@ -44,9 +48,22 @@
       </button>
       {% endif %}
     {% else %}
+      {# The finisher takes no load and no reps, but it is timed. Both fields
+         are optional: either one on its own records that it was done. #}
+      {% if card.last and card.last.time_label %}
+        <div class="last">{{ card.last_date }}: {{ card.last.time_label }}</div>
+      {% endif %}
       <label class="last">
         <input type="checkbox" name="done_{{ card.index }}" value="1"> Done
       </label>
+      <div class="sets">
+        <div class="set">
+          <span>time</span>
+          <input type="text" name="seconds_{{ card.index }}"
+                 placeholder="{{ card.last.time_label if card.last and card.last.time_label else '90 or 1:30' }}"
+                 inputmode="numeric" autocomplete="off">
+        </div>
+      </div>
     {% endif %}
   </div>
   {% endfor %}

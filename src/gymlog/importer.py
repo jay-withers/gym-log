@@ -4,20 +4,28 @@ A `.xlsx` is a zip of XML, so this parses it with `zipfile` and `xml.etree` from
 the standard library rather than adding `openpyxl` to the runtime image for a
 one-off import that runs once per rotation at most.
 
-**It imports the prescription, not the performance.** The sheet's achieved-reps
-and weight cells are read only as `seed_weight`, so the first suggestion is not
-blind. They are deliberately *not* turned into a logged session: those cells carry
-no date, and inventing one would put a fabricated entry at the head of the history
-this application exists to keep honest.
+**There are two `Reps` columns and the second one is the real one.** The sheet
+has a `Reps` beside `Sets` and another beside `Weight`; the numbers actually
+worked to are the second, which is why that is the one read here. The first is
+left alone.
 
-The expected shape, which is what the sheet already has — one worksheet per
-training day, a header row, then one row per exercise:
+    Part | Exercises | Sets | Reps | Rest | Reps     | Weight
+    Chest| Low-to-High Cable Flyes | 3 | 10-12 | 60-70secs | 15       | 7.5
+    Triceps | Overhead Cable Tricep Ext | 3 | 10-12 | 60secs | 10/12/12 | 15
 
-    Part | Exercises | Sets | Reps | Rest | Reps | Weight
-    Chest | Low-to-High Cable Flyes | 3 | 10-12 | 60-70secs | 15 | 7.5
+**A slashed value is one number per set**, in order: `10/12/12` is a ten then two
+twelves, not a range and not an average. `rep_low`/`rep_high` become the min and
+max of those, so the double-progression rule keeps working unchanged, and
+`rep_targets` keeps which set is which.
+
+**It still imports no performance.** The `Weight` cell is read only as
+`seed_weight`, and nothing here is turned into a logged session: these cells
+carry no date, and inventing one would put a fabricated entry at the head of the
+history this application exists to keep honest.
 
 A trailing row with a name but no `Part` is the finisher (Sled Push, Sandbag
-Lunges): performed and ticked off, carrying no load or rep target.
+Lunges): no load and no rep target, but it is timed when anyone remembers to,
+which the session form offers as an optional field.
 """
 
 from __future__ import annotations
@@ -65,21 +73,28 @@ def _exercises(rows: list[list[str]]) -> list[Exercise]:
     out: list[Exercise] = []
     for row in rows[1:]:  # row 0 is the header
         cells = [c.strip() for c in row] + [""] * 7
-        part, name, sets, reps, rest, _achieved, weight = cells[:7]
+        # `_prescribed` is the `Reps` beside `Sets` and is deliberately unused —
+        # see the module docstring. The worked reps are the column beside
+        # `Weight`, which is `worked` here.
+        part, name, sets, _prescribed, rest, worked, weight = cells[:7]
         if not name:
             continue
         if not part:
             # The finisher: a movement with no load and no rep target.
             out.append(Exercise(slot="finisher", name=name))
             continue
-        low, high = _rep_range(reps)
+        count = _int(sets)
+        targets = _rep_targets(worked, count)
         out.append(
             Exercise(
                 slot=part.lower(),
                 name=name,
-                sets=_int(sets),
-                rep_low=low,
-                rep_high=high,
+                sets=count,
+                rep_low=min(targets) if targets else 0,
+                rep_high=max(targets) if targets else 0,
+                # Only worth storing when the sets actually differ; a flat
+                # `15/15/15` says nothing `rep_low`/`rep_high` does not.
+                rep_targets=targets if len(set(targets)) > 1 else (),
                 rest_seconds=_rest_seconds(rest),
                 seed_weight=_float(weight),
             )
@@ -87,14 +102,22 @@ def _exercises(rows: list[list[str]]) -> list[Exercise]:
     return out
 
 
-def _rep_range(value: str) -> tuple[int, int]:
-    """`10-12` -> (10, 12); a bare `10` -> (10, 10); anything else -> (0, 0)."""
+def _rep_targets(value: str, sets: int) -> tuple[int, ...]:
+    """`10/12/12` -> (10, 12, 12); a bare `15` across 3 sets -> (15, 15, 15).
+
+    A single number applies to every set. Several are taken in order, and are
+    padded with the last or truncated if the count disagrees with the `Sets`
+    column — a disagreement is a typo in one cell or the other, and importing
+    the rest of a 12-exercise block beats refusing the file over it.
+    """
     numbers = [int(n) for n in re.findall(r"\d+", value)]
-    if not numbers:
-        return 0, 0
+    if not numbers or sets <= 0:
+        return ()
     if len(numbers) == 1:
-        return numbers[0], numbers[0]
-    return min(numbers), max(numbers)
+        return (numbers[0],) * sets
+    if len(numbers) < sets:
+        numbers += [numbers[-1]] * (sets - len(numbers))
+    return tuple(numbers[:sets])
 
 
 def _rest_seconds(value: str) -> int:
