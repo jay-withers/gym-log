@@ -132,12 +132,12 @@ def _blob() -> Any:
     return BlobClient.from_blob_url(f"{url.rstrip('/')}/{BLOB_NAME}", credential=credential())
 
 
-def _local_path() -> pathlib.Path:
+def local_path() -> pathlib.Path:
     return pathlib.Path(settings().local_state_path)
 
 
 def _load_local() -> tuple[Log, str | None]:
-    path = _local_path()
+    path = local_path()
     if not path.exists():
         logger.info("no local log at %s; starting an empty one", path)
         return Log(), None
@@ -150,7 +150,7 @@ def _save_local(log: Log) -> None:
     An interrupted write that truncates the file in place would lose the whole
     history; a rename is atomic on every filesystem this runs on.
     """
-    path = _local_path()
+    path = local_path()
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(log.to_json(), encoding="utf-8")
     tmp.replace(path)

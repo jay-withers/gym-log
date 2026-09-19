@@ -98,8 +98,20 @@ file, and `settings.py` reads the passcode from the environment before Key Vault
 ```bash
 make install
 make test
+make seed         # a sample log, shaped exactly like the one in blob storage
 make run          # http://localhost:8000, passcode "local"
 ```
+
+`make seed` matters more than it sounds: an empty local file leaves the app with
+no block, and therefore no session screen, no suggestions and no history — the
+one state with least to look at. The sample carries a block part-way through and
+five sessions chosen to put every card into a different state (climbing inside
+the range, ready to add weight, stalled below it, and never logged), so a change
+to the session screen can be seen rather than imagined. `make seed FORCE=1`
+replaces an existing one.
+
+It writes to the local file only, and **refuses outright when
+`STATE_CONTAINER_URL` is set** — invented sessions must never reach the real log.
 
 Browsers treat `localhost` as a secure origin, so the `Secure` session cookie
 works over plain http there. `httpx` does not, which is why the tests point

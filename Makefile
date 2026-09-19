@@ -10,7 +10,7 @@ IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint test run build push deploy url logs import show init fmt validate plan apply secrets
+.PHONY: help install lint test run seed build push deploy url logs import show init fmt validate plan apply secrets
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -39,6 +39,17 @@ lint: ## Run every pre-commit hook against every file
 # works over plain http here despite being set `Secure`.
 run: ## Serve locally on :8000 against a local log file
 	APP_PASSCODE=$${APP_PASSCODE:-local} uv run gymlog serve --reload
+
+# The local file starts empty, which is the one state the app has least to show:
+# no block, so no session screen, no suggestions and no history. This writes a
+# sample log in exactly the shape the blob holds, with enough sessions to put
+# every screen into a state worth looking at.
+#
+# STATE_CONTAINER_URL is cleared rather than merely expected to be unset: a
+# developer with it exported for `make show` would otherwise get a refusal here,
+# and the refusal is a guard against overwriting the real log, not a workflow.
+seed: ## Write a sample log to the local file (STATE_CONTAINER_URL is ignored)
+	STATE_CONTAINER_URL= uv run gymlog seed $(if $(FORCE),--force,)
 
 # The one-off that seeds a block from the spreadsheet. Against the real blob, so
 # it needs Storage Blob Data Contributor on the container — which whoever
