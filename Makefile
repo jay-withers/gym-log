@@ -48,8 +48,13 @@ run: ## Serve locally on :8000 against a local log file
 # STATE_CONTAINER_URL is cleared rather than merely expected to be unset: a
 # developer with it exported for `make show` would otherwise get a refusal here,
 # and the refusal is a guard against overwriting the real log, not a workflow.
-seed: ## Write a sample log to the local file (STATE_CONTAINER_URL is ignored)
-	STATE_CONTAINER_URL= uv run gymlog seed $(if $(FORCE),--force,)
+# The hint is here rather than in the command's own refusal because the right
+# answer depends on how you got here: `--force` if you ran the CLI, FORCE=1 if
+# you ran make, and make cannot be passed `--force` as a target argument.
+seed: ## Write a sample log to the local file (FORCE=1 replaces an existing one)
+	@STATE_CONTAINER_URL= uv run gymlog seed $(if $(FORCE),--force,) || { \
+		echo "hint: make seed FORCE=1   # replaces the existing local log" >&2; \
+		exit 1; }
 
 # The one-off that seeds a block from the spreadsheet. Against the real blob, so
 # it needs Storage Blob Data Contributor on the container — which whoever

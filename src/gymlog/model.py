@@ -274,12 +274,39 @@ class Entry:
 
 @dataclass(frozen=True)
 class Session:
-    """One training session, as performed. Never modified once written."""
+    """One training session, as performed.
+
+    **Filled in as the session happens, then never touched again.** Each
+    exercise is saved as it is finished, so a session grows an entry at a time
+    over the hour it takes — losing the phone half way costs the exercise in
+    progress rather than the whole morning.
+
+    The append-only rule the log is built on is about *history*, and it still
+    holds: `with_entry` only ever reaches the session for today's date and day.
+    Yesterday's is as immutable as it ever was.
+    """
 
     date: str
     block: str
     day: str
     entries: tuple[Entry, ...] = ()
+
+    def with_entry(self, entry: Entry) -> Session:
+        """Add `entry`, or replace the one already recorded for that exercise.
+
+        Replacing rather than appending is what makes a correction possible: an
+        11 typed where a 1 was meant is noticed on the next set, and the only
+        way to fix it otherwise would be to leave both in the log.
+        """
+        others = tuple(e for e in self.entries if e.exercise != entry.exercise)
+        if len(others) == len(self.entries):
+            return replace(self, entries=(*self.entries, entry))
+        # Rebuilt in place so re-saving an exercise does not move it to the end,
+        # which would make the log disagree with the order they were performed.
+        return replace(
+            self,
+            entries=tuple(entry if e.exercise == entry.exercise else e for e in self.entries),
+        )
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -353,8 +380,44 @@ class Log:
         return tuple(out)
 
     def with_session(self, session: Session) -> Log:
-        """Append a session. The only mutation this model allows."""
+        """Append a whole session."""
         return replace(self, sessions=(*self.sessions, session))
+
+    def with_entry(self, when: str, block: str, day: str, entry: Entry) -> Log:
+        """Record one exercise into today's session, starting it if need be.
+
+        The session for a date and day is the unit, not the submit: six saves
+        over an hour produce one row in the log, because one training session is
+        what happened.
+        """
+        for index, session in enumerate(self.sessions):
+            if session.date == when and session.day == day:
+                updated = session.with_entry(entry)
+                return replace(
+                    self,
+                    sessions=(*self.sessions[:index], updated, *self.sessions[index + 1 :]),
+                )
+        started = Session(date=when, block=block, day=day, entries=(entry,))
+        return replace(self, sessions=(*self.sessions, started))
+
+    def session_on(self, when: str, day: str) -> Session | None:
+        """Today's session for `day`, if it has been started."""
+        return next(
+            (s for s in self.sessions if s.date == when and s.day == day),
+            None,
+        )
+
+    def excluding(self, when: str, day: str) -> Log:
+        """This log without one session.
+
+        Used to work out what to suggest *for* a session while it is being
+        filled in: with today's entries included, every suggestion would chase
+        the set that had just been typed into it.
+        """
+        return replace(
+            self,
+            sessions=tuple(s for s in self.sessions if not (s.date == when and s.day == day)),
+        )
 
     def with_block(self, block: Block) -> Log:
         """Add or replace a block by id."""
