@@ -131,9 +131,16 @@ def session_form(request: Request, day: str) -> Any:
     if block is None or day not in block.days:
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
+    today = _today().isoformat()
+    # Suggestions come from everything *except* today's own session. With it
+    # included, saving an exercise would immediately re-suggest against the set
+    # just typed in, and the card would chase itself up the rep range.
+    history = log.excluding(today, day)
+    started = log.session_on(today, day)
+
     cards = []
     for index, exercise in enumerate(block.days[day].exercises):
-        previous = log.last_entry(exercise.name)
+        previous = history.last_entry(exercise.name)
         last_entry, last_date = previous if previous else (None, "")
         cards.append(
             {
@@ -142,6 +149,10 @@ def session_form(request: Request, day: str) -> Any:
                 "suggestion": suggest(exercise, last_entry, last_date),
                 "last": last_entry,
                 "last_date": last_date,
+                # What is already in the log for this exercise today, which the
+                # card shows back as values rather than placeholders so that
+                # re-saving it is an edit rather than a fresh guess.
+                "recorded": _recorded(started, exercise.name),
             }
         )
 
@@ -154,51 +165,78 @@ def session_form(request: Request, day: str) -> Any:
             "label": block.days[day].label,
             "week": block.week_of(_today()),
             "cards": cards,
-            "today": _today().isoformat(),
-            # Whether today's session for this day is already in the log. The
-            # page uses it to decide that a draft held on the phone has landed
-            # and can be dropped — see the draft script in session.html. Asked
-            # of the server rather than assumed on submit, so a save that failed
-            # leaves the draft exactly where it was.
-            "already_logged": any(
-                s.day == day and s.date == _today().isoformat() for s in log.sessions
-            ),
+            "today": today,
+            "done": sum(1 for c in cards if c["recorded"]),
         },
     )
 
 
-@router.post("/session/{day}", include_in_schema=False)
-async def log_session(request: Request, day: str) -> Any:
+@router.post("/session/{day}/{index}", include_in_schema=False)
+async def log_exercise(request: Request, day: str, index: int) -> Any:
+    """Record one exercise into today's session, starting the session if needed.
+
+    **One submit per exercise, not one per session.** A session is an hour of a
+    phone in a pocket, and a single Save at the end means an hour of typing
+    riding on the tab surviving that long. Each exercise is banked as it is
+    finished instead, so the worst case is the one in progress.
+
+    They still make one session in the log, because one training session is what
+    happened — see `Log.with_entry`.
+    """
     log, _etag = store.load()
     block = log.current_block
     if block is None or day not in block.days:
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
+    exercises = block.days[day].exercises
+    if not 0 <= index < len(exercises):
+        return RedirectResponse(f"/session/{day}", status_code=status.HTTP_303_SEE_OTHER)
+
+    exercise = exercises[index]
     form = await request.form()
     when = str(form.get("date") or _today().isoformat())
-    entries = _entries(block.days[day], form)
+    entry = _entry(exercise, index, form)
 
-    if not entries:
-        # Nothing was filled in. Recording an empty session would put a
-        # zero-rep entry into the history and drag every suggestion down.
-        return RedirectResponse(f"/session/{day}?empty=1", status_code=status.HTTP_303_SEE_OTHER)
+    if entry is None:
+        # Nothing filled in. Recording it would put a zero-rep entry into the
+        # history and drag every later suggestion down.
+        return _back(day, index, "empty")
 
-    session = Session(date=when, block=block.id, day=day, entries=entries)
     try:
-        store.update(lambda current: current.with_session(session))
+        store.update(lambda current: current.with_entry(when, block.id, day, entry))
     except store.ConflictError as exc:
         raise ConflictResponse(
-            "the log was changed elsewhere while this session was being saved; nothing was recorded"
+            f"the log was changed elsewhere while {exercise.name} was being saved; "
+            "it was not recorded"
         ) from exc
 
-    logger.info("logged %s day %s — %d exercise(s)", when, day, len(entries))
-    return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+    logger.info("recorded %s on %s day %s", exercise.name, when, day)
+    return _back(day, index, "saved")
 
 
-def _entries(day: Day, form: Any) -> tuple[Entry, ...]:
-    """Read the posted form into entries, dropping anything left blank.
+def _back(day: str, index: int, outcome: str) -> RedirectResponse:
+    """Back to the session, at the card just submitted.
 
-    A set with no reps is a set that was not performed — the form always renders
+    The fragment matters on a phone: without it every save scrolls back to the
+    top and the next exercise has to be found again, six times a session.
+    """
+    return RedirectResponse(
+        f"/session/{day}?{outcome}={index}#e{index}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+def _recorded(session: Session | None, name: str) -> Entry | None:
+    """What is already in today's session for `name`, if anything."""
+    if session is None:
+        return None
+    return next((e for e in session.entries if e.exercise == name), None)
+
+
+def _entry(exercise: Exercise, index: int, form: Any) -> Entry | None:
+    """One exercise's posted fields, or None when nothing was filled in.
+
+    A set with no reps is a set that was not performed — the card always renders
     the full prescription, and stopping at two sets of three is ordinary. Only
     what was filled in is recorded.
 
@@ -206,32 +244,23 @@ def _entries(day: Day, form: Any) -> tuple[Entry, ...]:
     timed rather than loaded, so a time on its own counts as having done it and
     the tick box is not also required.
     """
-    out: list[Entry] = []
-    for index, exercise in enumerate(day.exercises):
-        if not exercise.tracked:
-            seconds = _seconds(form.get(f"seconds_{index}"))
-            if form.get(f"done_{index}") or seconds:
-                out.append(
-                    Entry(
-                        slot=exercise.slot,
-                        exercise=exercise.name,
-                        note="done",
-                        seconds=seconds,
-                    )
-                )
+    if not exercise.tracked:
+        seconds = _seconds(form.get(f"seconds_{index}"))
+        if form.get(f"done_{index}") or seconds:
+            return Entry(slot=exercise.slot, exercise=exercise.name, note="done", seconds=seconds)
+        return None
+
+    sets: list[SetLog] = []
+    for position in range(exercise.sets):
+        reps = _int(form.get(f"reps_{index}_{position}"))
+        weight = _float(form.get(f"weight_{index}_{position}"))
+        if reps is None or weight is None:
             continue
+        sets.append(SetLog(reps=reps, weight=weight))
 
-        sets: list[SetLog] = []
-        for position in range(exercise.sets):
-            reps = _int(form.get(f"reps_{index}_{position}"))
-            weight = _float(form.get(f"weight_{index}_{position}"))
-            if reps is None or weight is None:
-                continue
-            sets.append(SetLog(reps=reps, weight=weight))
-
-        if sets:
-            out.append(Entry(slot=exercise.slot, exercise=exercise.name, sets=tuple(sets)))
-    return tuple(out)
+    if not sets:
+        return None
+    return Entry(slot=exercise.slot, exercise=exercise.name, sets=tuple(sets))
 
 
 @router.get("/history/{slot}", response_class=HTMLResponse, include_in_schema=False)

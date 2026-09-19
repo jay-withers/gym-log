@@ -37,7 +37,11 @@
   .reason { color: var(--accent); font-size: 14px; margin-bottom: 10px; }
   .reason.stalled { color: var(--warn); }
   .last { color: var(--dim); font-size: 13px; margin-bottom: 10px; }
-  .target { color: var(--fg); font-size: 13px; margin-bottom: 8px; }
+  /* A saved exercise recedes rather than disappears: it is still editable, but
+     the eye should land on the next one that is not done. */
+  .card.recorded { border-color: var(--accent); opacity: .72; }
+  .card.recorded:focus-within { opacity: 1; }
+  .target { color: var(--text); font-size: 13px; margin-bottom: 8px; }
   /* The one thing the stripped-back card still has to be able to shout: the
      last session fell short of the range, so the weight is deliberately not
      going up this time. */
