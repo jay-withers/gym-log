@@ -48,6 +48,11 @@
   .target.stalled { color: var(--warn); }
   .target b { font-weight: 600; }
   .target .per-set { color: var(--dim); }
+  /* Name above, range beneath: the two rep boxes are narrow enough to sit
+     side by side one-handed without either falling under the 16px floor. */
+  .range { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 8px;
+           align-items: center; margin-top: 6px; }
+  .range span { color: var(--dim); font-size: 13px; }
   .sets { display: grid; gap: 8px; }
   .set { display: grid; grid-template-columns: 28px 1fr 1fr; gap: 8px; align-items: center; }
   .set span { color: var(--dim); font-size: 13px; }

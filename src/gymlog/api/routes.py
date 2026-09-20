@@ -306,9 +306,10 @@ def block_form(request: Request) -> Any:
 async def rotate(request: Request) -> Any:
     """Start a new block, carrying the slot structure and prescriptions forward.
 
-    The exercise *names* are whatever was typed into the form; everything else
-    about each slot defaults to the outgoing block's prescription, because
-    changing the movement rarely means changing the sets or the rep range.
+    The exercise *names* and *rep ranges* are whatever was typed into the form;
+    everything else about each slot defaults to the outgoing block's
+    prescription, because changing the movement rarely means changing the sets
+    or the rest.
 
     History is untouched. Sessions reference the block they were performed in and
     carry their own slot, so a rotation adds to the record rather than resetting
@@ -328,14 +329,23 @@ async def rotate(request: Request) -> Any:
         exercises: list[Exercise] = []
         for index, exercise in enumerate(day.exercises):
             chosen = str(form.get(f"name_{key}_{index}") or exercise.name).strip()
+            rep_low, rep_high = _chosen_range(form, key, index, exercise)
             exercises.append(
                 Exercise(
                     slot=exercise.slot,
                     name=chosen or exercise.name,
                     sets=exercise.sets,
-                    rep_low=exercise.rep_low,
-                    rep_high=exercise.rep_high,
-                    rep_targets=exercise.rep_targets,
+                    rep_low=rep_low,
+                    rep_high=rep_high,
+                    # Per-set targets describe the range they were written for —
+                    # `10/12/12` inside 10-12. Carrying them into a range that
+                    # has moved would put the old numbers in the session
+                    # placeholders and contradict the target printed above them.
+                    rep_targets=(
+                        exercise.rep_targets
+                        if (rep_low, rep_high) == (exercise.rep_low, exercise.rep_high)
+                        else ()
+                    ),
                     rest_seconds=exercise.rest_seconds,
                     increment=exercise.increment,
                     # No seed weight: a changed movement starts from what gets
@@ -397,6 +407,28 @@ def _seconds(value: Any) -> int:
         return max(0, int(parts[0] or 0) * 60 + int(parts[1] or 0))
     except ValueError:
         return 0
+
+
+def _chosen_range(form: Any, key: str, index: int, exercise: Exercise) -> tuple[int, int]:
+    """The rep range typed into the block form, or the outgoing one.
+
+    A blank, a zero or a word falls back per field rather than for the pair, so
+    raising only the top of 8-10 to 8-12 does not need both boxes retyped. A
+    range entered backwards is read as a transposition rather than rejected:
+    there is no error path on this form, and refusing the whole rotation over
+    `12-10` would be worse than reading it the only way it can be meant.
+    """
+
+    def typed(field: str, fallback: int) -> int:
+        value = _int(form.get(f"{field}_{key}_{index}"))
+        # `min` on the input is advice, not a guarantee: anything can be posted.
+        return value if value is not None and value > 0 else fallback
+
+    low = typed("rep_low", exercise.rep_low)
+    high = typed("rep_high", exercise.rep_high)
+    if high < low:
+        low, high = high, low
+    return low, high
 
 
 def _int(value: Any) -> int | None:
