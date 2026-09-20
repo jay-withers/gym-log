@@ -14,6 +14,7 @@ def exercise(
     increment: float = 2.5,
     seed_weight: float | None = None,
     rest_seconds: int = 60,
+    rep_targets: tuple[int, ...] = (),
 ) -> Exercise:
     return Exercise(
         slot=slot,
@@ -21,6 +22,7 @@ def exercise(
         sets=sets,
         rep_low=rep_low,
         rep_high=rep_high,
+        rep_targets=rep_targets,
         rest_seconds=rest_seconds,
         increment=increment,
         seed_weight=seed_weight,

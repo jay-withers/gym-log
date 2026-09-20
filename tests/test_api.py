@@ -10,9 +10,9 @@ from fastapi.testclient import TestClient
 from gymlog import settings as settings_module
 from gymlog import store
 from gymlog.api.main import create_app
-from gymlog.model import Log
+from gymlog.model import Block, Day, Log
 
-from .factories import block, exercise
+from .factories import block, entry, exercise, session
 
 
 @pytest.fixture
@@ -220,6 +220,41 @@ def test_rotating_keeps_the_slot_and_the_history(client, seeded):
     assert [r[1] for r in log.history("chest")] == ["Cable Flyes"]
 
 
+def test_the_block_form_offers_the_rep_range_of_every_tracked_movement(client, seeded):
+    """The prescription is edited here or nowhere — there is no other screen for it."""
+    login(client)
+    page = client.get("/block").text
+    assert 'name="rep_low_A_0" value="10"' in page
+    assert 'name="rep_high_A_0" value="12"' in page
+    # The finisher takes no load, so it is offered no range to type into.
+    assert "rep_low_A_1" not in page
+
+
+def test_rotating_takes_the_rep_range_from_the_form(client):
+    store.save(Log(blocks=(block("2026-09-01", exercise(rep_targets=(10, 12, 12))),)))
+    login(client)
+    assert (
+        client.post(
+            "/block",
+            data={
+                "name": "Block 4",
+                "started": "2026-10-27",
+                # Only the top of the range retyped, and the pair transposed, to
+                # cover both things the form is forgiving about.
+                "rep_high_A_0": "8",
+            },
+        ).status_code
+        == 303
+    )
+
+    log, _ = store.load()
+    assert log.current_block is not None
+    chest = log.current_block.days["A"].exercises[0]
+    assert (chest.rep_low, chest.rep_high) == (8, 10)
+    # Per-set targets belonged to the old range and did not follow it.
+    assert chest.rep_targets == ()
+
+
 def test_a_write_that_loses_its_race_is_reported_not_swallowed(client, seeded, monkeypatch):
     """The person is the only one who can re-enter a session, so they must be told."""
 
@@ -296,6 +331,9 @@ def test_an_unticked_untimed_finisher_is_not_recorded(client, seeded):
         ("", 0),
         # Unparseable is untimed, not a refused session.
         ("ages", 0),
+        # Half-parseable too: `1:` reaches the int() and must not 500 there.
+        ("1:ish", 0),
+        ("m", 0),
     ],
 )
 def test_the_time_field_takes_what_a_phone_keyboard_makes_easy(typed, expected):
@@ -514,3 +552,194 @@ def test_an_index_outside_the_day_goes_back_rather_than_erroring(client, seeded)
     response = client.post("/session/A/99", data={"date": date.today().isoformat()})
     assert response.status_code == 303
     assert response.headers["location"] == "/session/A"
+
+
+# --- the pages before there is anything to show ------------------------------
+
+
+def test_every_page_says_how_to_get_started_before_the_first_import(client):
+    """A fresh deployment has no block at all, and must not 500 on the way to saying so."""
+    login(client)
+    for path in ("/", "/block"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert "gymlog import" in response.text
+
+
+def test_rotating_with_no_block_to_rotate_goes_home(client):
+    """There is nothing to carry forward, so there is nothing to do."""
+    login(client)
+    assert client.post("/block", data={"name": "Block 1"}).status_code == 303
+
+
+@pytest.mark.parametrize("path", ["/session/Z", "/session/Z/0"])
+def test_a_day_that_is_not_in_the_block_goes_home(client, seeded, path):
+    """A stale bookmark from a previous block, which the phone keeps for months."""
+    login(client)
+    response = client.get(path) if path.count("/") == 2 else client.post(path, data={})
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+
+
+def test_an_exercise_index_past_the_end_goes_back_to_the_session(client, seeded):
+    """Same stale bookmark, one level down: the block rotated and the day got shorter."""
+    login(client)
+    response = client.post("/session/A/99", data={"date": "2026-09-15"})
+    assert response.status_code == 303
+    assert response.headers["location"] == "/session/A"
+
+
+def test_a_rotation_that_loses_its_race_is_reported(client, seeded, monkeypatch):
+    """Silently dropping it would leave the phone showing a block that was never started."""
+
+    def conflict(_change):
+        raise store.ConflictError("changed underneath")
+
+    monkeypatch.setattr(store, "update", conflict)
+    login(client)
+    assert client.post("/block", data={"name": "Block 4"}).status_code == 409
+
+
+# --- history -----------------------------------------------------------------
+
+
+def test_history_spans_the_rotation_and_marks_the_best_set(client, seeded):
+    """The page that only exists because the log is keyed on the slot."""
+    store.save(
+        Log(
+            blocks=(block("2026-09-01", exercise(slot="chest", name="Cable Flyes")),),
+            sessions=(
+                session("2026-09-15", "2026-09-01", "A", entry("Cable Flyes", "chest", (12, 7.5))),
+                session(
+                    "2026-10-28", "2026-10-27", "A", entry("Incline DB Press", "chest", (11, 20.0))
+                ),
+            ),
+        )
+    )
+    login(client)
+    page = client.get("/history/chest").text
+
+    assert "Cable Flyes" in page
+    assert "Incline DB Press" in page
+    # The heaviest set across every block, marked once.
+    assert page.count("▲") == 1
+
+
+def test_a_slot_with_nothing_in_it_says_so(client, seeded):
+    login(client)
+    assert "Nothing logged for this slot yet" in client.get("/history/legs").text
+
+
+# --- which day is next -------------------------------------------------------
+
+
+def test_the_next_day_alternates(client, seeded):
+    """Twice a week means the day not done last, which is the whole rule."""
+    store.save(
+        Log(
+            blocks=(
+                Block(
+                    id="2026-09-01",
+                    name="Test block",
+                    started="2026-09-01",
+                    days={
+                        "A": Day(label="Tues", exercises=(exercise(),)),
+                        "B": Day(label="Thur", exercises=(exercise(),)),
+                    },
+                ),
+            ),
+            sessions=(session("2026-09-15", "2026-09-01", "A", entry()),),
+        )
+    )
+    login(client)
+    page = client.get("/").text
+    assert "Thur · next" in page
+    assert "Tues · next" not in page
+
+
+def test_the_first_session_of_a_block_starts_at_the_first_day(client, seeded):
+    login(client)
+    assert "Tues · next" in client.get("/").text
+
+
+def test_a_block_with_no_days_still_renders(client):
+    """A hand-edited document in the portal can produce one, and a 500 would hide why."""
+    store.save(Log(blocks=(Block(id="2026-09-01", name="Empty", started="2026-09-01", days={}),)))
+    login(client)
+    assert client.get("/").status_code == 200
+
+
+# --- the gate ----------------------------------------------------------------
+
+
+def test_readiness_passes_when_the_log_can_be_read(client):
+    """The probe Container Apps uses to decide whether to send traffic."""
+    response = client.get("/readyz")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "storage": True}
+
+
+def test_rotating_the_passcode_logs_the_phone_out(client, seeded, monkeypatch):
+    """The useful property of deriving the cookie key from the passcode.
+
+    There is no session store to revoke against, so this is the whole of "log
+    every device out".
+    """
+    login(client)
+    assert client.get("/").status_code == 200
+
+    monkeypatch.setenv("APP_PASSCODE", "a-new-passcode")
+    settings_module.secret.cache_clear()
+
+    assert client.get("/").status_code == 303
+
+
+def test_a_cookie_secret_decouples_the_two(client, seeded, monkeypatch):
+    """Which is why it exists: rotating the passcode then leaves sessions alone."""
+    monkeypatch.setenv("COOKIE_SECRET", "a-signing-key")
+    settings_module.settings.cache_clear()
+    login(client)
+
+    monkeypatch.setenv("APP_PASSCODE", "a-new-passcode")
+    settings_module.secret.cache_clear()
+
+    assert client.get("/").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "cookie",
+    [
+        # Signed with something else, or edited by hand.
+        "1758240000.0000000000000000000000000000000000000000000000000000000000000000",
+        # Not a timestamp at all, which must be refused before it is compared.
+        "yesterday.abc",
+        # Not the shape at all.
+        "nonsense",
+    ],
+)
+def test_a_cookie_this_process_did_not_issue_is_refused(client, seeded, cookie):
+    login(client)
+    client.cookies.set("gymlog_session", cookie)
+    assert client.get("/").status_code == 303
+
+
+def test_a_session_older_than_the_cookie_lifetime_is_refused(client, seeded, monkeypatch):
+    """Thirty days by default; this is the check that eventually ends one."""
+    login(client)
+    monkeypatch.setenv("COOKIE_MAX_AGE_SECONDS", "0")
+    settings_module.settings.cache_clear()
+
+    assert client.get("/").status_code == 303
+
+
+def test_the_gate_can_be_turned_off(monkeypatch, tmp_path):
+    """For a local `make run`, and only for that: it defaults on and fails closed."""
+    monkeypatch.setenv("REQUIRE_PASSCODE", "false")
+    monkeypatch.delenv("APP_PASSCODE", raising=False)
+    settings_module.settings.cache_clear()
+    settings_module.secret.cache_clear()
+
+    # No passcode configured at all, so a start-up that still resolved one would
+    # raise here rather than serve.
+    with TestClient(create_app(), base_url="https://testserver", follow_redirects=False) as open_:
+        assert open_.get("/").status_code == 200

@@ -16,17 +16,30 @@
   </div>
 
   <p class="last">
-    Change whichever movements you want. Anything left as it is carries over.
-    Sets, rep range and rest come with the slot; history is keyed on the slot, so
-    swapping an exercise adds to the record rather than resetting it.
+    Change whichever movements and rep ranges you want. Anything left as it is
+    carries over. Sets and rest come with the slot; history is keyed on the slot,
+    so swapping an exercise adds to the record rather than resetting it.
   </p>
 
   {% for key, day in block.days | dictsort %}
   <div class="card">
     <div class="slot">{{ day.label or key }}</div>
     {% for e in day.exercises %}
+      {% set index = loop.index0 %}
       <label class="slot" style="display:block;margin-top:10px">{{ e.slot }}</label>
-      <input type="text" name="name_{{ key }}_{{ loop.index0 }}" value="{{ e.name }}">
+      <input type="text" name="name_{{ key }}_{{ index }}" value="{{ e.name }}">
+      {# Only for a movement that takes a load: the finisher is performed and
+         ticked off, so a rep range on it would be a box that means nothing. #}
+      {% if e.tracked %}
+      <div class="range">
+        <span>Target reps</span>
+        <input type="number" name="rep_low_{{ key }}_{{ index }}" value="{{ e.rep_low }}"
+               inputmode="numeric" min="1" max="99" aria-label="{{ e.slot }} lowest target reps">
+        <span>&ndash;</span>
+        <input type="number" name="rep_high_{{ key }}_{{ index }}" value="{{ e.rep_high }}"
+               inputmode="numeric" min="1" max="99" aria-label="{{ e.slot }} highest target reps">
+      </div>
+      {% endif %}
     {% endfor %}
   </div>
   {% endfor %}
