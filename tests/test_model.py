@@ -125,3 +125,18 @@ def test_week_of_survives_an_unparseable_start_date():
     b = block("2026-09-01")
     b = type(b)(id=b.id, name=b.name, started="not-a-date", days=b.days)
     assert b.week_of(date(2026, 9, 19)) == 1
+
+
+@pytest.mark.parametrize(
+    ("low", "high", "label"),
+    [
+        (10, 12, "10\u201312"),
+        # No width: the sheet writes a single number against some movements, and
+        # `10-10` would read as a range that is not one.
+        (10, 10, "10"),
+        # The finisher, which takes no rep target at all.
+        (0, 0, ""),
+    ],
+)
+def test_the_rep_range_label(low, high, label):
+    assert exercise(rep_low=low, rep_high=high).rep_range_label == label
