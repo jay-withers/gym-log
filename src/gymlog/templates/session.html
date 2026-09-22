@@ -49,11 +49,6 @@
 
     <div class="row">
       <button type="submit">{% if rec %}Update{% else %}Save{% endif %}</button>
-      {% if e.rest_seconds %}
-      <button type="button" class="btn ghost" data-rest="{{ e.rest_seconds }}">
-        Rest {{ e.rest_seconds }}s
-      </button>
-      {% endif %}
     </div>
   {% else %}
     {# The finisher: no load and no reps, but it is timed when remembered. #}
@@ -78,12 +73,6 @@
 {% endfor %}
 
 <a class="btn ghost" href="/" style="margin-top:20px">Finish</a>
-
-<div class="timer" id="timer" hidden>
-  <strong id="remaining">0:00</strong>
-  <span class="sub" id="timer-label"></span>
-  <button type="button" class="btn ghost" id="stop">Stop</button>
-</div>
 
 <script>
 // Keep what has been typed on the phone until the session is actually saved.
@@ -158,49 +147,6 @@
   form.addEventListener('input', save);
   form.addEventListener('change', save);
   }
-})();
-</script>
-
-<script>
-// Rest timer. The spreadsheet had a Rest column that did nothing; this is the
-// whole of making it do something. Deliberately no Notification or Wake Lock
-// permission prompt - a number that counts down is enough, and a permission
-// dialog mid-session is worse than glancing at the screen.
-(function () {
-  var timer = document.getElementById('timer');
-  var remaining = document.getElementById('remaining');
-  var label = document.getElementById('timer-label');
-  var handle = null;
-  var endsAt = 0;
-
-  function render() {
-    // Recomputed from a wall-clock deadline rather than decremented, so a phone
-    // that slept mid-set does not come back believing it owes you two minutes.
-    var left = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
-    remaining.textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
-    if (left <= 0) {
-      stop();
-      if (navigator.vibrate) { navigator.vibrate([200, 100, 200]); }
-    }
-  }
-
-  function stop() {
-    if (handle) { clearInterval(handle); handle = null; }
-    timer.hidden = true;
-  }
-
-  document.getElementById('stop').addEventListener('click', stop);
-
-  document.querySelectorAll('[data-rest]').forEach(function (button) {
-    button.addEventListener('click', function () {
-      endsAt = Date.now() + parseInt(button.dataset.rest, 10) * 1000;
-      label.textContent = button.closest('.card').querySelector('.name').textContent;
-      timer.hidden = false;
-      render();
-      if (handle) { clearInterval(handle); }
-      handle = setInterval(render, 250);
-    });
-  });
 })();
 </script>
 {% endblock %}
