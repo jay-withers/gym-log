@@ -16,6 +16,11 @@ output "container_app_name" {
   value       = azurerm_container_app.this.name
 }
 
+output "container_app_job_name" {
+  description = "Name of the weekly insight job, which `make deploy` passes to `az containerapp job update`."
+  value       = azurerm_container_app_job.insight.name
+}
+
 output "key_vault_name" {
   description = "Key Vault name, for populating APP-PASSCODE with `az keyvault secret set`."
   value       = azurerm_key_vault.this.name

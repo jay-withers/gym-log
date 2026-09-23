@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 import pathlib
 import re
+import uuid
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -18,7 +20,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from .. import store
-from ..model import Block, Day, Entry, Exercise, Session, SetLog
+from ..model import Achievement, Block, Condition, Day, Entry, Exercise, Goal, Log, Session, SetLog
 from ..progression import suggest
 from ..settings import settings
 from . import deps
@@ -84,12 +86,16 @@ def manifest() -> JSONResponse:
     `display: standalone` is the point of it — opened from the home screen there
     is no browser chrome, which on a phone is the difference between seeing three
     exercises and seeing five.
+
+    `start_url` points straight at `/strength` rather than the new home page:
+    the phone icon exists for the twice-a-week fast path of logging a set, and
+    a menu screen in front of it would be a tap this manifest exists to save.
     """
     return JSONResponse(
         {
-            "name": "gym-log",
-            "short_name": "gym",
-            "start_url": "/",
+            "name": "Health",
+            "short_name": "Health",
+            "start_url": "/strength",
             "display": "standalone",
             "background_color": "#101014",
             "theme_color": "#101014",
@@ -98,11 +104,20 @@ def manifest() -> JSONResponse:
     )
 
 
-# --- the log -----------------------------------------------------------------
+# --- home ----------------------------------------------------------------------
 
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
-def index(request: Request) -> Any:
+def home(request: Request) -> Any:
+    """A light landing page. Everything below it is one section among several."""
+    return templates.TemplateResponse(request, "home.html", {})
+
+
+# --- strength training -----------------------------------------------------
+
+
+@router.get("/strength", response_class=HTMLResponse, include_in_schema=False)
+def strength_index(request: Request) -> Any:
     log, _etag = store.load()
     block = log.current_block
     today = _today()
@@ -112,7 +127,7 @@ def index(request: Request) -> Any:
 
     return templates.TemplateResponse(
         request,
-        "index.html",
+        "strength.html",
         {
             "block": block,
             "week": block.week_of(today),
@@ -129,7 +144,7 @@ def session_form(request: Request, day: str) -> Any:
     log, _etag = store.load()
     block = log.current_block
     if block is None or day not in block.days:
-        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse("/strength", status_code=status.HTTP_303_SEE_OTHER)
 
     today = _today().isoformat()
     # Suggestions come from everything *except* today's own session. With it
@@ -186,7 +201,7 @@ async def log_exercise(request: Request, day: str, index: int) -> Any:
     log, _etag = store.load()
     block = log.current_block
     if block is None or day not in block.days:
-        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse("/strength", status_code=status.HTTP_303_SEE_OTHER)
 
     exercises = block.days[day].exercises
     if not 0 <= index < len(exercises):
@@ -318,7 +333,7 @@ async def rotate(request: Request) -> Any:
     log, _etag = store.load()
     previous = log.current_block
     if previous is None:
-        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse("/strength", status_code=status.HTTP_303_SEE_OTHER)
 
     form = await request.form()
     started = str(form.get("started") or _today().isoformat())
@@ -366,7 +381,282 @@ async def rotate(request: Request) -> Any:
         ) from exc
 
     logger.info("rotated to block %s (%s)", block.id, block.name)
-    return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse("/strength", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# --- achievements --------------------------------------------------------------
+
+
+@router.get("/achievements", response_class=HTMLResponse, include_in_schema=False)
+def achievements_list(request: Request) -> Any:
+    log, _etag = store.load()
+    return templates.TemplateResponse(
+        request,
+        "achievements.html",
+        {
+            "achievements": sorted(log.achievements, key=lambda a: a.date, reverse=True),
+            "today": _today().isoformat(),
+        },
+    )
+
+
+@router.post("/achievements", include_in_schema=False)
+async def add_achievement(request: Request) -> Any:
+    form = await request.form()
+    title = str(form.get("title") or "").strip()
+    if not title:
+        # Nothing worth recording. Same "silently do nothing" choice as an
+        # empty exercise card in log_exercise.
+        return RedirectResponse("/achievements", status_code=status.HTTP_303_SEE_OTHER)
+
+    achievement = Achievement(
+        id=uuid.uuid4().hex[:12],
+        date=str(form.get("date") or _today().isoformat()),
+        title=title,
+        note=str(form.get("note") or "").strip(),
+    )
+    try:
+        store.update(lambda current: current.with_achievement(achievement))
+    except store.ConflictError as exc:
+        raise ConflictResponse(
+            "the log was changed elsewhere; the achievement was not saved"
+        ) from exc
+    return RedirectResponse("/achievements", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/achievements/{achievement_id}", include_in_schema=False)
+async def edit_achievement(request: Request, achievement_id: str) -> Any:
+    form = await request.form()
+    title = str(form.get("title") or "").strip()
+    if not title:
+        return RedirectResponse("/achievements", status_code=status.HTTP_303_SEE_OTHER)
+
+    date = str(form.get("date") or "").strip()
+    note = str(form.get("note") or "").strip()
+
+    def apply_edit(current: Log) -> Log:
+        existing = next((a for a in current.achievements if a.id == achievement_id), None)
+        if existing is None:
+            return current
+        edited = replace(existing, date=date or existing.date, title=title, note=note)
+        return current.with_achievement(edited)
+
+    try:
+        store.update(apply_edit)
+    except store.ConflictError as exc:
+        raise ConflictResponse(
+            "the log was changed elsewhere; the achievement was not saved"
+        ) from exc
+    return RedirectResponse("/achievements", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/achievements/{achievement_id}/delete", include_in_schema=False)
+def delete_achievement(achievement_id: str) -> Any:
+    try:
+        store.update(lambda current: current.without_achievement(achievement_id))
+    except store.ConflictError as exc:
+        raise ConflictResponse(
+            "the log was changed elsewhere; the achievement was not deleted"
+        ) from exc
+    return RedirectResponse("/achievements", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# --- goals -----------------------------------------------------------------
+
+
+@router.get("/goals", response_class=HTMLResponse, include_in_schema=False)
+def goals_list(request: Request) -> Any:
+    log, _etag = store.load()
+    return templates.TemplateResponse(
+        request,
+        "goals.html",
+        {
+            "active": [g for g in log.goals if g.status == "active"],
+            "achieved": [g for g in log.goals if g.status != "active"],
+        },
+    )
+
+
+@router.post("/goals", include_in_schema=False)
+async def add_goal(request: Request) -> Any:
+    form = await request.form()
+    title = str(form.get("title") or "").strip()
+    if not title:
+        return RedirectResponse("/goals", status_code=status.HTTP_303_SEE_OTHER)
+
+    goal = Goal(
+        id=uuid.uuid4().hex[:12],
+        title=title,
+        target_date=str(form.get("target_date") or "").strip(),
+        note=str(form.get("note") or "").strip(),
+    )
+    try:
+        store.update(lambda current: current.with_goal(goal))
+    except store.ConflictError as exc:
+        raise ConflictResponse("the log was changed elsewhere; the goal was not saved") from exc
+    return RedirectResponse("/goals", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/goals/{goal_id}/achieve", include_in_schema=False)
+def achieve_goal(goal_id: str) -> Any:
+    # Looked up and mutated inside the retry-safe closure, not before it, so a
+    # conflict retries against whatever the goal actually looks like on the
+    # newer document rather than clobbering it with a stale copy.
+    def mark_achieved(current: Log) -> Log:
+        goal = next((g for g in current.goals if g.id == goal_id), None)
+        if goal is None:
+            return current
+        return current.with_goal(replace(goal, status="achieved"))
+
+    try:
+        store.update(mark_achieved)
+    except store.ConflictError as exc:
+        raise ConflictResponse("the log was changed elsewhere; the goal was not updated") from exc
+    return RedirectResponse("/goals", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/goals/{goal_id}", include_in_schema=False)
+async def edit_goal(request: Request, goal_id: str) -> Any:
+    form = await request.form()
+    title = str(form.get("title") or "").strip()
+    if not title:
+        return RedirectResponse("/goals", status_code=status.HTTP_303_SEE_OTHER)
+
+    target_date = str(form.get("target_date") or "").strip()
+    note = str(form.get("note") or "").strip()
+
+    def apply_edit(current: Log) -> Log:
+        existing = next((g for g in current.goals if g.id == goal_id), None)
+        if existing is None:
+            return current
+        edited = replace(existing, title=title, target_date=target_date, note=note)
+        return current.with_goal(edited)
+
+    try:
+        store.update(apply_edit)
+    except store.ConflictError as exc:
+        raise ConflictResponse("the log was changed elsewhere; the goal was not saved") from exc
+    return RedirectResponse("/goals", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/goals/{goal_id}/delete", include_in_schema=False)
+def delete_goal(goal_id: str) -> Any:
+    try:
+        store.update(lambda current: current.without_goal(goal_id))
+    except store.ConflictError as exc:
+        raise ConflictResponse("the log was changed elsewhere; the goal was not deleted") from exc
+    return RedirectResponse("/goals", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# --- injuries & conditions -----------------------------------------------------
+
+
+@router.get("/conditions", response_class=HTMLResponse, include_in_schema=False)
+def conditions_list(request: Request) -> Any:
+    log, _etag = store.load()
+    return templates.TemplateResponse(
+        request,
+        "conditions.html",
+        {
+            "active": [c for c in log.conditions if c.status == "active"],
+            "resolved": [c for c in log.conditions if c.status != "active"],
+            "today": _today().isoformat(),
+        },
+    )
+
+
+@router.post("/conditions", include_in_schema=False)
+async def add_condition(request: Request) -> Any:
+    form = await request.form()
+    body_part = str(form.get("body_part") or "").strip()
+    if not body_part:
+        return RedirectResponse("/conditions", status_code=status.HTTP_303_SEE_OTHER)
+
+    condition = Condition(
+        id=uuid.uuid4().hex[:12],
+        body_part=body_part,
+        started=str(form.get("started") or _today().isoformat()),
+        note=str(form.get("note") or "").strip(),
+    )
+    try:
+        store.update(lambda current: current.with_condition(condition))
+    except store.ConflictError as exc:
+        raise ConflictResponse(
+            "the log was changed elsewhere; the condition was not saved"
+        ) from exc
+    return RedirectResponse("/conditions", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/conditions/{condition_id}/resolve", include_in_schema=False)
+def resolve_condition(condition_id: str) -> Any:
+    today = _today().isoformat()
+
+    def mark_resolved(current: Log) -> Log:
+        condition = next((c for c in current.conditions if c.id == condition_id), None)
+        if condition is None:
+            return current
+        return current.with_condition(replace(condition, status="resolved", resolved=today))
+
+    try:
+        store.update(mark_resolved)
+    except store.ConflictError as exc:
+        raise ConflictResponse(
+            "the log was changed elsewhere; the condition was not updated"
+        ) from exc
+    return RedirectResponse("/conditions", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/conditions/{condition_id}", include_in_schema=False)
+async def edit_condition(request: Request, condition_id: str) -> Any:
+    form = await request.form()
+    body_part = str(form.get("body_part") or "").strip()
+    if not body_part:
+        return RedirectResponse("/conditions", status_code=status.HTTP_303_SEE_OTHER)
+
+    started = str(form.get("started") or "").strip()
+    note = str(form.get("note") or "").strip()
+
+    def apply_edit(current: Log) -> Log:
+        existing = next((c for c in current.conditions if c.id == condition_id), None)
+        if existing is None:
+            return current
+        edited = replace(
+            existing, body_part=body_part, started=started or existing.started, note=note
+        )
+        return current.with_condition(edited)
+
+    try:
+        store.update(apply_edit)
+    except store.ConflictError as exc:
+        raise ConflictResponse(
+            "the log was changed elsewhere; the condition was not saved"
+        ) from exc
+    return RedirectResponse("/conditions", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/conditions/{condition_id}/delete", include_in_schema=False)
+def delete_condition(condition_id: str) -> Any:
+    try:
+        store.update(lambda current: current.without_condition(condition_id))
+    except store.ConflictError as exc:
+        raise ConflictResponse(
+            "the log was changed elsewhere; the condition was not deleted"
+        ) from exc
+    return RedirectResponse("/conditions", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# --- weekly AI insight ----------------------------------------------------------
+
+
+@router.get("/insights", response_class=HTMLResponse, include_in_schema=False)
+def insights_list(request: Request) -> Any:
+    """Read-only. Insights are written by the scheduled job's CLI path, not here."""
+    log, _etag = store.load()
+    return templates.TemplateResponse(
+        request,
+        "insights.html",
+        {"insights": sorted(log.insights, key=lambda i: i.week_of, reverse=True)},
+    )
 
 
 # --- helpers -----------------------------------------------------------------

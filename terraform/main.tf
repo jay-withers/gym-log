@@ -13,11 +13,12 @@ module "naming" {
   suffix  = [var.project_name, var.environment]
 }
 
-# Only one naming instance, unlike repo-agent's second `naming_scan`. That one
-# exists because a job's name must carry its workload to match the platform's
-# job-failure alert convention (caj-<project>-<env>-<workload>). There is one
-# container app here and nothing parses its name, so `ca-gymlog-dev` (13 of the
-# 32 characters container apps allow) is the whole of it.
+# The container app itself needs nothing beyond this: there is one of them and
+# nothing parses its name, so `ca-gymlog-dev` (13 of the 32 characters
+# container apps allow) is the whole of it. The weekly insight job has its own
+# second naming module instance instead — see main.container-apps-job.tf for
+# why a job's name has to carry its workload, the same reason repo-agent's
+# `naming_scan` exists.
 
 resource "azurerm_resource_group" "this" {
   name = module.naming.resource_group.name

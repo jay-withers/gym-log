@@ -1,6 +1,7 @@
 {% extends "base.html" %}
-{% block title %}{{ label }} · gym-log{% endblock %}
+{% block title %}{{ label }} · Health{% endblock %}
 {% block subtitle %}{{ label }} · week {{ week }}{% endblock %}
+{% block back %}<a class="back" href="/strength"><span class="arrow">&larr;</span> Strength Training</a>{% endblock %}
 {% block body %}
 
 {# Each exercise is its own form, posting on its own. Nested forms are not a
@@ -72,7 +73,7 @@
 </form>
 {% endfor %}
 
-<a class="btn ghost" href="/" style="margin-top:20px">Finish</a>
+<a class="btn ghost" href="/strength" style="margin-top:20px">Finish</a>
 
 <script>
 // Keep what has been typed on the phone until the session is actually saved.

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Block · gym-log{% endblock %}
+{% block title %}Block · Health{% endblock %}
 {% block subtitle %}{{ block.name }} · week {{ week }} of {{ block.weeks }}{% endblock %}
+{% block back %}<a class="back" href="/strength"><span class="arrow">&larr;</span> Strength Training</a>{% endblock %}
 {% block body %}
 
 {% if due %}
@@ -45,6 +46,6 @@
   {% endfor %}
 
   <button type="submit">Start new block</button>
-  <a class="btn ghost" href="/">Cancel</a>
+  <a class="btn ghost" href="/strength">Cancel</a>
 </form>
 {% endblock %}

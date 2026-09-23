@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
-from gymlog.model import Block, Day, Entry, Exercise, Session, SetLog
+from gymlog.model import (
+    Achievement,
+    Block,
+    Condition,
+    Day,
+    Entry,
+    Exercise,
+    Goal,
+    Insight,
+    Session,
+    SetLog,
+)
 
 
 def exercise(
@@ -57,3 +68,41 @@ def session(
     *entries: Entry,
 ) -> Session:
     return Session(date=date, block=block_id, day=day, entries=entries)
+
+
+def achievement(
+    id: str = "ach1", date: str = "2026-09-15", title: str = "Ran a 5k", note: str = ""
+) -> Achievement:
+    return Achievement(id=id, date=date, title=title, note=note)
+
+
+def condition(
+    id: str = "cond1",
+    body_part: str = "lower back",
+    started: str = "2026-09-01",
+    status: str = "active",
+    resolved: str = "",
+    note: str = "",
+) -> Condition:
+    return Condition(
+        id=id, body_part=body_part, started=started, status=status, resolved=resolved, note=note
+    )
+
+
+def goal(
+    id: str = "goal1",
+    title: str = "Bench press 100kg",
+    target_date: str = "",
+    status: str = "active",
+    note: str = "",
+) -> Goal:
+    return Goal(id=id, title=title, target_date=target_date, status=status, note=note)
+
+
+def insight(
+    id: str = "ins1",
+    week_of: str = "2026-09-15",
+    summary: str = "Good week.",
+    generated_at: str = "2026-09-15",
+) -> Insight:
+    return Insight(id=id, week_of=week_of, summary=summary, generated_at=generated_at)

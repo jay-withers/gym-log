@@ -18,13 +18,31 @@ it has rather than to look like anyone's actual training:
 - **triceps** and **biceps** have none, so they show their seed weight.
 - the **finisher** carries a time on some sessions and not others, because it is
   optional and that is worth being able to see.
+
+Achievements, goals, injuries/conditions and the weekly insight get the same
+treatment: a handful of invented entries chosen to put those screens into more
+than one state (active and achieved, active and resolved) rather than left
+empty, since an empty section is the one state local work has the least
+reason to look at.
 """
 
 from __future__ import annotations
 
 from datetime import date, timedelta
 
-from .model import Block, Day, Entry, Exercise, Log, Session, SetLog
+from .model import (
+    Achievement,
+    Block,
+    Condition,
+    Day,
+    Entry,
+    Exercise,
+    Goal,
+    Insight,
+    Log,
+    Session,
+    SetLog,
+)
 
 # Deliberately not the real numbers off the sheet. Close enough in shape that
 # the screen looks right, far enough that nobody mistakes this for the log.
@@ -61,7 +79,14 @@ def sample_log(today: date | None = None) -> Log:
         started=started.isoformat(),
         days={"A": Day("Tues", _DAY_A), "B": Day("Thur", _DAY_B)},
     )
-    return Log(blocks=(block,), sessions=_sessions(block, started))
+    return Log(
+        blocks=(block,),
+        sessions=_sessions(block, started),
+        achievements=_achievements(now),
+        conditions=_conditions(now),
+        goals=_goals(now),
+        insights=_insights(now),
+    )
 
 
 def _sessions(block: Block, started: date) -> tuple[Session, ...]:
@@ -112,6 +137,85 @@ def _sessions(block: Block, started: date) -> tuple[Session, ...]:
             )
         )
     return tuple(sorted(out, key=lambda s: s.date))
+
+
+def _achievements(now: date) -> tuple[Achievement, ...]:
+    return (
+        Achievement(
+            id="sample-5k",
+            date=(now - timedelta(days=10)).isoformat(),
+            title="Ran a 5k",
+            note="Personal best, 24:10",
+        ),
+        Achievement(
+            id="sample-bodyweight-row",
+            date=(now - timedelta(days=3)).isoformat(),
+            title="First strict bodyweight row",
+        ),
+    )
+
+
+def _conditions(now: date) -> tuple[Condition, ...]:
+    # `Log.to_json` writes these sorted by `started`, and a real document is
+    # therefore always in that order once it has been saved once — built that
+    # way here too, rather than insertion order, so the round trip in
+    # test_seed.py holds the same way it would for a document that came from
+    # the blob.
+    return (
+        Condition(
+            id="sample-shoulder",
+            body_part="left shoulder",
+            started=(now - timedelta(days=60)).isoformat(),
+            status="resolved",
+            resolved=(now - timedelta(days=30)).isoformat(),
+            note="Impingement from overhead pressing, cleared up with rehab band work",
+        ),
+        Condition(
+            id="sample-lower-back",
+            body_part="lower back",
+            started=(now - timedelta(days=14)).isoformat(),
+            status="active",
+            note="Tight after deadlifts — mobility work before legs day",
+        ),
+    )
+
+
+def _goals(now: date) -> tuple[Goal, ...]:
+    # Sorted by id, for the same reason `_conditions` is sorted by `started`.
+    return (
+        Goal(
+            id="sample-5k-under-25",
+            title="Run a 5k under 25 minutes",
+            status="achieved",
+            note="Hit 24:10 in September",
+        ),
+        Goal(
+            id="sample-bench-100",
+            title="Bench press 100kg",
+            target_date=(now + timedelta(days=90)).isoformat(),
+            status="active",
+            note="Currently at 85kg for 3x8",
+        ),
+        Goal(id="sample-pullups", title="10 strict pull-ups"),
+    )
+
+
+def _insights(now: date) -> tuple[Insight, ...]:
+    return (
+        Insight(
+            id="sample-insight",
+            week_of=now.isoformat(),
+            summary=(
+                "Solid week: chest and back both climbed inside their rep ranges, "
+                "with back ready for a weight increase next session. Legs fell just "
+                "short of the bottom of the range on the last set, so that weight "
+                "holds rather than drops — nothing to worry about after three good "
+                "weeks in a row. The lower back is still listed as an active "
+                "condition, so keep the mobility work in before leg day."
+            ),
+            generated_at=now.isoformat(),
+        ),
+    )
 
 
 def _even(slot: str, name: str, reps: int, weight: float) -> Entry:

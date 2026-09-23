@@ -96,6 +96,19 @@ def test_the_finisher_is_timed_sometimes_and_not_others(log):
     assert any(t > 0 for t in times)
 
 
+def test_it_puts_goals_and_conditions_into_more_than_one_state(log):
+    """Empty is the one state local work has the least reason to look at."""
+    assert any(g.status == "active" for g in log.goals)
+    assert any(g.status == "achieved" for g in log.goals)
+    assert any(c.status == "active" for c in log.conditions)
+    assert any(c.status == "resolved" for c in log.conditions)
+
+
+def test_it_has_an_achievement_and_a_weekly_insight(log):
+    assert log.achievements
+    assert log.insights
+
+
 def test_per_set_targets_are_present_and_not_uniform(log):
     """Both shapes, so `· per set` is exercised as well as the plain range."""
     exercises = [e for day in log.current_block.days.values() for e in day.exercises]

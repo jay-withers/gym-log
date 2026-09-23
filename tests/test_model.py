@@ -8,11 +8,18 @@ import pytest
 
 from gymlog.model import DEFAULT_SLOTS, Log, SetLog
 
-from .factories import block, entry, exercise, session
+from .factories import achievement, block, condition, entry, exercise, goal, insight, session
 
 
 def test_round_trips_through_json():
-    log = Log(blocks=(block(),), sessions=(session("2026-09-15", "2026-09-01", "A", entry()),))
+    log = Log(
+        blocks=(block(),),
+        sessions=(session("2026-09-15", "2026-09-01", "A", entry()),),
+        achievements=(achievement(),),
+        conditions=(condition(),),
+        goals=(goal(),),
+        insights=(insight(),),
+    )
     assert Log.from_json(log.to_json()) == log
 
 
@@ -102,6 +109,63 @@ def test_with_block_replaces_by_id():
     updated = log.with_block(block("2026-09-01", exercise(name="New")))
     assert len(updated.blocks) == 1
     assert updated.blocks[0].days["A"].exercises[0].name == "New"
+
+
+def test_with_achievement_appends_a_new_one():
+    log = Log(achievements=(achievement(id="a1"),))
+    grown = log.with_achievement(achievement(id="a2"))
+    assert len(grown.achievements) == 2
+    assert len(log.achievements) == 1  # frozen; the original is untouched
+
+
+def test_with_achievement_replaces_by_id():
+    """Editing an achievement is resubmitting the same id with new fields."""
+    log = Log(achievements=(achievement(id="a1", title="Old title"),))
+    edited = log.with_achievement(achievement(id="a1", title="New title"))
+    assert len(edited.achievements) == 1
+    assert edited.achievements[0].title == "New title"
+
+
+def test_without_achievement_removes_by_id():
+    log = Log(achievements=(achievement(id="a1"), achievement(id="a2")))
+    shrunk = log.without_achievement("a1")
+    assert [a.id for a in shrunk.achievements] == ["a2"]
+
+
+def test_with_condition_replaces_by_id():
+    """Resolving a condition is resubmitting the same id with a new status."""
+    log = Log(conditions=(condition(id="c1", status="active"),))
+    resolved = log.with_condition(condition(id="c1", status="resolved", resolved="2026-09-20"))
+    assert len(resolved.conditions) == 1
+    assert resolved.conditions[0].status == "resolved"
+    assert resolved.conditions[0].resolved == "2026-09-20"
+
+
+def test_without_condition_removes_by_id():
+    log = Log(conditions=(condition(id="c1"), condition(id="c2")))
+    shrunk = log.without_condition("c1")
+    assert [c.id for c in shrunk.conditions] == ["c2"]
+
+
+def test_with_goal_replaces_by_id():
+    """Achieving a goal is resubmitting the same id with a new status."""
+    log = Log(goals=(goal(id="g1", status="active"),))
+    achieved = log.with_goal(goal(id="g1", status="achieved"))
+    assert len(achieved.goals) == 1
+    assert achieved.goals[0].status == "achieved"
+
+
+def test_without_goal_removes_by_id():
+    log = Log(goals=(goal(id="g1"), goal(id="g2")))
+    shrunk = log.without_goal("g1")
+    assert [g.id for g in shrunk.goals] == ["g2"]
+
+
+def test_with_insight_appends():
+    log = Log(insights=(insight(id="i1"),))
+    grown = log.with_insight(insight(id="i2"))
+    assert len(grown.insights) == 2
+    assert len(log.insights) == 1  # frozen; the original is untouched
 
 
 @pytest.mark.parametrize(
