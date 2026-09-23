@@ -616,9 +616,9 @@ def test_a_rotation_that_loses_its_race_is_reported(client, seeded, monkeypatch)
 
 
 def test_a_loose_day_renders_with_no_prescribed_cards(client, seeded):
-    """Wednesday carries no block prescription at all."""
+    """The manual day carries no block prescription at all."""
     login(client)
-    response = client.get("/session/wed")
+    response = client.get("/session/manual")
     assert response.status_code == 200
     page = response.text
     assert "Add an exercise" in page
@@ -627,13 +627,13 @@ def test_a_loose_day_renders_with_no_prescribed_cards(client, seeded):
 
 def test_the_strength_page_always_links_to_a_loose_day(client, seeded):
     login(client)
-    assert 'href="/session/wed"' in client.get("/strength").text
+    assert 'href="/session/manual"' in client.get("/strength").text
 
 
 def test_logging_a_manual_exercise_on_a_loose_day(client, seeded):
     login(client)
     response = client.post(
-        "/session/wed/extra",
+        "/session/manual/extra",
         data={
             "date": date.today().isoformat(),
             "name": "Ab Wheel Rollout",
@@ -643,11 +643,11 @@ def test_logging_a_manual_exercise_on_a_loose_day(client, seeded):
         },
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/session/wed"
+    assert response.headers["location"] == "/session/manual"
 
     log, _ = store.load()
     assert len(log.sessions) == 1
-    assert log.sessions[0].day == "wed"
+    assert log.sessions[0].day == "manual"
     entry = log.sessions[0].entries[0]
     assert entry.exercise == "Ab Wheel Rollout"
     assert entry.slot == "core"
@@ -655,7 +655,7 @@ def test_logging_a_manual_exercise_on_a_loose_day(client, seeded):
     # A slot typed in by hand is tracked for History by slot too.
     assert "core" in log.slots
 
-    page = client.get("/session/wed").text
+    page = client.get("/session/manual").text
     assert "Ab Wheel Rollout" in page
 
 
@@ -678,15 +678,33 @@ def test_logging_a_manual_exercise_alongside_prescribed_ones(client, seeded):
 
 def test_a_manual_exercise_with_no_name_or_slot_is_not_recorded(client, seeded):
     login(client)
-    client.post("/session/wed/extra", data={"name": "", "slot": "core", "reps_0": "10"})
-    client.post("/session/wed/extra", data={"name": "Plank", "slot": "", "reps_0": "10"})
+    client.post("/session/manual/extra", data={"name": "", "slot": "core", "reps_0": "10"})
+    client.post("/session/manual/extra", data={"name": "Plank", "slot": "", "reps_0": "10"})
     assert store.load()[0].sessions == ()
 
 
 def test_a_manual_exercise_with_no_sets_is_not_recorded(client, seeded):
     login(client)
-    client.post("/session/wed/extra", data={"name": "Plank", "slot": "core"})
+    client.post("/session/manual/extra", data={"name": "Plank", "slot": "core"})
     assert store.load()[0].sessions == ()
+
+
+def test_the_add_exercise_form_suggests_known_names(client, seeded):
+    """Catches "Bicep Curl" vs "Bicep Curls" before it becomes two histories."""
+    login(client)
+    client.post(
+        "/session/manual/extra",
+        data={
+            "date": date.today().isoformat(),
+            "name": "Ab Wheel Rollout",
+            "slot": "core",
+            "reps_0": "10",
+        },
+    )
+    page = client.get("/session/manual").text
+    # The block's prescribed exercises are offered too, not just past extras.
+    assert '<option value="Ab Wheel Rollout">' in page
+    assert '<option value="Cable Flyes">' in page
 
 
 def test_extra_exercise_on_an_unknown_day_goes_back_to_strength(client, seeded):

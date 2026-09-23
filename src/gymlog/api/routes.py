@@ -39,8 +39,9 @@ router = APIRouter()
 # Days that carry no block prescription at all — logged purely by hand, via
 # `log_extra_exercise`. A dict rather than a set so each has a label the same
 # way a block's own days do, and so a second one is as cheap to add as this
-# first one was.
-LOOSE_DAYS: dict[str, str] = {"wed": "Core (Wed)"}
+# first one was. "manual" is not tied to a day of the week: it exists so
+# anything can be logged any time, not just Tuesday or Thursday.
+LOOSE_DAYS: dict[str, str] = {"manual": "Manual"}
 
 
 class ConflictResponse(Exception):
@@ -197,7 +198,10 @@ def session_form(request: Request, day: str) -> Any:
             "today": today,
             "done": sum(1 for c in cards if c["recorded"]),
             "slots": log.slots,
-            "default_slot": "core" if day == "wed" else "",
+            # Offered as suggestions on the "add an exercise" field, so typing
+            # "Bicep" surfaces the "Bicep Curls" already on record instead of
+            # inviting a slightly different name for the same movement.
+            "known_exercises": _known_exercise_names(log),
         },
     )
 
@@ -808,6 +812,19 @@ def _next_day(log: Any, block: Block) -> str:
         if session.day in keys:
             return keys[(keys.index(session.day) + 1) % len(keys)]
     return keys[0]
+
+
+def _known_exercise_names(log: Any) -> list[str]:
+    """Every exercise name on record: prescribed by any block, or ever logged.
+
+    Spans every block rather than just the current one, so a name retired by
+    a rotation is still offered — the point is catching a near-duplicate of
+    something performed months ago, which is exactly when it is easiest to
+    forget the exact wording used last time.
+    """
+    names = {ex.name for b in log.blocks for d in b.days.values() for ex in d.exercises}
+    names.update(e.exercise for s in log.sessions for e in s.entries)
+    return sorted(names)
 
 
 def _seconds(value: Any) -> int:
