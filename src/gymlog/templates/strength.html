@@ -11,9 +11,9 @@
 </div>
 {% endif %}
 
-<div class="row">
+<div class="actions">
   {% for key, day in block.days | dictsort %}
-    <a class="btn {% if key != next_day %}ghost{% endif %}" href="/session/{{ key }}">
+    <a class="btn small {% if key != next_day %}ghost{% endif %}" href="/session/{{ key }}">
       {{ day.label or key }}{% if key == next_day %} · next{% endif %}
     </a>
   {% endfor %}
@@ -42,5 +42,5 @@
 <p class="last">Nothing logged yet. The first session sets the baseline.</p>
 {% endif %}
 
-<a class="btn ghost" href="/block" style="margin-top:20px">Block settings</a>
+<a class="btn ghost small" href="/block" style="margin-top:20px">Block settings</a>
 {% endblock %}
