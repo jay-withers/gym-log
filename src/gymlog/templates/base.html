@@ -79,21 +79,22 @@
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   /* The home page: a section is a destination to recognise at a glance, not
      a line to read, so a square icon tile rather than the list of buttons
-     every other page uses for actions. Flex-wrap with a fixed size rather
-     than a grid stretched to the column width — on this page's max-width
-     that stretch turned a "tile" into a near-fullscreen square. */
-  .tiles { display: flex; flex-wrap: wrap; gap: 10px; }
+     every other page uses for actions. Fixed two-column grid rather than a
+     flex-wrap of fixed-size tiles — a fixed pixel size read as too small on
+     phone widths, and this page's max-width (640px) keeps a two-up stretch
+     from ever reaching desktop-sized tiles. */
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .tile {
-    width: 104px; min-height: 104px; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 8px; padding: 10px;
+    min-height: 120px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px; padding: 12px;
     text-align: center; background: var(--card); border: 1px solid var(--line);
     border-radius: var(--radius); color: var(--text); text-decoration: none;
-    font-weight: 600; font-size: 12px; line-height: 1.25;
+    font-weight: 600; font-size: 13px; line-height: 1.3;
     transition: border-color .15s ease, transform .1s ease;
   }
   .tile:hover { border-color: var(--accent); }
   .tile:active { transform: scale(.97); }
-  .tile svg { width: 24px; height: 24px; color: var(--accent); flex-shrink: 0; }
+  .tile svg { width: 28px; height: 28px; color: var(--accent); flex-shrink: 0; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 9px 6px; border-bottom: 1px solid var(--line); }
   th { color: var(--dim); font-weight: 500; font-size: 12px; text-transform: uppercase; }
