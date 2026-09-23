@@ -389,14 +389,32 @@ async def rotate(request: Request) -> Any:
 
 @router.get("/achievements", response_class=HTMLResponse, include_in_schema=False)
 def achievements_list(request: Request) -> Any:
+    """Read-only, newest first. Adding or editing happens on its own page."""
     log, _etag = store.load()
     return templates.TemplateResponse(
         request,
         "achievements.html",
-        {
-            "achievements": sorted(log.achievements, key=lambda a: a.date, reverse=True),
-            "today": _today().isoformat(),
-        },
+        {"achievements": sorted(log.achievements, key=lambda a: a.date, reverse=True)},
+    )
+
+
+@router.get("/achievements/new", response_class=HTMLResponse, include_in_schema=False)
+def new_achievement_form(request: Request) -> Any:
+    return templates.TemplateResponse(
+        request, "achievement_form.html", {"achievement": None, "today": _today().isoformat()}
+    )
+
+
+@router.get(
+    "/achievements/{achievement_id}/edit", response_class=HTMLResponse, include_in_schema=False
+)
+def edit_achievement_form(request: Request, achievement_id: str) -> Any:
+    log, _etag = store.load()
+    achievement = next((a for a in log.achievements if a.id == achievement_id), None)
+    if achievement is None:
+        return RedirectResponse("/achievements", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(
+        request, "achievement_form.html", {"achievement": achievement, "today": achievement.date}
     )
 
 
@@ -466,15 +484,36 @@ def delete_achievement(achievement_id: str) -> Any:
 
 @router.get("/goals", response_class=HTMLResponse, include_in_schema=False)
 def goals_list(request: Request) -> Any:
+    """Read-only, soonest target date first. Adding or editing has its own page."""
     log, _etag = store.load()
     return templates.TemplateResponse(
         request,
         "goals.html",
         {
-            "active": [g for g in log.goals if g.status == "active"],
-            "achieved": [g for g in log.goals if g.status != "active"],
+            "active": sorted((g for g in log.goals if g.status == "active"), key=_goal_sort_key),
+            "achieved": sorted((g for g in log.goals if g.status != "active"), key=_goal_sort_key),
         },
     )
+
+
+def _goal_sort_key(goal: Goal) -> str:
+    """A goal with no target date sorts after every one that has it, rather
+    than first — an undated goal is not more urgent than a dated one."""
+    return goal.target_date or "9999-12-31"
+
+
+@router.get("/goals/new", response_class=HTMLResponse, include_in_schema=False)
+def new_goal_form(request: Request) -> Any:
+    return templates.TemplateResponse(request, "goal_form.html", {"goal": None})
+
+
+@router.get("/goals/{goal_id}/edit", response_class=HTMLResponse, include_in_schema=False)
+def edit_goal_form(request: Request, goal_id: str) -> Any:
+    log, _etag = store.load()
+    goal = next((g for g in log.goals if g.id == goal_id), None)
+    if goal is None:
+        return RedirectResponse("/goals", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(request, "goal_form.html", {"goal": goal})
 
 
 @router.post("/goals", include_in_schema=False)
@@ -553,15 +592,41 @@ def delete_goal(goal_id: str) -> Any:
 
 @router.get("/conditions", response_class=HTMLResponse, include_in_schema=False)
 def conditions_list(request: Request) -> Any:
+    """Read-only, most recently started first. Adding or editing has its own page."""
     log, _etag = store.load()
     return templates.TemplateResponse(
         request,
         "conditions.html",
         {
-            "active": [c for c in log.conditions if c.status == "active"],
-            "resolved": [c for c in log.conditions if c.status != "active"],
-            "today": _today().isoformat(),
+            "active": sorted(
+                (c for c in log.conditions if c.status == "active"),
+                key=lambda c: c.started,
+                reverse=True,
+            ),
+            "resolved": sorted(
+                (c for c in log.conditions if c.status != "active"),
+                key=lambda c: c.started,
+                reverse=True,
+            ),
         },
+    )
+
+
+@router.get("/conditions/new", response_class=HTMLResponse, include_in_schema=False)
+def new_condition_form(request: Request) -> Any:
+    return templates.TemplateResponse(
+        request, "condition_form.html", {"condition": None, "today": _today().isoformat()}
+    )
+
+
+@router.get("/conditions/{condition_id}/edit", response_class=HTMLResponse, include_in_schema=False)
+def edit_condition_form(request: Request, condition_id: str) -> Any:
+    log, _etag = store.load()
+    condition = next((c for c in log.conditions if c.id == condition_id), None)
+    if condition is None:
+        return RedirectResponse("/conditions", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(
+        request, "condition_form.html", {"condition": condition, "today": condition.started}
     )
 
 

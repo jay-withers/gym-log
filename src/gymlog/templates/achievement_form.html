@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{% if achievement %}Edit{% else %}Add{% endif %} Achievement · Health{% endblock %}
+{% block subtitle %}{% if achievement %}Edit{% else %}Add{% endif %} Achievement{% endblock %}
+{% block back %}<a class="back" href="/achievements"><span class="arrow">&larr;</span> Achievements</a>{% endblock %}
+{% block body %}
+
+<form method="post" action="{% if achievement %}/achievements/{{ achievement.id }}{% else %}/achievements{% endif %}">
+  <div class="card">
+    <label class="slot" for="title">Achievement</label>
+    <input type="text" id="title" name="title" placeholder="e.g. Ran a 5k" autocomplete="off"
+           value="{{ achievement.title if achievement else '' }}">
+    <label class="slot" for="date" style="display:block;margin-top:10px">Date</label>
+    <input type="date" id="date" name="date" value="{{ achievement.date if achievement else today }}">
+    <label class="slot" for="note" style="display:block;margin-top:10px">Note (optional)</label>
+    <input type="text" id="note" name="note" autocomplete="off"
+           value="{{ achievement.note if achievement else '' }}">
+  </div>
+  <button type="submit">{% if achievement %}Save{% else %}Add achievement{% endif %}</button>
+</form>
+
+{% if achievement %}
+<form method="post" action="/achievements/{{ achievement.id }}/delete"
+      onsubmit="return confirm('Delete this achievement?')">
+  <button type="submit" class="btn ghost">Delete</button>
+</form>
+{% endif %}
+{% endblock %}

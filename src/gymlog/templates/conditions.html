@@ -4,37 +4,21 @@
 {% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
 {% block body %}
 
-<form method="post" action="/conditions">
-  <div class="card">
-    <label class="slot" for="body_part">Body part</label>
-    <input type="text" id="body_part" name="body_part" placeholder="e.g. lower back" autocomplete="off">
-    <label class="slot" for="started" style="display:block;margin-top:10px">Started</label>
-    <input type="date" id="started" name="started" value="{{ today }}">
-    <label class="slot" for="note" style="display:block;margin-top:10px">Note (optional)</label>
-    <input type="text" id="note" name="note" autocomplete="off">
-  </div>
-  <button type="submit">Add</button>
-</form>
+<a class="btn" href="/conditions/new">Add condition</a>
 
 <h2 class="slot" style="margin-top:24px">Active</h2>
 {% if active %}
 {% for c in active %}
 <div class="card">
-  <form method="post" action="/conditions/{{ c.id }}">
-    <label class="slot" for="body_part_{{ c.id }}">Body part</label>
-    <input type="text" id="body_part_{{ c.id }}" name="body_part" value="{{ c.body_part }}" autocomplete="off">
-    <label class="slot" for="started_{{ c.id }}" style="display:block;margin-top:10px">Started</label>
-    <input type="date" id="started_{{ c.id }}" name="started" value="{{ c.started }}">
-    <label class="slot" for="note_{{ c.id }}" style="display:block;margin-top:10px">Note</label>
-    <input type="text" id="note_{{ c.id }}" name="note" value="{{ c.note }}" autocomplete="off">
-    <button type="submit">Save</button>
-  </form>
-  <form method="post" action="/conditions/{{ c.id }}/resolve">
-    <button type="submit" class="btn ghost">Mark resolved</button>
-  </form>
-  <form method="post" action="/conditions/{{ c.id }}/delete" onsubmit="return confirm('Delete this condition?')">
-    <button type="submit" class="btn ghost">Delete</button>
-  </form>
+  <div class="slot">since {{ c.started }}</div>
+  <div class="name">{{ c.body_part }}</div>
+  {% if c.note %}<p class="last">{{ c.note }}</p>{% endif %}
+  <div class="row" style="margin-top:10px">
+    <form method="post" action="/conditions/{{ c.id }}/resolve" style="flex:1">
+      <button type="submit" class="btn ghost">Mark resolved</button>
+    </form>
+    <a class="btn ghost" href="/conditions/{{ c.id }}/edit" style="flex:1">Edit</a>
+  </div>
 </div>
 {% endfor %}
 {% else %}
@@ -45,19 +29,10 @@
 <h2 class="slot" style="margin-top:24px">Resolved</h2>
 {% for c in resolved %}
 <div class="card" style="opacity:.72">
-  <form method="post" action="/conditions/{{ c.id }}">
-    <label class="slot" for="body_part_{{ c.id }}">Body part</label>
-    <input type="text" id="body_part_{{ c.id }}" name="body_part" value="{{ c.body_part }}" autocomplete="off">
-    <label class="slot" for="started_{{ c.id }}" style="display:block;margin-top:10px">Started</label>
-    <input type="date" id="started_{{ c.id }}" name="started" value="{{ c.started }}">
-    <label class="slot" for="note_{{ c.id }}" style="display:block;margin-top:10px">Note</label>
-    <input type="text" id="note_{{ c.id }}" name="note" value="{{ c.note }}" autocomplete="off">
-    <div class="last" style="margin-top:6px">resolved {{ c.resolved }}</div>
-    <button type="submit">Save</button>
-  </form>
-  <form method="post" action="/conditions/{{ c.id }}/delete" onsubmit="return confirm('Delete this condition?')">
-    <button type="submit" class="btn ghost">Delete</button>
-  </form>
+  <div class="slot">{{ c.started }} &ndash; {{ c.resolved }}</div>
+  <div class="name">{{ c.body_part }}</div>
+  {% if c.note %}<p class="last">{{ c.note }}</p>{% endif %}
+  <a class="btn ghost" href="/conditions/{{ c.id }}/edit">Edit</a>
 </div>
 {% endfor %}
 {% endif %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{% if goal %}Edit{% else %}Add{% endif %} Goal · Health{% endblock %}
+{% block subtitle %}{% if goal %}Edit{% else %}Add{% endif %} Goal{% endblock %}
+{% block back %}<a class="back" href="/goals"><span class="arrow">&larr;</span> Goals</a>{% endblock %}
+{% block body %}
+
+<form method="post" action="{% if goal %}/goals/{{ goal.id }}{% else %}/goals{% endif %}">
+  <div class="card">
+    <label class="slot" for="title">Goal</label>
+    <input type="text" id="title" name="title" placeholder="e.g. Bench press 100kg" autocomplete="off"
+           value="{{ goal.title if goal else '' }}">
+    <label class="slot" for="target_date" style="display:block;margin-top:10px">Target date (optional)</label>
+    <input type="date" id="target_date" name="target_date" value="{{ goal.target_date if goal else '' }}">
+    <label class="slot" for="note" style="display:block;margin-top:10px">Note (optional)</label>
+    <input type="text" id="note" name="note" autocomplete="off" value="{{ goal.note if goal else '' }}">
+  </div>
+  <button type="submit">{% if goal %}Save{% else %}Add goal{% endif %}</button>
+</form>
+
+{% if goal %}
+<form method="post" action="/goals/{{ goal.id }}/delete" onsubmit="return confirm('Delete this goal?')">
+  <button type="submit" class="btn ghost">Delete</button>
+</form>
+{% endif %}
+{% endblock %}

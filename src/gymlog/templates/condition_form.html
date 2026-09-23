@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{% if condition %}Edit{% else %}Add{% endif %} Condition · Health{% endblock %}
+{% block subtitle %}{% if condition %}Edit{% else %}Add{% endif %} Condition{% endblock %}
+{% block back %}<a class="back" href="/conditions"><span class="arrow">&larr;</span> Injuries &amp; Conditions</a>{% endblock %}
+{% block body %}
+
+<form method="post" action="{% if condition %}/conditions/{{ condition.id }}{% else %}/conditions{% endif %}">
+  <div class="card">
+    <label class="slot" for="body_part">Body part</label>
+    <input type="text" id="body_part" name="body_part" placeholder="e.g. lower back" autocomplete="off"
+           value="{{ condition.body_part if condition else '' }}">
+    <label class="slot" for="started" style="display:block;margin-top:10px">Started</label>
+    <input type="date" id="started" name="started" value="{{ condition.started if condition else today }}">
+    <label class="slot" for="note" style="display:block;margin-top:10px">Note (optional)</label>
+    <input type="text" id="note" name="note" autocomplete="off" value="{{ condition.note if condition else '' }}">
+  </div>
+  <button type="submit">{% if condition %}Save{% else %}Add{% endif %}</button>
+</form>
+
+{% if condition %}
+<form method="post" action="/conditions/{{ condition.id }}/delete"
+      onsubmit="return confirm('Delete this condition?')">
+  <button type="submit" class="btn ghost">Delete</button>
+</form>
+{% endif %}
+{% endblock %}

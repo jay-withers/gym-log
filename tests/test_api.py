@@ -814,6 +814,46 @@ def test_deleting_an_unknown_achievement_is_a_no_op(client, seeded):
     assert client.post("/achievements/does-not-exist/delete").status_code == 303
 
 
+def test_the_achievements_list_is_read_only(client, seeded):
+    """No inline editable fields — editing lives on its own page."""
+    login(client)
+    client.post("/achievements", data={"date": "2026-09-15", "title": "Ran a 5k"})
+    page = client.get("/achievements").text
+    assert "<input" not in page
+    assert 'href="/achievements/new"' in page
+    assert "/edit" in page
+
+
+def test_the_new_achievement_form_renders(client, seeded):
+    login(client)
+    assert client.get("/achievements/new").status_code == 200
+
+
+def test_the_edit_achievement_form_is_prefilled(client, seeded):
+    login(client)
+    client.post("/achievements", data={"date": "2026-09-15", "title": "Ran a 5k", "note": "PB"})
+    achievement_id = store.load()[0].achievements[0].id
+
+    page = client.get(f"/achievements/{achievement_id}/edit").text
+    assert 'value="Ran a 5k"' in page
+    assert 'value="PB"' in page
+
+
+def test_the_edit_form_for_an_unknown_achievement_goes_back_to_the_list(client, seeded):
+    login(client)
+    response = client.get("/achievements/does-not-exist/edit")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/achievements"
+
+
+def test_achievements_are_listed_newest_first(client, seeded):
+    login(client)
+    client.post("/achievements", data={"date": "2026-09-01", "title": "Older"})
+    client.post("/achievements", data={"date": "2026-09-20", "title": "Newer"})
+    page = client.get("/achievements").text
+    assert page.index("Newer") < page.index("Older")
+
+
 # --- goals -----------------------------------------------------------------
 
 
@@ -874,6 +914,46 @@ def test_editing_a_goal_with_no_title_does_nothing(client, seeded):
 def test_deleting_an_unknown_goal_is_a_no_op(client, seeded):
     login(client)
     assert client.post("/goals/does-not-exist/delete").status_code == 303
+
+
+def test_the_goals_list_is_read_only(client, seeded):
+    login(client)
+    client.post("/goals", data={"title": "Bench press 100kg"})
+    page = client.get("/goals").text
+    assert "<input" not in page
+    assert 'href="/goals/new"' in page
+    assert "/edit" in page
+
+
+def test_the_new_goal_form_renders(client, seeded):
+    login(client)
+    assert client.get("/goals/new").status_code == 200
+
+
+def test_the_edit_goal_form_is_prefilled(client, seeded):
+    login(client)
+    client.post("/goals", data={"title": "Bench press 100kg", "note": "3x8"})
+    goal_id = store.load()[0].goals[0].id
+
+    page = client.get(f"/goals/{goal_id}/edit").text
+    assert 'value="Bench press 100kg"' in page
+    assert 'value="3x8"' in page
+
+
+def test_the_edit_form_for_an_unknown_goal_goes_back_to_the_list(client, seeded):
+    login(client)
+    response = client.get("/goals/does-not-exist/edit")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/goals"
+
+
+def test_goals_are_listed_by_soonest_target_date_first(client, seeded):
+    login(client)
+    client.post("/goals", data={"title": "No date"})
+    client.post("/goals", data={"title": "Later", "target_date": "2027-06-01"})
+    client.post("/goals", data={"title": "Sooner", "target_date": "2027-01-01"})
+    page = client.get("/goals").text
+    assert page.index("Sooner") < page.index("Later") < page.index("No date")
 
 
 # --- injuries & conditions -----------------------------------------------------
@@ -943,6 +1023,45 @@ def test_editing_a_condition_with_no_body_part_does_nothing(client, seeded):
 def test_deleting_an_unknown_condition_is_a_no_op(client, seeded):
     login(client)
     assert client.post("/conditions/does-not-exist/delete").status_code == 303
+
+
+def test_the_conditions_list_is_read_only(client, seeded):
+    login(client)
+    client.post("/conditions", data={"body_part": "lower back"})
+    page = client.get("/conditions").text
+    assert "<input" not in page
+    assert 'href="/conditions/new"' in page
+    assert "/edit" in page
+
+
+def test_the_new_condition_form_renders(client, seeded):
+    login(client)
+    assert client.get("/conditions/new").status_code == 200
+
+
+def test_the_edit_condition_form_is_prefilled(client, seeded):
+    login(client)
+    client.post("/conditions", data={"body_part": "lower back", "note": "deadlifts"})
+    condition_id = store.load()[0].conditions[0].id
+
+    page = client.get(f"/conditions/{condition_id}/edit").text
+    assert 'value="lower back"' in page
+    assert 'value="deadlifts"' in page
+
+
+def test_the_edit_form_for_an_unknown_condition_goes_back_to_the_list(client, seeded):
+    login(client)
+    response = client.get("/conditions/does-not-exist/edit")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/conditions"
+
+
+def test_conditions_are_listed_most_recently_started_first(client, seeded):
+    login(client)
+    client.post("/conditions", data={"body_part": "Older", "started": "2026-08-01"})
+    client.post("/conditions", data={"body_part": "Newer", "started": "2026-09-15"})
+    page = client.get("/conditions").text
+    assert page.index("Newer") < page.index("Older")
 
 
 # --- weekly AI insight ----------------------------------------------------------
