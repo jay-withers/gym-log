@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from gymlog import settings as settings_module
 from gymlog import store
 from gymlog.api.main import create_app
-from gymlog.model import Block, Day, Log
+from gymlog.model import Block, Day, Log, SetLog
 
 from .factories import block, entry, exercise, insight, session
 
@@ -610,6 +610,92 @@ def test_a_rotation_that_loses_its_race_is_reported(client, seeded, monkeypatch)
     monkeypatch.setattr(store, "update", conflict)
     login(client)
     assert client.post("/block", data={"name": "Block 4"}).status_code == 409
+
+
+# --- loose days and manually-added exercises ----------------------------------
+
+
+def test_a_loose_day_renders_with_no_prescribed_cards(client, seeded):
+    """Wednesday carries no block prescription at all."""
+    login(client)
+    response = client.get("/session/wed")
+    assert response.status_code == 200
+    page = response.text
+    assert "Add an exercise" in page
+    assert "Save</button>" not in page  # no prescribed-card "Save"/"Update" buttons
+
+
+def test_the_strength_page_always_links_to_a_loose_day(client, seeded):
+    login(client)
+    assert 'href="/session/wed"' in client.get("/strength").text
+
+
+def test_logging_a_manual_exercise_on_a_loose_day(client, seeded):
+    login(client)
+    response = client.post(
+        "/session/wed/extra",
+        data={
+            "date": date.today().isoformat(),
+            "name": "Ab Wheel Rollout",
+            "slot": "core",
+            "reps_0": "10",
+            "weight_0": "0",
+        },
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/session/wed"
+
+    log, _ = store.load()
+    assert len(log.sessions) == 1
+    assert log.sessions[0].day == "wed"
+    entry = log.sessions[0].entries[0]
+    assert entry.exercise == "Ab Wheel Rollout"
+    assert entry.slot == "core"
+    assert entry.sets == (SetLog(reps=10, weight=0.0),)
+    # A slot typed in by hand is tracked for History by slot too.
+    assert "core" in log.slots
+
+    page = client.get("/session/wed").text
+    assert "Ab Wheel Rollout" in page
+
+
+def test_logging_a_manual_exercise_alongside_prescribed_ones(client, seeded):
+    """An improvised extra on a block day, not one of the prescribed cards."""
+    login(client)
+    client.post(
+        "/session/A/extra",
+        data={
+            "date": date.today().isoformat(),
+            "name": "Face Pulls",
+            "slot": "shoulders",
+            "reps_0": "15",
+        },
+    )
+    # No weight filled in: a bodyweight/band exercise, reps alone still counts.
+    page = client.get("/session/A").text
+    assert "Face Pulls" in page
+
+
+def test_a_manual_exercise_with_no_name_or_slot_is_not_recorded(client, seeded):
+    login(client)
+    client.post("/session/wed/extra", data={"name": "", "slot": "core", "reps_0": "10"})
+    client.post("/session/wed/extra", data={"name": "Plank", "slot": "", "reps_0": "10"})
+    assert store.load()[0].sessions == ()
+
+
+def test_a_manual_exercise_with_no_sets_is_not_recorded(client, seeded):
+    login(client)
+    client.post("/session/wed/extra", data={"name": "Plank", "slot": "core"})
+    assert store.load()[0].sessions == ()
+
+
+def test_extra_exercise_on_an_unknown_day_goes_back_to_strength(client, seeded):
+    login(client)
+    response = client.post(
+        "/session/Z/extra", data={"name": "Plank", "slot": "core", "reps_0": "10"}
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/strength"
 
 
 # --- history -----------------------------------------------------------------

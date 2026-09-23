@@ -36,6 +36,12 @@ templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 public = APIRouter()
 router = APIRouter()
 
+# Days that carry no block prescription at all — logged purely by hand, via
+# `log_extra_exercise`. A dict rather than a set so each has a label the same
+# way a block's own days do, and so a second one is as cheap to add as this
+# first one was.
+LOOSE_DAYS: dict[str, str] = {"wed": "Core (Wed)"}
+
 
 class ConflictResponse(Exception):
     """Raised when a write lost its race twice. Handled in main.create_app."""
@@ -135,6 +141,7 @@ def strength_index(request: Request) -> Any:
             "next_day": _next_day(log, block),
             "recent": sorted(log.sessions, key=lambda s: s.date, reverse=True)[:8],
             "slots": log.slots,
+            "loose_days": LOOSE_DAYS,
         },
     )
 
@@ -143,7 +150,7 @@ def strength_index(request: Request) -> Any:
 def session_form(request: Request, day: str) -> Any:
     log, _etag = store.load()
     block = log.current_block
-    if block is None or day not in block.days:
+    if block is None or (day not in block.days and day not in LOOSE_DAYS):
         return RedirectResponse("/strength", status_code=status.HTTP_303_SEE_OTHER)
 
     today = _today().isoformat()
@@ -153,8 +160,9 @@ def session_form(request: Request, day: str) -> Any:
     history = log.excluding(today, day)
     started = log.session_on(today, day)
 
+    prescribed = block.days[day].exercises if day in block.days else ()
     cards = []
-    for index, exercise in enumerate(block.days[day].exercises):
+    for index, exercise in enumerate(prescribed):
         previous = history.last_entry(exercise.name)
         last_entry, last_date = previous if previous else (None, "")
         cards.append(
@@ -171,19 +179,83 @@ def session_form(request: Request, day: str) -> Any:
             }
         )
 
+    # Anything logged today that is not one of the prescribed cards above —
+    # every entry, for a loose day; an improvised extra, for a block day.
+    prescribed_names = {exercise.name for exercise in prescribed}
+    extras = [e for e in (started.entries if started else ()) if e.exercise not in prescribed_names]
+
     return templates.TemplateResponse(
         request,
         "session.html",
         {
             "block": block,
             "day": day,
-            "label": block.days[day].label,
+            "label": block.days[day].label if day in block.days else LOOSE_DAYS[day],
             "week": block.week_of(_today()),
             "cards": cards,
+            "extras": extras,
             "today": today,
             "done": sum(1 for c in cards if c["recorded"]),
+            "slots": log.slots,
+            "default_slot": "core" if day == "wed" else "",
         },
     )
+
+
+@router.post("/session/{day}/extra", include_in_schema=False)
+async def log_extra_exercise(request: Request, day: str) -> Any:
+    """Log an exercise the block does not prescribe for `day`.
+
+    Registered before `/session/{day}/{index}` — that route's `index` is an
+    int, but a mismatched type only fails *validation*, not routing, so with
+    the order reversed this "extra" would 422 rather than ever being reached.
+
+    Uses `Log.with_entry`, the same mechanism a prescribed card saves through,
+    so a loose day and an improvised extra on a block day both end up as one
+    more entry in today's session rather than a different kind of record.
+    """
+    log, _etag = store.load()
+    block = log.current_block
+    if block is None or (day not in block.days and day not in LOOSE_DAYS):
+        return RedirectResponse("/strength", status_code=status.HTTP_303_SEE_OTHER)
+
+    form = await request.form()
+    name = str(form.get("name") or "").strip()
+    slot = str(form.get("slot") or "").strip()
+    if not name or not slot:
+        # Nothing worth recording without knowing what it was or where it
+        # counts toward — same "silently do nothing" choice as an empty
+        # prescribed card.
+        return RedirectResponse(f"/session/{day}", status_code=status.HTTP_303_SEE_OTHER)
+
+    when = str(form.get("date") or _today().isoformat())
+    sets = []
+    for position in range(3):
+        reps = _int(form.get(f"reps_{position}"))
+        if reps is None:
+            continue
+        # Unlike a prescribed exercise, weight is optional here: a manually
+        # added set is as likely to be pull-ups or a plank as a loaded lift,
+        # and a blank weight is bodyweight, not a set that was not performed.
+        sets.append(SetLog(reps=reps, weight=_float(form.get(f"weight_{position}")) or 0.0))
+
+    if not sets:
+        return RedirectResponse(f"/session/{day}", status_code=status.HTTP_303_SEE_OTHER)
+
+    entry = Entry(
+        slot=slot, exercise=name, sets=tuple(sets), note=str(form.get("note") or "").strip()
+    )
+    try:
+        store.update(
+            lambda current: current.with_entry(when, block.id, day, entry).ensuring_slot(slot)
+        )
+    except store.ConflictError as exc:
+        raise ConflictResponse(
+            f"the log was changed elsewhere while {name} was being saved; it was not recorded"
+        ) from exc
+
+    logger.info("recorded extra exercise %s on %s day %s", name, when, day)
+    return RedirectResponse(f"/session/{day}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/session/{day}/{index}", include_in_schema=False)

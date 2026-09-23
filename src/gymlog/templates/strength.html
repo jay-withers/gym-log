@@ -17,6 +17,12 @@
       {{ day.label or key }}{% if key == next_day %} · next{% endif %}
     </a>
   {% endfor %}
+  {# Loose days carry no prescription and sit outside the block's rotation
+     entirely, so they show here unconditionally rather than competing for
+     "next". #}
+  {% for key, day_label in loose_days.items() %}
+    <a class="btn ghost small" href="/session/{{ key }}">{{ day_label }}</a>
+  {% endfor %}
 </div>
 
 <h2 class="slot" style="margin-top:24px">History by slot</h2>
