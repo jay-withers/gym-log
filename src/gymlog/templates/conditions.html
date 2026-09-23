@@ -4,7 +4,7 @@
 {% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
 {% block body %}
 
-<a class="btn" href="/conditions/new">Add condition</a>
+<a class="btn small" href="/conditions/new">Add condition</a>
 
 <h2 class="slot" style="margin-top:24px">Active</h2>
 {% if active %}
@@ -13,11 +13,11 @@
   <div class="slot">since {{ c.started }}</div>
   <div class="name">{{ c.body_part }}</div>
   {% if c.note %}<p class="last">{{ c.note }}</p>{% endif %}
-  <div class="row" style="margin-top:10px">
-    <form method="post" action="/conditions/{{ c.id }}/resolve" style="flex:1">
-      <button type="submit" class="btn ghost">Mark resolved</button>
+  <div class="actions">
+    <form method="post" action="/conditions/{{ c.id }}/resolve">
+      <button type="submit" class="btn ghost small">Mark resolved</button>
     </form>
-    <a class="btn ghost" href="/conditions/{{ c.id }}/edit" style="flex:1">Edit</a>
+    <a class="btn ghost small" href="/conditions/{{ c.id }}/edit">Edit</a>
   </div>
 </div>
 {% endfor %}
@@ -32,7 +32,9 @@
   <div class="slot">{{ c.started }} &ndash; {{ c.resolved }}</div>
   <div class="name">{{ c.body_part }}</div>
   {% if c.note %}<p class="last">{{ c.note }}</p>{% endif %}
-  <a class="btn ghost" href="/conditions/{{ c.id }}/edit">Edit</a>
+  <div class="actions">
+    <a class="btn ghost small" href="/conditions/{{ c.id }}/edit">Edit</a>
+  </div>
 </div>
 {% endfor %}
 {% endif %}

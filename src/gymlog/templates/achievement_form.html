@@ -21,7 +21,7 @@
 {% if achievement %}
 <form method="post" action="/achievements/{{ achievement.id }}/delete"
       onsubmit="return confirm('Delete this achievement?')">
-  <button type="submit" class="btn ghost">Delete</button>
+  <button type="submit" class="btn ghost small">Delete</button>
 </form>
 {% endif %}
 {% endblock %}

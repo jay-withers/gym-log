@@ -4,7 +4,7 @@
 {% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
 {% block body %}
 
-<a class="btn" href="/achievements/new">Add achievement</a>
+<a class="btn small" href="/achievements/new">Add achievement</a>
 
 {% if achievements %}
 {% for a in achievements %}
@@ -12,7 +12,9 @@
   <div class="slot">{{ a.date }}</div>
   <div class="name">{{ a.title }}</div>
   {% if a.note %}<p class="last">{{ a.note }}</p>{% endif %}
-  <a class="btn ghost" href="/achievements/{{ a.id }}/edit">Edit</a>
+  <div class="actions">
+    <a class="btn ghost small" href="/achievements/{{ a.id }}/edit">Edit</a>
+  </div>
 </div>
 {% endfor %}
 {% else %}

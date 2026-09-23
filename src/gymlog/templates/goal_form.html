@@ -19,7 +19,7 @@
 
 {% if goal %}
 <form method="post" action="/goals/{{ goal.id }}/delete" onsubmit="return confirm('Delete this goal?')">
-  <button type="submit" class="btn ghost">Delete</button>
+  <button type="submit" class="btn ghost small">Delete</button>
 </form>
 {% endif %}
 {% endblock %}

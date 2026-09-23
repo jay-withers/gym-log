@@ -70,6 +70,13 @@
   .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; }
+  /* A secondary, in-list action — Edit, Mark achieved, Delete — is not the
+     one thing this screen is for, and full-width made a two- or three-item
+     list look like a wall of buttons. Auto width, hugs its label instead. */
+  .btn.small, button.small {
+    display: inline-block; width: auto; padding: 8px 14px; font-size: 14px; margin-top: 0;
+  }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 9px 6px; border-bottom: 1px solid var(--line); }
   th { color: var(--dim); font-weight: 500; font-size: 12px; text-transform: uppercase; }

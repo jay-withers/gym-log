@@ -4,7 +4,7 @@
 {% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
 {% block body %}
 
-<a class="btn" href="/goals/new">Add goal</a>
+<a class="btn small" href="/goals/new">Add goal</a>
 
 <h2 class="slot" style="margin-top:24px">Active</h2>
 {% if active %}
@@ -13,11 +13,11 @@
   <div class="name">{{ g.title }}</div>
   {% if g.target_date %}<div class="last">by {{ g.target_date }}</div>{% endif %}
   {% if g.note %}<p class="last">{{ g.note }}</p>{% endif %}
-  <div class="row" style="margin-top:10px">
-    <form method="post" action="/goals/{{ g.id }}/achieve" style="flex:1">
-      <button type="submit" class="btn ghost">Mark achieved</button>
+  <div class="actions">
+    <form method="post" action="/goals/{{ g.id }}/achieve">
+      <button type="submit" class="btn ghost small">Mark achieved</button>
     </form>
-    <a class="btn ghost" href="/goals/{{ g.id }}/edit" style="flex:1">Edit</a>
+    <a class="btn ghost small" href="/goals/{{ g.id }}/edit">Edit</a>
   </div>
 </div>
 {% endfor %}
@@ -32,7 +32,9 @@
   <div class="name">{{ g.title }}</div>
   {% if g.target_date %}<div class="last">by {{ g.target_date }}</div>{% endif %}
   {% if g.note %}<p class="last">{{ g.note }}</p>{% endif %}
-  <a class="btn ghost" href="/goals/{{ g.id }}/edit">Edit</a>
+  <div class="actions">
+    <a class="btn ghost small" href="/goals/{{ g.id }}/edit">Edit</a>
+  </div>
 </div>
 {% endfor %}
 {% endif %}
