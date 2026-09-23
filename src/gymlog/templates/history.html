@@ -1,6 +1,7 @@
 {% extends "base.html" %}
-{% block title %}{{ slot }} · gym-log{% endblock %}
+{% block title %}{{ slot }} · Health{% endblock %}
 {% block subtitle %}{{ slot }}{% endblock %}
+{% block back %}<a class="back" href="/strength"><span class="arrow">&larr;</span> Strength Training</a>{% endblock %}
 {% block body %}
 
 <div class="chips">
@@ -26,6 +27,4 @@
 {% else %}
 <p class="last">Nothing logged for this slot yet.</p>
 {% endif %}
-
-<a class="btn ghost" href="/" style="margin-top:20px">Back</a>
 {% endblock %}

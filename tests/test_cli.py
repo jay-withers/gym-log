@@ -19,7 +19,7 @@ from gymlog import store, telemetry
 from gymlog.cli import _configure_logging, _terminate, main
 from gymlog.model import Log
 
-from .factories import block
+from .factories import block, insight
 
 
 def test_serve_runs_the_app_with_the_access_log_off(monkeypatch):
@@ -89,6 +89,26 @@ def test_import_adds_a_block_rather_than_replacing_the_log(monkeypatch):
 
     log, _etag = store.load()
     assert [b.id for b in log.blocks] == ["2026-07-01", "2026-09-01"]
+
+
+def test_insight_records_what_generate_insight_returns(monkeypatch):
+    generated = insight(id="i1", week_of="2026-09-15")
+    monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: generated)
+
+    assert main(["insight"]) == 0
+
+    log, _etag = store.load()
+    assert log.insights == (generated,)
+
+
+def test_insight_is_a_no_op_when_generate_insight_declines(monkeypatch):
+    """Too soon since the last one — see insights.MIN_DAYS_BETWEEN."""
+    monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: None)
+
+    assert main(["insight"]) == 0
+
+    log, _etag = store.load()
+    assert log.insights == ()
 
 
 def test_a_missing_subcommand_is_refused(capsys):

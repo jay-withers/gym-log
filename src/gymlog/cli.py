@@ -92,6 +92,8 @@ def main(argv: list[str] | None = None) -> int:
         help="overwrite an existing local log",
     )
 
+    sub.add_parser("insight", help="generate this week's AI training insight")
+
     args = parser.parse_args(argv)
 
     _configure_logging()
@@ -108,6 +110,8 @@ def main(argv: list[str] | None = None) -> int:
             return _show()
         if args.command == "seed":
             return _seed(args)
+        if args.command == "insight":
+            return _insight()
     finally:
         telemetry.flush()
 
@@ -187,4 +191,19 @@ def _show() -> int:
 
     log, _etag = store.load()
     print(log.to_json())
+    return 0
+
+
+def _insight() -> int:
+    from . import store
+    from .insights import generate_insight
+
+    log, _etag = store.load()
+    insight = generate_insight(log)
+    if insight is None:
+        logging.getLogger("gymlog").info("no new insight needed yet")
+        return 0
+
+    store.update(lambda current: current.with_insight(insight))
+    logging.getLogger("gymlog").info("recorded insight for week of %s", insight.week_of)
     return 0

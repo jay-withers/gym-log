@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Weekly Insights · Health{% endblock %}
+{% block subtitle %}Weekly Insights{% endblock %}
+{% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
+{% block body %}
+
+{% if insights %}
+{% for i in insights %}
+<div class="card">
+  <div class="slot">week of {{ i.week_of }}</div>
+  <p class="last" style="color:var(--text);font-size:14px;white-space:pre-line">{{ i.summary }}</p>
+</div>
+{% endfor %}
+{% else %}
+<p class="last">No insight yet — the weekly job writes the first one after enough sessions are logged.</p>
+{% endif %}
+{% endblock %}

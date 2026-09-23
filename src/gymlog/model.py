@@ -273,6 +273,123 @@ class Entry:
 
 
 @dataclass(frozen=True)
+class Achievement:
+    """A milestone logged by hand — not derived from lift data."""
+
+    id: str
+    date: str
+    title: str
+    note: str = ""
+
+    def to_json(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"id": self.id, "date": self.date, "title": self.title}
+        if self.note:
+            payload["note"] = self.note
+        return payload
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Achievement:
+        return cls(
+            id=str(payload.get("id", "")),
+            date=str(payload.get("date", "")),
+            title=str(payload.get("title", "")),
+            note=str(payload.get("note", "")),
+        )
+
+
+@dataclass(frozen=True)
+class Condition:
+    """An injury or medical condition. Resolved by resubmitting the same `id`."""
+
+    id: str
+    body_part: str
+    started: str
+    status: str = "active"
+    resolved: str = ""
+    note: str = ""
+
+    def to_json(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "id": self.id,
+            "body_part": self.body_part,
+            "started": self.started,
+            "status": self.status,
+        }
+        if self.resolved:
+            payload["resolved"] = self.resolved
+        if self.note:
+            payload["note"] = self.note
+        return payload
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Condition:
+        return cls(
+            id=str(payload.get("id", "")),
+            body_part=str(payload.get("body_part", "")),
+            started=str(payload.get("started", "")),
+            status=str(payload.get("status", "active") or "active"),
+            resolved=str(payload.get("resolved", "")),
+            note=str(payload.get("note", "")),
+        )
+
+
+@dataclass(frozen=True)
+class Goal:
+    """A free-form target. Achieved by resubmitting the same `id`."""
+
+    id: str
+    title: str
+    target_date: str = ""
+    status: str = "active"
+    note: str = ""
+
+    def to_json(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"id": self.id, "title": self.title, "status": self.status}
+        if self.target_date:
+            payload["target_date"] = self.target_date
+        if self.note:
+            payload["note"] = self.note
+        return payload
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Goal:
+        return cls(
+            id=str(payload.get("id", "")),
+            title=str(payload.get("title", "")),
+            target_date=str(payload.get("target_date", "")),
+            status=str(payload.get("status", "active") or "active"),
+            note=str(payload.get("note", "")),
+        )
+
+
+@dataclass(frozen=True)
+class Insight:
+    """A weekly AI-generated summary, written only by the scheduled job."""
+
+    id: str
+    week_of: str
+    summary: str
+    generated_at: str
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "week_of": self.week_of,
+            "summary": self.summary,
+            "generated_at": self.generated_at,
+        }
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Insight:
+        return cls(
+            id=str(payload.get("id", "")),
+            week_of=str(payload.get("week_of", "")),
+            summary=str(payload.get("summary", "")),
+            generated_at=str(payload.get("generated_at", "")),
+        )
+
+
+@dataclass(frozen=True)
 class Session:
     """One training session, as performed.
 
@@ -335,6 +452,10 @@ class Log:
     slots: tuple[str, ...] = DEFAULT_SLOTS
     blocks: tuple[Block, ...] = ()
     sessions: tuple[Session, ...] = ()
+    achievements: tuple[Achievement, ...] = ()
+    conditions: tuple[Condition, ...] = ()
+    goals: tuple[Goal, ...] = ()
+    insights: tuple[Insight, ...] = ()
 
     @property
     def current_block(self) -> Block | None:
@@ -424,6 +545,36 @@ class Log:
         others = tuple(b for b in self.blocks if b.id != block.id)
         return replace(self, blocks=(*others, block))
 
+    def with_achievement(self, achievement: Achievement) -> Log:
+        """Add or replace an achievement by id — resubmitting edits it."""
+        others = tuple(a for a in self.achievements if a.id != achievement.id)
+        return replace(self, achievements=(*others, achievement))
+
+    def without_achievement(self, achievement_id: str) -> Log:
+        return replace(
+            self, achievements=tuple(a for a in self.achievements if a.id != achievement_id)
+        )
+
+    def with_condition(self, condition: Condition) -> Log:
+        """Add or replace a condition by id — resubmitting edits or resolves it."""
+        others = tuple(c for c in self.conditions if c.id != condition.id)
+        return replace(self, conditions=(*others, condition))
+
+    def without_condition(self, condition_id: str) -> Log:
+        return replace(self, conditions=tuple(c for c in self.conditions if c.id != condition_id))
+
+    def with_goal(self, goal: Goal) -> Log:
+        """Add or replace a goal by id — resubmitting edits or achieves it."""
+        others = tuple(g for g in self.goals if g.id != goal.id)
+        return replace(self, goals=(*others, goal))
+
+    def without_goal(self, goal_id: str) -> Log:
+        return replace(self, goals=tuple(g for g in self.goals if g.id != goal_id))
+
+    def with_insight(self, insight: Insight) -> Log:
+        """Append a weekly insight."""
+        return replace(self, insights=(*self.insights, insight))
+
     def to_json(self) -> str:
         return json.dumps(
             {
@@ -431,6 +582,14 @@ class Log:
                 "slots": list(self.slots),
                 "blocks": [b.to_json() for b in sorted(self.blocks, key=lambda b: b.started)],
                 "sessions": [s.to_json() for s in sorted(self.sessions, key=lambda s: s.date)],
+                "achievements": [
+                    a.to_json() for a in sorted(self.achievements, key=lambda a: a.date)
+                ],
+                "conditions": [
+                    c.to_json() for c in sorted(self.conditions, key=lambda c: c.started)
+                ],
+                "goals": [g.to_json() for g in sorted(self.goals, key=lambda g: g.id)],
+                "insights": [i.to_json() for i in sorted(self.insights, key=lambda i: i.week_of)],
             },
             indent=2,
         )
@@ -458,5 +617,23 @@ class Log:
             ),
             sessions=tuple(
                 Session.from_json(s) for s in payload.get("sessions", []) if isinstance(s, dict)
+            ),
+            achievements=tuple(
+                Achievement.from_json(a)
+                for a in payload.get("achievements", []) or ()
+                if isinstance(a, dict)
+            ),
+            conditions=tuple(
+                Condition.from_json(c)
+                for c in payload.get("conditions", []) or ()
+                if isinstance(c, dict)
+            ),
+            goals=tuple(
+                Goal.from_json(g) for g in payload.get("goals", []) or () if isinstance(g, dict)
+            ),
+            insights=tuple(
+                Insight.from_json(i)
+                for i in payload.get("insights", []) or ()
+                if isinstance(i, dict)
             ),
         )

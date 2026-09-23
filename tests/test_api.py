@@ -12,7 +12,7 @@ from gymlog import store
 from gymlog.api.main import create_app
 from gymlog.model import Block, Day, Log
 
-from .factories import block, entry, exercise, session
+from .factories import block, entry, exercise, insight, session
 
 
 @pytest.fixture
@@ -125,6 +125,18 @@ def test_the_manifest_is_not_gated(client):
     response = client.get("/manifest.json")
     assert response.status_code == 200
     assert response.json()["display"] == "standalone"
+
+
+def test_the_manifest_starts_at_strength_not_the_home_menu(client):
+    """The phone icon exists for the twice-a-week fast path of logging a set."""
+    assert client.get("/manifest.json").json()["start_url"] == "/strength"
+
+
+def test_home_links_to_every_section(client, seeded):
+    login(client)
+    page = client.get("/").text
+    for href in ("/strength", "/achievements", "/goals", "/conditions", "/insights"):
+        assert f'href="{href}"' in page
 
 
 def test_logging_a_session_records_only_what_was_filled_in(client, seeded):
@@ -560,7 +572,7 @@ def test_an_index_outside_the_day_goes_back_rather_than_erroring(client, seeded)
 def test_every_page_says_how_to_get_started_before_the_first_import(client):
     """A fresh deployment has no block at all, and must not 500 on the way to saying so."""
     login(client)
-    for path in ("/", "/block"):
+    for path in ("/strength", "/block"):
         response = client.get(path)
         assert response.status_code == 200
         assert "gymlog import" in response.text
@@ -573,12 +585,12 @@ def test_rotating_with_no_block_to_rotate_goes_home(client):
 
 
 @pytest.mark.parametrize("path", ["/session/Z", "/session/Z/0"])
-def test_a_day_that_is_not_in_the_block_goes_home(client, seeded, path):
+def test_a_day_that_is_not_in_the_block_goes_back_to_strength(client, seeded, path):
     """A stale bookmark from a previous block, which the phone keeps for months."""
     login(client)
     response = client.get(path) if path.count("/") == 2 else client.post(path, data={})
     assert response.status_code == 303
-    assert response.headers["location"] == "/"
+    assert response.headers["location"] == "/strength"
 
 
 def test_an_exercise_index_past_the_end_goes_back_to_the_session(client, seeded):
@@ -652,21 +664,21 @@ def test_the_next_day_alternates(client, seeded):
         )
     )
     login(client)
-    page = client.get("/").text
+    page = client.get("/strength").text
     assert "Thur · next" in page
     assert "Tues · next" not in page
 
 
 def test_the_first_session_of_a_block_starts_at_the_first_day(client, seeded):
     login(client)
-    assert "Tues · next" in client.get("/").text
+    assert "Tues · next" in client.get("/strength").text
 
 
 def test_a_block_with_no_days_still_renders(client):
     """A hand-edited document in the portal can produce one, and a 500 would hide why."""
     store.save(Log(blocks=(Block(id="2026-09-01", name="Empty", started="2026-09-01", days={}),)))
     login(client)
-    assert client.get("/").status_code == 200
+    assert client.get("/strength").status_code == 200
 
 
 # --- the gate ----------------------------------------------------------------
@@ -743,3 +755,207 @@ def test_the_gate_can_be_turned_off(monkeypatch, tmp_path):
     # raise here rather than serve.
     with TestClient(create_app(), base_url="https://testserver", follow_redirects=False) as open_:
         assert open_.get("/").status_code == 200
+
+
+# --- achievements --------------------------------------------------------------
+
+
+def test_logging_an_achievement(client, seeded):
+    login(client)
+    response = client.post(
+        "/achievements", data={"date": "2026-09-15", "title": "Ran a 5k", "note": "PB"}
+    )
+    assert response.status_code == 303
+
+    log, _ = store.load()
+    assert len(log.achievements) == 1
+    assert log.achievements[0].title == "Ran a 5k"
+    assert log.achievements[0].note == "PB"
+    assert "Ran a 5k" in client.get("/achievements").text
+
+
+def test_an_achievement_with_no_title_is_not_recorded(client, seeded):
+    login(client)
+    client.post("/achievements", data={"date": "2026-09-15", "title": ""})
+    assert store.load()[0].achievements == ()
+
+
+def test_editing_and_deleting_an_achievement(client, seeded):
+    login(client)
+    client.post("/achievements", data={"date": "2026-09-15", "title": "Ran a 5k"})
+    achievement_id = store.load()[0].achievements[0].id
+
+    response = client.post(
+        f"/achievements/{achievement_id}",
+        data={"date": "2026-09-16", "title": "Ran a 10k", "note": "further than planned"},
+    )
+    assert response.status_code == 303
+    edited = store.load()[0].achievements[0]
+    assert edited.title == "Ran a 10k"
+    assert edited.date == "2026-09-16"
+    assert edited.note == "further than planned"
+
+    response = client.post(f"/achievements/{achievement_id}/delete")
+    assert response.status_code == 303
+    assert store.load()[0].achievements == ()
+
+
+def test_editing_an_achievement_with_no_title_does_nothing(client, seeded):
+    login(client)
+    client.post("/achievements", data={"date": "2026-09-15", "title": "Ran a 5k"})
+    achievement_id = store.load()[0].achievements[0].id
+
+    client.post(f"/achievements/{achievement_id}", data={"title": ""})
+    assert store.load()[0].achievements[0].title == "Ran a 5k"
+
+
+def test_deleting_an_unknown_achievement_is_a_no_op(client, seeded):
+    login(client)
+    assert client.post("/achievements/does-not-exist/delete").status_code == 303
+
+
+# --- goals -----------------------------------------------------------------
+
+
+def test_adding_and_achieving_a_goal(client, seeded):
+    login(client)
+    client.post("/goals", data={"title": "Bench press 100kg"})
+
+    log, _ = store.load()
+    assert len(log.goals) == 1
+    assert log.goals[0].status == "active"
+    goal_id = log.goals[0].id
+
+    page = client.get("/goals").text
+    assert "Bench press 100kg" in page
+
+    response = client.post(f"/goals/{goal_id}/achieve")
+    assert response.status_code == 303
+    assert store.load()[0].goals[0].status == "achieved"
+
+
+def test_achieving_an_unknown_goal_is_a_no_op(client, seeded):
+    login(client)
+    assert client.post("/goals/does-not-exist/achieve").status_code == 303
+    assert store.load()[0].goals == ()
+
+
+def test_editing_and_deleting_a_goal(client, seeded):
+    login(client)
+    client.post("/goals", data={"title": "Bench press 100kg"})
+    goal_id = store.load()[0].goals[0].id
+
+    response = client.post(
+        f"/goals/{goal_id}",
+        data={"title": "Bench press 110kg", "target_date": "2027-01-01", "note": "raised it"},
+    )
+    assert response.status_code == 303
+    edited = store.load()[0].goals[0]
+    assert edited.title == "Bench press 110kg"
+    assert edited.target_date == "2027-01-01"
+    assert edited.note == "raised it"
+    # Editing must not disturb the status an achieve/resolve action set.
+    assert edited.status == "active"
+
+    response = client.post(f"/goals/{goal_id}/delete")
+    assert response.status_code == 303
+    assert store.load()[0].goals == ()
+
+
+def test_editing_a_goal_with_no_title_does_nothing(client, seeded):
+    login(client)
+    client.post("/goals", data={"title": "Bench press 100kg"})
+    goal_id = store.load()[0].goals[0].id
+
+    client.post(f"/goals/{goal_id}", data={"title": ""})
+    assert store.load()[0].goals[0].title == "Bench press 100kg"
+
+
+def test_deleting_an_unknown_goal_is_a_no_op(client, seeded):
+    login(client)
+    assert client.post("/goals/does-not-exist/delete").status_code == 303
+
+
+# --- injuries & conditions -----------------------------------------------------
+
+
+def test_adding_and_resolving_a_condition(client, seeded):
+    login(client)
+    client.post(
+        "/conditions",
+        data={"body_part": "lower back", "started": "2026-09-01", "note": "deadlifts"},
+    )
+
+    log, _ = store.load()
+    assert len(log.conditions) == 1
+    assert log.conditions[0].status == "active"
+    condition_id = log.conditions[0].id
+
+    page = client.get("/conditions").text
+    assert "lower back" in page
+
+    response = client.post(f"/conditions/{condition_id}/resolve")
+    assert response.status_code == 303
+    resolved = store.load()[0].conditions[0]
+    assert resolved.status == "resolved"
+    assert resolved.resolved
+
+
+def test_a_condition_with_no_body_part_is_not_recorded(client, seeded):
+    login(client)
+    client.post("/conditions", data={"body_part": ""})
+    assert store.load()[0].conditions == ()
+
+
+def test_editing_and_deleting_a_condition(client, seeded):
+    login(client)
+    client.post(
+        "/conditions", data={"body_part": "lower back", "started": "2026-09-01", "note": "gym"}
+    )
+    condition_id = store.load()[0].conditions[0].id
+
+    response = client.post(
+        f"/conditions/{condition_id}",
+        data={"body_part": "upper back", "started": "2026-09-02", "note": "deadlifts"},
+    )
+    assert response.status_code == 303
+    edited = store.load()[0].conditions[0]
+    assert edited.body_part == "upper back"
+    assert edited.started == "2026-09-02"
+    assert edited.note == "deadlifts"
+    # Editing must not disturb the status a resolve action set.
+    assert edited.status == "active"
+
+    response = client.post(f"/conditions/{condition_id}/delete")
+    assert response.status_code == 303
+    assert store.load()[0].conditions == ()
+
+
+def test_editing_a_condition_with_no_body_part_does_nothing(client, seeded):
+    login(client)
+    client.post("/conditions", data={"body_part": "lower back"})
+    condition_id = store.load()[0].conditions[0].id
+
+    client.post(f"/conditions/{condition_id}", data={"body_part": ""})
+    assert store.load()[0].conditions[0].body_part == "lower back"
+
+
+def test_deleting_an_unknown_condition_is_a_no_op(client, seeded):
+    login(client)
+    assert client.post("/conditions/does-not-exist/delete").status_code == 303
+
+
+# --- weekly AI insight ----------------------------------------------------------
+
+
+def test_insights_page_lists_stored_insights(client, seeded):
+    """Read-only: the page never writes one, only the scheduled job's CLI does."""
+    store.update(lambda current: current.with_insight(insight(summary="Good week overall.")))
+    login(client)
+    page = client.get("/insights").text
+    assert "Good week overall." in page
+
+
+def test_insights_page_when_empty(client, seeded):
+    login(client)
+    assert client.get("/insights").status_code == 200

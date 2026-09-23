@@ -53,6 +53,33 @@ logged entry carries its slot, so `/history/chest` spans the rotation:
 That is the one thing the spreadsheet could not do, and the reason the model is
 shaped the way it is.
 
+## Beyond the lift log
+
+The lift log itself — block/day, session logging, history, block rotation —
+now lives under `/strength` rather than at the root. `/` is a light home page
+linking to it and to the sections below; the installed-to-home-screen phone
+icon still opens straight to `/strength`, since that is the twice-a-week fast
+path this app exists for.
+
+Four sections that are not derived from sets and reps:
+
+- **Achievements** (`/achievements`) — a free-text, append-only list of
+  milestones. Never edited, only added to.
+- **Goals** (`/goals`) — free-form targets with an optional date, marked
+  achieved by hand. Not tied to a specific exercise or weight.
+- **Injuries & conditions** (`/conditions`) — structured records (body part,
+  status, start/resolved dates, a note), marked resolved by hand. Read by the
+  weekly insight so it does not suggest anything that would aggravate an
+  active one.
+- **Weekly insight** (`/insights`, read-only) — a DeepSeek-generated summary
+  of the week, written once a week by `azurerm_container_app_job.insight`
+  (`terraform/main.container-apps-job.tf`), not by the web app. The app
+  scales to zero between workouts, so nothing in-process could fire a weekly
+  timer; the job exists specifically to run on a schedule regardless of
+  whether anyone has opened the app that week. `make insight` runs it by hand
+  against the real log, and `az containerapp job start` triggers it on the
+  deployed job directly.
+
 ## Design
 
 - **A single container app**, `min_replicas = 0`, on the shared environment from
@@ -107,11 +134,19 @@ no block, and therefore no session screen, no suggestions and no history — the
 one state with least to look at. The sample carries a block part-way through and
 five sessions chosen to put every card into a different state (climbing inside
 the range, ready to add weight, stalled below it, and never logged), so a change
-to the session screen can be seen rather than imagined. `make seed FORCE=1`
+to the session screen can be seen rather than imagined. The same sample also
+seeds an achievement, a goal in each of active/achieved, a condition in each of
+active/resolved, and a weekly insight, so those four sections are never the
+one blank thing in an otherwise-populated local run. `make seed FORCE=1`
 replaces an existing one (make cannot take `--force` as a target argument).
 
 It writes to the local file only, and **refuses outright when
 `STATE_CONTAINER_URL` is set** — invented sessions must never reach the real log.
+
+`make insight-local` regenerates the weekly insight against that same local
+file — set `DEEPSEEK_API_KEY` in the environment first, since there is no Key
+Vault to fall back to locally. Without a key it fails with the same
+`secret()` error a missing `APP_PASSCODE` would.
 
 Browsers treat `localhost` as a secure origin, so the `Secure` session cookie
 works over plain http there. `httpx` does not, which is why the tests point
@@ -167,7 +202,10 @@ Ordering-sensitive:
 2. Set `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` as
    repository variables, or the plan legs stay skipped.
 3. `make apply`.
-4. `make secrets` and run what it prints to set `APP-PASSCODE`.
+4. `make secrets` and run what it prints to set `APP-PASSCODE` and
+   `DEEPSEEK-API-KEY`. The insight job fails at the next scheduled run,
+   rather than at apply time, if the latter is skipped — it resolves the key
+   the same way `APP-PASSCODE` is resolved, lazily and at runtime.
 5. **Flip the GHCR package to public.** New packages default to private
    regardless of repository visibility, and there is no pull secret.
 6. `make import FILE=Gym_3.xlsx NAME="Block 3"`.

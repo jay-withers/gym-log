@@ -1,5 +1,7 @@
 {% extends "base.html" %}
-{% block subtitle %}{{ block.name }} · week {{ week }} of {{ block.weeks }}{% endblock %}
+{% block title %}Strength Training · Health{% endblock %}
+{% block subtitle %}Strength Training · {{ block.name }} · week {{ week }} of {{ block.weeks }}{% endblock %}
+{% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
 {% block body %}
 
 {% if due %}
