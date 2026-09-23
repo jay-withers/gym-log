@@ -22,6 +22,13 @@ resource "azurerm_container_app" "this" {
   # revisions would mean a session logged against whichever revision answered.
   revision_mode = "Single"
 
+  # The shared environment has no other workload profile (it is
+  # Consumption-only, the same reason the storage account's checkov skips give
+  # for no VNet/private endpoint). Stated explicitly rather than left to the
+  # provider default: the API already reports this back, and leaving it unset
+  # in config made every plan propose clearing it.
+  workload_profile_name = "Consumption"
+
   identity {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.this.id]

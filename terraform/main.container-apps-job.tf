@@ -43,9 +43,9 @@ resource "azurerm_container_app_job" "insight" {
   replica_retry_limit        = 1
 
   schedule_trigger_config {
-    # Monday 08:00 UTC — after the week just logged, ahead of the week about
-    # to start.
-    cron_expression          = "0 8 * * MON"
+    # Sunday 20:00 UTC — the week's training is done by then, and the summary
+    # is there to read before the next week's first session.
+    cron_expression          = "0 20 * * SUN"
     parallelism              = 1
     replica_completion_count = 1
   }
