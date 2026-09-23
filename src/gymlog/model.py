@@ -545,6 +545,16 @@ class Log:
         others = tuple(b for b in self.blocks if b.id != block.id)
         return replace(self, blocks=(*others, block))
 
+    def ensuring_slot(self, slot: str) -> Log:
+        """Track `slot` on the History-by-slot page, if it isn't already.
+
+        For a slot typed in by hand against a manually-added exercise —
+        "core", say — rather than one of the seven the sheet came with.
+        """
+        if not slot or slot in self.slots:
+            return self
+        return replace(self, slots=(*self.slots, slot))
+
     def with_achievement(self, achievement: Achievement) -> Log:
         """Add or replace an achievement by id — resubmitting edits it."""
         others = tuple(a for a in self.achievements if a.id != achievement.id)

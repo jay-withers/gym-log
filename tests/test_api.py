@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from gymlog import settings as settings_module
 from gymlog import store
 from gymlog.api.main import create_app
-from gymlog.model import Block, Day, Log
+from gymlog.model import Block, Day, Log, SetLog
 
 from .factories import block, entry, exercise, insight, session
 
@@ -612,6 +612,110 @@ def test_a_rotation_that_loses_its_race_is_reported(client, seeded, monkeypatch)
     assert client.post("/block", data={"name": "Block 4"}).status_code == 409
 
 
+# --- loose days and manually-added exercises ----------------------------------
+
+
+def test_a_loose_day_renders_with_no_prescribed_cards(client, seeded):
+    """The manual day carries no block prescription at all."""
+    login(client)
+    response = client.get("/session/manual")
+    assert response.status_code == 200
+    page = response.text
+    assert "Add an exercise" in page
+    assert "Save</button>" not in page  # no prescribed-card "Save"/"Update" buttons
+
+
+def test_the_strength_page_always_links_to_a_loose_day(client, seeded):
+    login(client)
+    assert 'href="/session/manual"' in client.get("/strength").text
+
+
+def test_logging_a_manual_exercise_on_a_loose_day(client, seeded):
+    login(client)
+    response = client.post(
+        "/session/manual/extra",
+        data={
+            "date": date.today().isoformat(),
+            "name": "Ab Wheel Rollout",
+            "slot": "core",
+            "reps_0": "10",
+            "weight_0": "0",
+        },
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/session/manual"
+
+    log, _ = store.load()
+    assert len(log.sessions) == 1
+    assert log.sessions[0].day == "manual"
+    entry = log.sessions[0].entries[0]
+    assert entry.exercise == "Ab Wheel Rollout"
+    assert entry.slot == "core"
+    assert entry.sets == (SetLog(reps=10, weight=0.0),)
+    # A slot typed in by hand is tracked for History by slot too.
+    assert "core" in log.slots
+
+    page = client.get("/session/manual").text
+    assert "Ab Wheel Rollout" in page
+
+
+def test_logging_a_manual_exercise_alongside_prescribed_ones(client, seeded):
+    """An improvised extra on a block day, not one of the prescribed cards."""
+    login(client)
+    client.post(
+        "/session/A/extra",
+        data={
+            "date": date.today().isoformat(),
+            "name": "Face Pulls",
+            "slot": "shoulders",
+            "reps_0": "15",
+        },
+    )
+    # No weight filled in: a bodyweight/band exercise, reps alone still counts.
+    page = client.get("/session/A").text
+    assert "Face Pulls" in page
+
+
+def test_a_manual_exercise_with_no_name_or_slot_is_not_recorded(client, seeded):
+    login(client)
+    client.post("/session/manual/extra", data={"name": "", "slot": "core", "reps_0": "10"})
+    client.post("/session/manual/extra", data={"name": "Plank", "slot": "", "reps_0": "10"})
+    assert store.load()[0].sessions == ()
+
+
+def test_a_manual_exercise_with_no_sets_is_not_recorded(client, seeded):
+    login(client)
+    client.post("/session/manual/extra", data={"name": "Plank", "slot": "core"})
+    assert store.load()[0].sessions == ()
+
+
+def test_the_add_exercise_form_suggests_known_names(client, seeded):
+    """Catches "Bicep Curl" vs "Bicep Curls" before it becomes two histories."""
+    login(client)
+    client.post(
+        "/session/manual/extra",
+        data={
+            "date": date.today().isoformat(),
+            "name": "Ab Wheel Rollout",
+            "slot": "core",
+            "reps_0": "10",
+        },
+    )
+    page = client.get("/session/manual").text
+    # The block's prescribed exercises are offered too, not just past extras.
+    assert '<option value="Ab Wheel Rollout">' in page
+    assert '<option value="Cable Flyes">' in page
+
+
+def test_extra_exercise_on_an_unknown_day_goes_back_to_strength(client, seeded):
+    login(client)
+    response = client.post(
+        "/session/Z/extra", data={"name": "Plank", "slot": "core", "reps_0": "10"}
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/strength"
+
+
 # --- history -----------------------------------------------------------------
 
 
@@ -814,6 +918,46 @@ def test_deleting_an_unknown_achievement_is_a_no_op(client, seeded):
     assert client.post("/achievements/does-not-exist/delete").status_code == 303
 
 
+def test_the_achievements_list_is_read_only(client, seeded):
+    """No inline editable fields — editing lives on its own page."""
+    login(client)
+    client.post("/achievements", data={"date": "2026-09-15", "title": "Ran a 5k"})
+    page = client.get("/achievements").text
+    assert "<input" not in page
+    assert 'href="/achievements/new"' in page
+    assert "/edit" in page
+
+
+def test_the_new_achievement_form_renders(client, seeded):
+    login(client)
+    assert client.get("/achievements/new").status_code == 200
+
+
+def test_the_edit_achievement_form_is_prefilled(client, seeded):
+    login(client)
+    client.post("/achievements", data={"date": "2026-09-15", "title": "Ran a 5k", "note": "PB"})
+    achievement_id = store.load()[0].achievements[0].id
+
+    page = client.get(f"/achievements/{achievement_id}/edit").text
+    assert 'value="Ran a 5k"' in page
+    assert 'value="PB"' in page
+
+
+def test_the_edit_form_for_an_unknown_achievement_goes_back_to_the_list(client, seeded):
+    login(client)
+    response = client.get("/achievements/does-not-exist/edit")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/achievements"
+
+
+def test_achievements_are_listed_newest_first(client, seeded):
+    login(client)
+    client.post("/achievements", data={"date": "2026-09-01", "title": "Older"})
+    client.post("/achievements", data={"date": "2026-09-20", "title": "Newer"})
+    page = client.get("/achievements").text
+    assert page.index("Newer") < page.index("Older")
+
+
 # --- goals -----------------------------------------------------------------
 
 
@@ -874,6 +1018,46 @@ def test_editing_a_goal_with_no_title_does_nothing(client, seeded):
 def test_deleting_an_unknown_goal_is_a_no_op(client, seeded):
     login(client)
     assert client.post("/goals/does-not-exist/delete").status_code == 303
+
+
+def test_the_goals_list_is_read_only(client, seeded):
+    login(client)
+    client.post("/goals", data={"title": "Bench press 100kg"})
+    page = client.get("/goals").text
+    assert "<input" not in page
+    assert 'href="/goals/new"' in page
+    assert "/edit" in page
+
+
+def test_the_new_goal_form_renders(client, seeded):
+    login(client)
+    assert client.get("/goals/new").status_code == 200
+
+
+def test_the_edit_goal_form_is_prefilled(client, seeded):
+    login(client)
+    client.post("/goals", data={"title": "Bench press 100kg", "note": "3x8"})
+    goal_id = store.load()[0].goals[0].id
+
+    page = client.get(f"/goals/{goal_id}/edit").text
+    assert 'value="Bench press 100kg"' in page
+    assert 'value="3x8"' in page
+
+
+def test_the_edit_form_for_an_unknown_goal_goes_back_to_the_list(client, seeded):
+    login(client)
+    response = client.get("/goals/does-not-exist/edit")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/goals"
+
+
+def test_goals_are_listed_by_soonest_target_date_first(client, seeded):
+    login(client)
+    client.post("/goals", data={"title": "No date"})
+    client.post("/goals", data={"title": "Later", "target_date": "2027-06-01"})
+    client.post("/goals", data={"title": "Sooner", "target_date": "2027-01-01"})
+    page = client.get("/goals").text
+    assert page.index("Sooner") < page.index("Later") < page.index("No date")
 
 
 # --- injuries & conditions -----------------------------------------------------
@@ -943,6 +1127,45 @@ def test_editing_a_condition_with_no_body_part_does_nothing(client, seeded):
 def test_deleting_an_unknown_condition_is_a_no_op(client, seeded):
     login(client)
     assert client.post("/conditions/does-not-exist/delete").status_code == 303
+
+
+def test_the_conditions_list_is_read_only(client, seeded):
+    login(client)
+    client.post("/conditions", data={"body_part": "lower back"})
+    page = client.get("/conditions").text
+    assert "<input" not in page
+    assert 'href="/conditions/new"' in page
+    assert "/edit" in page
+
+
+def test_the_new_condition_form_renders(client, seeded):
+    login(client)
+    assert client.get("/conditions/new").status_code == 200
+
+
+def test_the_edit_condition_form_is_prefilled(client, seeded):
+    login(client)
+    client.post("/conditions", data={"body_part": "lower back", "note": "deadlifts"})
+    condition_id = store.load()[0].conditions[0].id
+
+    page = client.get(f"/conditions/{condition_id}/edit").text
+    assert 'value="lower back"' in page
+    assert 'value="deadlifts"' in page
+
+
+def test_the_edit_form_for_an_unknown_condition_goes_back_to_the_list(client, seeded):
+    login(client)
+    response = client.get("/conditions/does-not-exist/edit")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/conditions"
+
+
+def test_conditions_are_listed_most_recently_started_first(client, seeded):
+    login(client)
+    client.post("/conditions", data={"body_part": "Older", "started": "2026-08-01"})
+    client.post("/conditions", data={"body_part": "Newer", "started": "2026-09-15"})
+    page = client.get("/conditions").text
+    assert page.index("Newer") < page.index("Older")
 
 
 # --- weekly AI insight ----------------------------------------------------------

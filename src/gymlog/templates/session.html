@@ -8,7 +8,9 @@
    thing in HTML, so this is a list of forms rather than one form of sections -
    which is also what lets a save be a plain submit with no JavaScript. #}
 
+{% if cards %}
 <div class="last" id="progress">{{ done }} of {{ cards | length }} recorded today</div>
+{% endif %}
 
 {% for card in cards %}
 {% set e = card.exercise %}
@@ -48,8 +50,8 @@
       {% endfor %}
     </div>
 
-    <div class="row">
-      <button type="submit">{% if rec %}Update{% else %}Save{% endif %}</button>
+    <div class="actions">
+      <button type="submit" class="small">{% if rec %}Update{% else %}Save{% endif %}</button>
     </div>
   {% else %}
     {# The finisher: no load and no reps, but it is timed when remembered. #}
@@ -66,14 +68,61 @@
       <input type="checkbox" name="done_{{ card.index }}" value="1"
              {% if rec %}checked{% endif %}> Done
     </label>
-    <div class="row">
-      <button type="submit">{% if rec %}Update{% else %}Save{% endif %}</button>
+    <div class="actions">
+      <button type="submit" class="small">{% if rec %}Update{% else %}Save{% endif %}</button>
     </div>
   {% endif %}
 </form>
 {% endfor %}
 
-<a class="btn ghost" href="/strength" style="margin-top:20px">Finish</a>
+{% if extras %}
+<h2 class="slot" style="margin-top:24px">Logged today</h2>
+{% for e in extras %}
+<div class="card">
+  <div class="slot">{{ e.slot }}</div>
+  <div class="name">{{ e.exercise }}</div>
+  {% if e.sets %}
+  <p class="last">
+    {% for s in e.sets %}{{ s.reps }}&times;{{ '%g' % s.weight }}kg{% if not loop.last %}, {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+  {% if e.note %}<p class="last">{{ e.note }}</p>{% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+<h2 class="slot" style="margin-top:24px">Add an exercise</h2>
+<form method="post" action="/session/{{ day }}/extra">
+  <input type="hidden" name="date" value="{{ today }}">
+  <div class="card">
+    <label class="slot" for="extra-name">Exercise</label>
+    <input type="text" id="extra-name" name="name" list="known-exercises" autocomplete="off">
+    <datalist id="known-exercises">
+      {% for name in known_exercises %}<option value="{{ name }}">{% endfor %}
+    </datalist>
+    <label class="slot" for="extra-slot" style="display:block;margin-top:10px">Slot</label>
+    <input type="text" id="extra-slot" name="slot" list="known-slots" autocomplete="off">
+    <datalist id="known-slots">
+      {% for s in slots %}<option value="{{ s }}">{% endfor %}
+    </datalist>
+    <div class="sets" style="margin-top:10px">
+      {% for position in range(3) %}
+      <div class="set">
+        <span>{{ position + 1 }}</span>
+        <input type="number" name="reps_{{ position }}" placeholder="reps"
+               inputmode="numeric" min="0" max="999">
+        <input type="number" name="weight_{{ position }}" placeholder="kg"
+               inputmode="decimal" step="0.5" min="0">
+      </div>
+      {% endfor %}
+    </div>
+    <label class="slot" for="extra-note" style="display:block;margin-top:10px">Note (optional)</label>
+    <input type="text" id="extra-note" name="note" autocomplete="off">
+  </div>
+  <button type="submit" class="small">Add exercise</button>
+</form>
+
+<a class="btn ghost small" href="/strength" style="margin-top:20px">Finish</a>
 
 <script>
 // Keep what has been typed on the phone until the session is actually saved.

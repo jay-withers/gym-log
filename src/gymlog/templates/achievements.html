@@ -4,35 +4,17 @@
 {% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
 {% block body %}
 
-<form method="post" action="/achievements">
-  <div class="card">
-    <label class="slot" for="title">Achievement</label>
-    <input type="text" id="title" name="title" placeholder="e.g. Ran a 5k" autocomplete="off">
-    <label class="slot" for="date" style="display:block;margin-top:10px">Date</label>
-    <input type="date" id="date" name="date" value="{{ today }}">
-    <label class="slot" for="note" style="display:block;margin-top:10px">Note (optional)</label>
-    <input type="text" id="note" name="note" autocomplete="off">
-  </div>
-  <button type="submit">Add achievement</button>
-</form>
+<a class="btn small" href="/achievements/new">Add achievement</a>
 
 {% if achievements %}
-<h2 class="slot" style="margin-top:24px">Logged</h2>
 {% for a in achievements %}
 <div class="card">
-  <form method="post" action="/achievements/{{ a.id }}">
-    <label class="slot" for="date_{{ a.id }}">Date</label>
-    <input type="date" id="date_{{ a.id }}" name="date" value="{{ a.date }}">
-    <label class="slot" for="title_{{ a.id }}" style="display:block;margin-top:10px">Achievement</label>
-    <input type="text" id="title_{{ a.id }}" name="title" value="{{ a.title }}" autocomplete="off">
-    <label class="slot" for="note_{{ a.id }}" style="display:block;margin-top:10px">Note</label>
-    <input type="text" id="note_{{ a.id }}" name="note" value="{{ a.note }}" autocomplete="off">
-    <button type="submit">Save</button>
-  </form>
-  <form method="post" action="/achievements/{{ a.id }}/delete"
-        onsubmit="return confirm('Delete this achievement?')">
-    <button type="submit" class="btn ghost">Delete</button>
-  </form>
+  <div class="slot">{{ a.date }}</div>
+  <div class="name">{{ a.title }}</div>
+  {% if a.note %}<p class="last">{{ a.note }}</p>{% endif %}
+  <div class="actions">
+    <a class="btn ghost small" href="/achievements/{{ a.id }}/edit">Edit</a>
+  </div>
 </div>
 {% endfor %}
 {% else %}

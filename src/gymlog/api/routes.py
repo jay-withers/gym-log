@@ -36,6 +36,13 @@ templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 public = APIRouter()
 router = APIRouter()
 
+# Days that carry no block prescription at all — logged purely by hand, via
+# `log_extra_exercise`. A dict rather than a set so each has a label the same
+# way a block's own days do, and so a second one is as cheap to add as this
+# first one was. "manual" is not tied to a day of the week: it exists so
+# anything can be logged any time, not just Tuesday or Thursday.
+LOOSE_DAYS: dict[str, str] = {"manual": "Manual"}
+
 
 class ConflictResponse(Exception):
     """Raised when a write lost its race twice. Handled in main.create_app."""
@@ -135,6 +142,7 @@ def strength_index(request: Request) -> Any:
             "next_day": _next_day(log, block),
             "recent": sorted(log.sessions, key=lambda s: s.date, reverse=True)[:8],
             "slots": log.slots,
+            "loose_days": LOOSE_DAYS,
         },
     )
 
@@ -143,7 +151,7 @@ def strength_index(request: Request) -> Any:
 def session_form(request: Request, day: str) -> Any:
     log, _etag = store.load()
     block = log.current_block
-    if block is None or day not in block.days:
+    if block is None or (day not in block.days and day not in LOOSE_DAYS):
         return RedirectResponse("/strength", status_code=status.HTTP_303_SEE_OTHER)
 
     today = _today().isoformat()
@@ -153,8 +161,9 @@ def session_form(request: Request, day: str) -> Any:
     history = log.excluding(today, day)
     started = log.session_on(today, day)
 
+    prescribed = block.days[day].exercises if day in block.days else ()
     cards = []
-    for index, exercise in enumerate(block.days[day].exercises):
+    for index, exercise in enumerate(prescribed):
         previous = history.last_entry(exercise.name)
         last_entry, last_date = previous if previous else (None, "")
         cards.append(
@@ -171,19 +180,86 @@ def session_form(request: Request, day: str) -> Any:
             }
         )
 
+    # Anything logged today that is not one of the prescribed cards above —
+    # every entry, for a loose day; an improvised extra, for a block day.
+    prescribed_names = {exercise.name for exercise in prescribed}
+    extras = [e for e in (started.entries if started else ()) if e.exercise not in prescribed_names]
+
     return templates.TemplateResponse(
         request,
         "session.html",
         {
             "block": block,
             "day": day,
-            "label": block.days[day].label,
+            "label": block.days[day].label if day in block.days else LOOSE_DAYS[day],
             "week": block.week_of(_today()),
             "cards": cards,
+            "extras": extras,
             "today": today,
             "done": sum(1 for c in cards if c["recorded"]),
+            "slots": log.slots,
+            # Offered as suggestions on the "add an exercise" field, so typing
+            # "Bicep" surfaces the "Bicep Curls" already on record instead of
+            # inviting a slightly different name for the same movement.
+            "known_exercises": _known_exercise_names(log),
         },
     )
+
+
+@router.post("/session/{day}/extra", include_in_schema=False)
+async def log_extra_exercise(request: Request, day: str) -> Any:
+    """Log an exercise the block does not prescribe for `day`.
+
+    Registered before `/session/{day}/{index}` — that route's `index` is an
+    int, but a mismatched type only fails *validation*, not routing, so with
+    the order reversed this "extra" would 422 rather than ever being reached.
+
+    Uses `Log.with_entry`, the same mechanism a prescribed card saves through,
+    so a loose day and an improvised extra on a block day both end up as one
+    more entry in today's session rather than a different kind of record.
+    """
+    log, _etag = store.load()
+    block = log.current_block
+    if block is None or (day not in block.days and day not in LOOSE_DAYS):
+        return RedirectResponse("/strength", status_code=status.HTTP_303_SEE_OTHER)
+
+    form = await request.form()
+    name = str(form.get("name") or "").strip()
+    slot = str(form.get("slot") or "").strip()
+    if not name or not slot:
+        # Nothing worth recording without knowing what it was or where it
+        # counts toward — same "silently do nothing" choice as an empty
+        # prescribed card.
+        return RedirectResponse(f"/session/{day}", status_code=status.HTTP_303_SEE_OTHER)
+
+    when = str(form.get("date") or _today().isoformat())
+    sets = []
+    for position in range(3):
+        reps = _int(form.get(f"reps_{position}"))
+        if reps is None:
+            continue
+        # Unlike a prescribed exercise, weight is optional here: a manually
+        # added set is as likely to be pull-ups or a plank as a loaded lift,
+        # and a blank weight is bodyweight, not a set that was not performed.
+        sets.append(SetLog(reps=reps, weight=_float(form.get(f"weight_{position}")) or 0.0))
+
+    if not sets:
+        return RedirectResponse(f"/session/{day}", status_code=status.HTTP_303_SEE_OTHER)
+
+    entry = Entry(
+        slot=slot, exercise=name, sets=tuple(sets), note=str(form.get("note") or "").strip()
+    )
+    try:
+        store.update(
+            lambda current: current.with_entry(when, block.id, day, entry).ensuring_slot(slot)
+        )
+    except store.ConflictError as exc:
+        raise ConflictResponse(
+            f"the log was changed elsewhere while {name} was being saved; it was not recorded"
+        ) from exc
+
+    logger.info("recorded extra exercise %s on %s day %s", name, when, day)
+    return RedirectResponse(f"/session/{day}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/session/{day}/{index}", include_in_schema=False)
@@ -389,14 +465,32 @@ async def rotate(request: Request) -> Any:
 
 @router.get("/achievements", response_class=HTMLResponse, include_in_schema=False)
 def achievements_list(request: Request) -> Any:
+    """Read-only, newest first. Adding or editing happens on its own page."""
     log, _etag = store.load()
     return templates.TemplateResponse(
         request,
         "achievements.html",
-        {
-            "achievements": sorted(log.achievements, key=lambda a: a.date, reverse=True),
-            "today": _today().isoformat(),
-        },
+        {"achievements": sorted(log.achievements, key=lambda a: a.date, reverse=True)},
+    )
+
+
+@router.get("/achievements/new", response_class=HTMLResponse, include_in_schema=False)
+def new_achievement_form(request: Request) -> Any:
+    return templates.TemplateResponse(
+        request, "achievement_form.html", {"achievement": None, "today": _today().isoformat()}
+    )
+
+
+@router.get(
+    "/achievements/{achievement_id}/edit", response_class=HTMLResponse, include_in_schema=False
+)
+def edit_achievement_form(request: Request, achievement_id: str) -> Any:
+    log, _etag = store.load()
+    achievement = next((a for a in log.achievements if a.id == achievement_id), None)
+    if achievement is None:
+        return RedirectResponse("/achievements", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(
+        request, "achievement_form.html", {"achievement": achievement, "today": achievement.date}
     )
 
 
@@ -466,15 +560,36 @@ def delete_achievement(achievement_id: str) -> Any:
 
 @router.get("/goals", response_class=HTMLResponse, include_in_schema=False)
 def goals_list(request: Request) -> Any:
+    """Read-only, soonest target date first. Adding or editing has its own page."""
     log, _etag = store.load()
     return templates.TemplateResponse(
         request,
         "goals.html",
         {
-            "active": [g for g in log.goals if g.status == "active"],
-            "achieved": [g for g in log.goals if g.status != "active"],
+            "active": sorted((g for g in log.goals if g.status == "active"), key=_goal_sort_key),
+            "achieved": sorted((g for g in log.goals if g.status != "active"), key=_goal_sort_key),
         },
     )
+
+
+def _goal_sort_key(goal: Goal) -> str:
+    """A goal with no target date sorts after every one that has it, rather
+    than first — an undated goal is not more urgent than a dated one."""
+    return goal.target_date or "9999-12-31"
+
+
+@router.get("/goals/new", response_class=HTMLResponse, include_in_schema=False)
+def new_goal_form(request: Request) -> Any:
+    return templates.TemplateResponse(request, "goal_form.html", {"goal": None})
+
+
+@router.get("/goals/{goal_id}/edit", response_class=HTMLResponse, include_in_schema=False)
+def edit_goal_form(request: Request, goal_id: str) -> Any:
+    log, _etag = store.load()
+    goal = next((g for g in log.goals if g.id == goal_id), None)
+    if goal is None:
+        return RedirectResponse("/goals", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(request, "goal_form.html", {"goal": goal})
 
 
 @router.post("/goals", include_in_schema=False)
@@ -553,15 +668,41 @@ def delete_goal(goal_id: str) -> Any:
 
 @router.get("/conditions", response_class=HTMLResponse, include_in_schema=False)
 def conditions_list(request: Request) -> Any:
+    """Read-only, most recently started first. Adding or editing has its own page."""
     log, _etag = store.load()
     return templates.TemplateResponse(
         request,
         "conditions.html",
         {
-            "active": [c for c in log.conditions if c.status == "active"],
-            "resolved": [c for c in log.conditions if c.status != "active"],
-            "today": _today().isoformat(),
+            "active": sorted(
+                (c for c in log.conditions if c.status == "active"),
+                key=lambda c: c.started,
+                reverse=True,
+            ),
+            "resolved": sorted(
+                (c for c in log.conditions if c.status != "active"),
+                key=lambda c: c.started,
+                reverse=True,
+            ),
         },
+    )
+
+
+@router.get("/conditions/new", response_class=HTMLResponse, include_in_schema=False)
+def new_condition_form(request: Request) -> Any:
+    return templates.TemplateResponse(
+        request, "condition_form.html", {"condition": None, "today": _today().isoformat()}
+    )
+
+
+@router.get("/conditions/{condition_id}/edit", response_class=HTMLResponse, include_in_schema=False)
+def edit_condition_form(request: Request, condition_id: str) -> Any:
+    log, _etag = store.load()
+    condition = next((c for c in log.conditions if c.id == condition_id), None)
+    if condition is None:
+        return RedirectResponse("/conditions", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(
+        request, "condition_form.html", {"condition": condition, "today": condition.started}
     )
 
 
@@ -671,6 +812,19 @@ def _next_day(log: Any, block: Block) -> str:
         if session.day in keys:
             return keys[(keys.index(session.day) + 1) % len(keys)]
     return keys[0]
+
+
+def _known_exercise_names(log: Any) -> list[str]:
+    """Every exercise name on record: prescribed by any block, or ever logged.
+
+    Spans every block rather than just the current one, so a name retired by
+    a rotation is still offered — the point is catching a near-duplicate of
+    something performed months ago, which is exactly when it is easiest to
+    forget the exact wording used last time.
+    """
+    names = {ex.name for b in log.blocks for d in b.days.values() for ex in d.exercises}
+    names.update(e.exercise for s in log.sessions for e in s.entries)
+    return sorted(names)
 
 
 def _seconds(value: Any) -> int:

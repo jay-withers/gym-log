@@ -4,37 +4,21 @@
 {% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
 {% block body %}
 
-<form method="post" action="/goals">
-  <div class="card">
-    <label class="slot" for="title">Goal</label>
-    <input type="text" id="title" name="title" placeholder="e.g. Bench press 100kg" autocomplete="off">
-    <label class="slot" for="target_date" style="display:block;margin-top:10px">Target date (optional)</label>
-    <input type="date" id="target_date" name="target_date">
-    <label class="slot" for="note" style="display:block;margin-top:10px">Note (optional)</label>
-    <input type="text" id="note" name="note" autocomplete="off">
-  </div>
-  <button type="submit">Add goal</button>
-</form>
+<a class="btn small" href="/goals/new">Add goal</a>
 
 <h2 class="slot" style="margin-top:24px">Active</h2>
 {% if active %}
 {% for g in active %}
 <div class="card">
-  <form method="post" action="/goals/{{ g.id }}">
-    <label class="slot" for="title_{{ g.id }}">Goal</label>
-    <input type="text" id="title_{{ g.id }}" name="title" value="{{ g.title }}" autocomplete="off">
-    <label class="slot" for="target_date_{{ g.id }}" style="display:block;margin-top:10px">Target date</label>
-    <input type="date" id="target_date_{{ g.id }}" name="target_date" value="{{ g.target_date }}">
-    <label class="slot" for="note_{{ g.id }}" style="display:block;margin-top:10px">Note</label>
-    <input type="text" id="note_{{ g.id }}" name="note" value="{{ g.note }}" autocomplete="off">
-    <button type="submit">Save</button>
-  </form>
-  <form method="post" action="/goals/{{ g.id }}/achieve">
-    <button type="submit" class="btn ghost">Mark achieved</button>
-  </form>
-  <form method="post" action="/goals/{{ g.id }}/delete" onsubmit="return confirm('Delete this goal?')">
-    <button type="submit" class="btn ghost">Delete</button>
-  </form>
+  <div class="name">{{ g.title }}</div>
+  {% if g.target_date %}<div class="last">by {{ g.target_date }}</div>{% endif %}
+  {% if g.note %}<p class="last">{{ g.note }}</p>{% endif %}
+  <div class="actions">
+    <form method="post" action="/goals/{{ g.id }}/achieve">
+      <button type="submit" class="btn ghost small">Mark achieved</button>
+    </form>
+    <a class="btn ghost small" href="/goals/{{ g.id }}/edit">Edit</a>
+  </div>
 </div>
 {% endfor %}
 {% else %}
@@ -45,18 +29,12 @@
 <h2 class="slot" style="margin-top:24px">Achieved</h2>
 {% for g in achieved %}
 <div class="card" style="opacity:.72">
-  <form method="post" action="/goals/{{ g.id }}">
-    <label class="slot" for="title_{{ g.id }}">Goal</label>
-    <input type="text" id="title_{{ g.id }}" name="title" value="{{ g.title }}" autocomplete="off">
-    <label class="slot" for="target_date_{{ g.id }}" style="display:block;margin-top:10px">Target date</label>
-    <input type="date" id="target_date_{{ g.id }}" name="target_date" value="{{ g.target_date }}">
-    <label class="slot" for="note_{{ g.id }}" style="display:block;margin-top:10px">Note</label>
-    <input type="text" id="note_{{ g.id }}" name="note" value="{{ g.note }}" autocomplete="off">
-    <button type="submit">Save</button>
-  </form>
-  <form method="post" action="/goals/{{ g.id }}/delete" onsubmit="return confirm('Delete this goal?')">
-    <button type="submit" class="btn ghost">Delete</button>
-  </form>
+  <div class="name">{{ g.title }}</div>
+  {% if g.target_date %}<div class="last">by {{ g.target_date }}</div>{% endif %}
+  {% if g.note %}<p class="last">{{ g.note }}</p>{% endif %}
+  <div class="actions">
+    <a class="btn ghost small" href="/goals/{{ g.id }}/edit">Edit</a>
+  </div>
 </div>
 {% endfor %}
 {% endif %}

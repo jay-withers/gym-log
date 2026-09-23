@@ -3,9 +3,40 @@
 {% block subtitle %}Home{% endblock %}
 {% block body %}
 
-<a class="btn ghost" href="/strength">Strength Training</a>
-<a class="btn ghost" href="/achievements">Achievements</a>
-<a class="btn ghost" href="/goals">Goals</a>
-<a class="btn ghost" href="/conditions">Injuries &amp; Conditions</a>
-<a class="btn ghost" href="/insights">Weekly Insights</a>
+<div class="tiles">
+  <a class="tile" href="/strength">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+      <path d="M2 12h2M4 8v8M6 6v12M18 6v12M20 8v8M22 12h-2M6 12h12"/>
+    </svg>
+    <span>Strength Training</span>
+  </a>
+  <a class="tile" href="/achievements">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z"/>
+      <path d="M7 5H4a2 2 0 0 0 2 2M17 5h3a2 2 0 0 1-2 2"/>
+      <path d="M12 13v3M9 20h6M10 20v-2h4v2"/>
+    </svg>
+    <span>Achievements</span>
+  </a>
+  <a class="tile" href="/goals">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+      <circle cx="12" cy="12" r="8"/>
+      <circle cx="12" cy="12" r="4.5"/>
+      <circle cx="12" cy="12" r="1"/>
+    </svg>
+    <span>Goals</span>
+  </a>
+  <a class="tile" href="/conditions">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 20s-7-4.5-9.5-9C1 8 2 4.5 5.5 4A4.7 4.7 0 0 1 12 6.5 4.7 4.7 0 0 1 18.5 4C22 4.5 23 8 21.5 11 19 15.5 12 20 12 20Z"/>
+    </svg>
+    <span>Injuries &amp; Conditions</span>
+  </a>
+  <a class="tile" href="/insights">
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z"/>
+    </svg>
+    <span>Weekly Insights</span>
+  </a>
+</div>
 {% endblock %}

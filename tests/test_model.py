@@ -111,6 +111,23 @@ def test_with_block_replaces_by_id():
     assert updated.blocks[0].days["A"].exercises[0].name == "New"
 
 
+def test_ensuring_slot_adds_an_unseen_slot():
+    log = Log()
+    grown = log.ensuring_slot("core")
+    assert "core" in grown.slots
+    assert "core" not in log.slots  # frozen; the original is untouched
+
+
+def test_ensuring_slot_does_not_duplicate_a_known_slot():
+    log = Log()
+    assert log.ensuring_slot("chest").slots.count("chest") == 1
+
+
+def test_ensuring_slot_ignores_a_blank_slot():
+    log = Log()
+    assert log.ensuring_slot("").slots == log.slots
+
+
 def test_with_achievement_appends_a_new_one():
     log = Log(achievements=(achievement(id="a1"),))
     grown = log.with_achievement(achievement(id="a2"))
