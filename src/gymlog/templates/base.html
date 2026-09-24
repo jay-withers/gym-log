@@ -68,6 +68,26 @@
     text-align: center; text-decoration: none; cursor: pointer; margin-top: 8px;
   }
   .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  /* The greyed-out state a submit reaches while its request is in flight —
+     see the script at the bottom of this file. `pointer-events: none` rather
+     than relying on `disabled` alone: iOS Safari still shows a tap highlight
+     on a disabled button otherwise. */
+  button[disabled], .btn[disabled] { opacity: .55; cursor: default; pointer-events: none; }
+  /* Indeterminate rather than a real percentage: there is no way to know how
+     long a request like a Garmin sync will take, and a bar that looks like it
+     is measuring something it is not would be worse than none at all. */
+  .progress-track {
+    height: 4px; border-radius: 999px; background: var(--line);
+    overflow: hidden; margin-top: 8px;
+  }
+  .progress-track .bar {
+    height: 100%; width: 40%; border-radius: inherit; background: var(--accent);
+    animation: progress-slide 1.1s ease-in-out infinite;
+  }
+  @keyframes progress-slide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(250%); }
+  }
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; }
   /* A secondary, in-list action — Edit, Mark achieved, Delete — is not the
@@ -134,5 +154,34 @@
 </header>
 {% block back %}{% endblock %}
 {% block body %}{% endblock %}
+<script>
+// Greys out a form's submit button the instant it is pressed, with an
+// indeterminate progress bar underneath, so a slow request (a live DeepSeek
+// or Garmin call, both measured in seconds rather than milliseconds) reads as
+// "working" instead of inviting a second tap. This is a plain page reload,
+// not a fetch: the button stays disabled until the browser actually
+// navigates to whatever the response redirects to, which is the point.
+//
+// A form can override the label with `data-loading-label="Syncing…"`;
+// without one this falls back to the button's own text with an ellipsis.
+document.addEventListener('submit', function (event) {
+  // `defaultPrevented` is already true here if a form's own onsubmit (the
+  // achievement/goal/condition delete confirmations) returned false — this
+  // must not grey out a button whose submission was just cancelled.
+  if (event.defaultPrevented) return;
+
+  var form = event.target;
+  var button = form.querySelector('button[type="submit"]');
+  if (!button || button.disabled) return;
+
+  button.disabled = true;
+  button.textContent = form.dataset.loadingLabel || button.textContent + '…';
+
+  var track = document.createElement('div');
+  track.className = 'progress-track';
+  track.innerHTML = '<div class="bar"></div>';
+  button.insertAdjacentElement('afterend', track);
+});
+</script>
 </body>
 </html>

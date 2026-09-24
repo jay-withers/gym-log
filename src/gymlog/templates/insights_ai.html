@@ -4,7 +4,7 @@
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
 
-<form method="post" action="/insights/ai">
+<form method="post" action="/insights/ai" data-loading-label="Generating…">
   <button type="submit" class="btn small">Generate insight now</button>
 </form>
 <p class="last" style="margin-top:8px">Takes a few seconds — it's a live call to DeepSeek.</p>
