@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}HR Zone Insights · Health{% endblock %}
+{% block subtitle %}HR Zone Insights{% endblock %}
+{% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
+{% block body %}
+
+{% if zones and (zones | sum(attribute="month_minutes")) > 0 %}
+<div class="card">
+  <table>
+    <tr><th>Zone</th><th>This week</th><th>Last 30 days</th></tr>
+    {% for z in zones %}
+    <tr><td>{{ z.zone }}</td><td>{{ z.week_minutes }}m</td><td>{{ z.month_minutes }}m</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% else %}
+<p class="last">No heart rate zone data yet — sync some activities from <a href="/garmin">Garmin</a> first.</p>
+{% endif %}
+{% endblock %}

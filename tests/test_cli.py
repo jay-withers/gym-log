@@ -19,7 +19,7 @@ from gymlog import store, telemetry
 from gymlog.cli import _configure_logging, _terminate, main
 from gymlog.model import Log
 
-from .factories import block, insight
+from .factories import block, garmin_activity, garmin_day, insight
 
 
 def test_serve_runs_the_app_with_the_access_log_off(monkeypatch):
@@ -99,6 +99,18 @@ def test_insight_records_what_generate_insight_returns(monkeypatch):
 
     log, _etag = store.load()
     assert log.insights == (generated,)
+
+
+def test_garmin_sync_records_what_sync_garmin_returns(monkeypatch):
+    activity = garmin_activity(id="a1")
+    day = garmin_day(date="2026-09-15")
+    monkeypatch.setattr("gymlog.garmin.sync_garmin", lambda: ([activity], [day]))
+
+    assert main(["garmin-sync"]) == 0
+
+    log, _etag = store.load()
+    assert log.garmin_activities == (activity,)
+    assert log.garmin_days == (day,)
 
 
 def test_a_missing_subcommand_is_refused(capsys):

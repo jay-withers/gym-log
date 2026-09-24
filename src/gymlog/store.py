@@ -37,6 +37,12 @@ logger = logging.getLogger(__name__)
 # The document's own name inside the container.
 BLOB_NAME = "gymlog.json"
 
+# A cached Garmin login session (garth's OAuth tokens), reused across syncs so
+# the job does not have to re-authenticate with a password every run — see
+# gymlog.garmin. A second, small blob in the same container; no ETag dance, no
+# new IAM: the identity's container-scoped role already covers any blob name.
+GARMIN_SESSION_BLOB_NAME = "garmin-session.json"
+
 
 class ConflictError(RuntimeError):
     """The document changed between being read and being written."""
@@ -117,8 +123,8 @@ def update(change: Callable[[Log], Log]) -> Log:
     raise AssertionError("unreachable")
 
 
-def _blob() -> Any:
-    """A client for the log document, or None when no container is configured.
+def _blob(name: str = BLOB_NAME) -> Any:
+    """A client for `name` in the state container, or None when none is configured.
 
     Imported lazily so the model, the progression rule and their tests never need
     the Azure SDK present — the same reason `settings.py` defers its imports.
@@ -129,11 +135,48 @@ def _blob() -> Any:
 
     from azure.storage.blob import BlobClient
 
-    return BlobClient.from_blob_url(f"{url.rstrip('/')}/{BLOB_NAME}", credential=credential())
+    return BlobClient.from_blob_url(f"{url.rstrip('/')}/{name}", credential=credential())
 
 
 def local_path() -> pathlib.Path:
     return pathlib.Path(settings().local_state_path)
+
+
+def _garmin_session_local_path() -> pathlib.Path:
+    return local_path().with_suffix(".garmin-session.json")
+
+
+def load_garmin_session() -> str | None:
+    """The cached Garmin login session, or None if one has never been saved.
+
+    Unlike the log itself, absence here is never a failure worth raising over —
+    a first sync (or one that ran before this existed) just falls back to a
+    fresh username/password login, same as `login()` does internally.
+    """
+    blob = _blob(GARMIN_SESSION_BLOB_NAME)
+    if blob is None:
+        path = _garmin_session_local_path()
+        return path.read_text(encoding="utf-8") if path.exists() else None
+
+    from azure.core.exceptions import ResourceNotFoundError
+
+    try:
+        return blob.download_blob().readall().decode("utf-8")
+    except ResourceNotFoundError:
+        return None
+
+
+def save_garmin_session(token_json: str) -> None:
+    """Persist a refreshed Garmin login session, overwriting any previous one."""
+    blob = _blob(GARMIN_SESSION_BLOB_NAME)
+    if blob is None:
+        path = _garmin_session_local_path()
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(token_json, encoding="utf-8")
+        tmp.replace(path)
+        return
+
+    blob.upload_blob(token_json.encode("utf-8"), overwrite=True)
 
 
 def _load_local() -> tuple[Log, str | None]:

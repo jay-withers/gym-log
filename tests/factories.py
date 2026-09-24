@@ -9,6 +9,8 @@ from gymlog.model import (
     Day,
     Entry,
     Exercise,
+    GarminActivity,
+    GarminDay,
     Goal,
     Insight,
     Session,
@@ -113,3 +115,32 @@ def insight(
     generated_at: str = "2026-09-15",
 ) -> Insight:
     return Insight(id=id, week_of=week_of, summary=summary, generated_at=generated_at)
+
+
+def garmin_activity(
+    id: str = "act1",
+    date: str = "2026-09-15",
+    activity_type: str = "running",
+    duration_seconds: int = 1800,
+    avg_hr: int = 140,
+    max_hr: int = 165,
+    zone_seconds: tuple[int, ...] = (60, 300, 900, 480, 60),
+) -> GarminActivity:
+    return GarminActivity(
+        id=id,
+        date=date,
+        activity_type=activity_type,
+        duration_seconds=duration_seconds,
+        avg_hr=avg_hr,
+        max_hr=max_hr,
+        zone_seconds=zone_seconds,
+    )
+
+
+def garmin_day(
+    date: str = "2026-09-15",
+    steps: int = 8000,
+    resting_hr: int = 55,
+    sleep_seconds: int = 27000,
+) -> GarminDay:
+    return GarminDay(date=date, steps=steps, resting_hr=resting_hr, sleep_seconds=sleep_seconds)

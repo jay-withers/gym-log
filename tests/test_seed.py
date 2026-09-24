@@ -110,6 +110,13 @@ def test_it_has_an_achievement_and_a_weekly_insight(log):
     assert log.insights
 
 
+def test_it_has_garmin_activities_and_days_including_a_failed_zone_fetch(log):
+    """One activity with zones, one without — the Garmin page shows both states."""
+    assert log.garmin_days
+    assert any(a.zone_seconds for a in log.garmin_activities)
+    assert any(not a.zone_seconds for a in log.garmin_activities)
+
+
 def test_per_set_targets_are_present_and_not_uniform(log):
     """Both shapes, so `· per set` is exercised as well as the plain range."""
     exercises = [e for day in log.current_block.days.values() for e in day.exercises]

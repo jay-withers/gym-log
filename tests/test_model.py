@@ -8,7 +8,18 @@ import pytest
 
 from gymlog.model import DEFAULT_SLOTS, Log, SetLog
 
-from .factories import achievement, block, condition, entry, exercise, goal, insight, session
+from .factories import (
+    achievement,
+    block,
+    condition,
+    entry,
+    exercise,
+    garmin_activity,
+    garmin_day,
+    goal,
+    insight,
+    session,
+)
 
 
 def test_round_trips_through_json():
@@ -19,6 +30,8 @@ def test_round_trips_through_json():
         conditions=(condition(),),
         goals=(goal(),),
         insights=(insight(),),
+        garmin_activities=(garmin_activity(),),
+        garmin_days=(garmin_day(),),
     )
     assert Log.from_json(log.to_json()) == log
 
@@ -183,6 +196,51 @@ def test_with_insight_appends():
     grown = log.with_insight(insight(id="i2"))
     assert len(grown.insights) == 2
     assert len(log.insights) == 1  # frozen; the original is untouched
+
+
+def test_with_garmin_sync_merges_new_records_and_dedupes_existing_ones():
+    log = Log(
+        garmin_activities=(garmin_activity(id="a1", date="2026-09-10"),),
+        garmin_days=(garmin_day(date="2026-09-10", steps=1000),),
+    )
+    updated = log.with_garmin_sync(
+        activities=[
+            garmin_activity(id="a1", date="2026-09-10", avg_hr=150),
+            garmin_activity(id="a2", date="2026-09-12"),
+        ],
+        days=[garmin_day(date="2026-09-12", steps=2000)],
+        keep_since="2026-08-01",
+    )
+    assert [a.id for a in updated.garmin_activities] == ["a1", "a2"]
+    assert updated.garmin_activities[0].avg_hr == 150  # replaced, not duplicated
+    assert [d.date for d in updated.garmin_days] == ["2026-09-10", "2026-09-12"]
+
+
+def test_with_garmin_sync_prunes_anything_older_than_keep_since():
+    log = Log(
+        garmin_activities=(garmin_activity(id="old", date="2026-08-01"),),
+        garmin_days=(garmin_day(date="2026-08-01"),),
+    )
+    updated = log.with_garmin_sync(activities=[], days=[], keep_since="2026-09-01")
+    assert updated.garmin_activities == ()
+    assert updated.garmin_days == ()
+
+
+def test_garmin_zone_seconds_since_sums_across_activities_on_or_after_cutoff():
+    log = Log(
+        garmin_activities=(
+            garmin_activity(date="2026-09-01", zone_seconds=(10, 20, 30, 40, 50)),
+            garmin_activity(date="2026-09-10", zone_seconds=(1, 2, 3, 4, 5)),
+        )
+    )
+    assert log.garmin_zone_seconds_since("2026-09-05") == (1, 2, 3, 4, 5)
+    assert log.garmin_zone_seconds_since("2026-08-01") == (11, 22, 33, 44, 55)
+
+
+def test_garmin_zone_seconds_since_ignores_a_failed_zone_fetch():
+    """`zone_seconds=()` (the per-activity detail call failed) contributes nothing."""
+    log = Log(garmin_activities=(garmin_activity(zone_seconds=()),))
+    assert log.garmin_zone_seconds_since("2026-01-01") == (0, 0, 0, 0, 0)
 
 
 @pytest.mark.parametrize(

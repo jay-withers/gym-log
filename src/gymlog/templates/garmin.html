@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Garmin · Health{% endblock %}
+{% block subtitle %}Garmin{% endblock %}
+{% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
+{% block body %}
+
+<form method="post" action="/garmin/sync">
+  <button type="submit" class="btn small">Sync now</button>
+</form>
+<p class="last" style="margin-top:8px">Takes a few seconds — pulls the last 30 days from Garmin Connect.</p>
+
+<h2 class="slot" style="margin-top:24px">Activities</h2>
+{% if activities %}
+{% for a in activities %}
+<div class="card">
+  <div class="slot">{{ a.date }}</div>
+  <div class="name">{{ a.activity_type }}</div>
+  <p class="last">
+    {{ a.duration_seconds // 60 }} min
+    {% if a.avg_hr %}· avg {{ a.avg_hr }} bpm{% endif %}
+    {% if a.max_hr %}· max {{ a.max_hr }} bpm{% endif %}
+  </p>
+</div>
+{% endfor %}
+{% else %}
+<p class="last">No activities synced yet.</p>
+{% endif %}
+
+<h2 class="slot" style="margin-top:24px">Days</h2>
+{% if days %}
+{% for d in days %}
+<div class="card">
+  <div class="slot">{{ d.date }}</div>
+  <p class="last">
+    {{ d.steps }} steps
+    {% if d.resting_hr %}· resting HR {{ d.resting_hr }}{% endif %}
+    {% if d.sleep_seconds %}· sleep {{ d.sleep_seconds // 3600 }}h{{ (d.sleep_seconds % 3600) // 60 }}m{% endif %}
+  </p>
+</div>
+{% endfor %}
+{% else %}
+<p class="last">No daily summaries synced yet.</p>
+{% endif %}
+{% endblock %}

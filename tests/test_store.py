@@ -65,6 +65,16 @@ def test_a_corrupt_document_raises_rather_than_starting_fresh(monkeypatch, tmp_p
         store.load()
 
 
+def test_a_missing_local_garmin_session_is_not_a_failure():
+    """Unlike the log itself: a first sync (or one older than this feature) just re-logs in."""
+    assert store.load_garmin_session() is None
+
+
+def test_a_saved_local_garmin_session_reads_back():
+    store.save_garmin_session('{"di_token": "abc"}')
+    assert store.load_garmin_session() == '{"di_token": "abc"}'
+
+
 def test_a_local_write_is_atomic(monkeypatch, tmp_path):
     """Written via a temp file and renamed, so an interrupted write cannot truncate.
 
@@ -277,3 +287,24 @@ def test_the_retry_applies_the_change_to_what_the_other_writer_left(blob):
 
     written = Log.from_json(blob.uploads[1]["body"].decode("utf-8"))
     assert [s.date for s in written.sessions] == ["2026-09-13", "2026-09-15"]
+
+
+# --- the Garmin session blob --------------------------------------------------
+#
+# A second, small blob in the same container, with none of the log's ETag
+# dance — the sync job is the only writer, so there is no race to guard
+# against.
+
+
+def test_the_garmin_session_is_named_under_the_container_url(blob):
+    store.load_garmin_session()
+    assert blob.url == "https://acct.blob.core.windows.net/state/garmin-session.json"
+
+
+def test_a_garmin_session_blob_that_has_never_existed_is_none(blob):
+    assert store.load_garmin_session() is None
+
+
+def test_a_saved_garmin_session_blob_reads_back(blob):
+    store.save_garmin_session('{"di_token": "abc"}')
+    assert store.load_garmin_session() == '{"di_token": "abc"}'

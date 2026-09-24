@@ -19,11 +19,11 @@ it has rather than to look like anyone's actual training:
 - the **finisher** carries a time on some sessions and not others, because it is
   optional and that is worth being able to see.
 
-Achievements, goals, injuries/conditions and the insight get the same
-treatment: a handful of invented entries chosen to put those screens into more
-than one state (active and achieved, active and resolved) rather than left
-empty, since an empty section is the one state local work has the least
-reason to look at.
+Achievements, goals, injuries/conditions, the insight and the Garmin section
+get the same treatment: a handful of invented entries chosen to put those
+screens into more than one state (active and achieved, active and resolved)
+rather than left empty, since an empty section is the one state local work
+has the least reason to look at.
 """
 
 from __future__ import annotations
@@ -37,6 +37,8 @@ from .model import (
     Day,
     Entry,
     Exercise,
+    GarminActivity,
+    GarminDay,
     Goal,
     Insight,
     Log,
@@ -86,6 +88,8 @@ def sample_log(today: date | None = None) -> Log:
         conditions=_conditions(now),
         goals=_goals(now),
         insights=_insights(now),
+        garmin_activities=_garmin_activities(now),
+        garmin_days=_garmin_days(now),
     )
 
 
@@ -215,6 +219,47 @@ def _insights(now: date) -> tuple[Insight, ...]:
             ),
             generated_at=now.isoformat(),
         ),
+    )
+
+
+def _garmin_activities(now: date) -> tuple[GarminActivity, ...]:
+    # `Log.to_json` writes these sorted by `date`, same reasoning as
+    # `_conditions` — built in that order here so the round trip in
+    # test_seed.py holds. One with a full zone breakdown, one where the
+    # detail call failed (`()`), so the Heart Rate Zones subsection and the
+    # Garmin page both show what each state actually looks like.
+    return (
+        GarminActivity(
+            id="sample-cycle",
+            date=(now - timedelta(days=6)).isoformat(),
+            activity_type="cycling",
+            duration_seconds=2700,
+            avg_hr=128,
+            max_hr=155,
+        ),
+        GarminActivity(
+            id="sample-run",
+            date=(now - timedelta(days=2)).isoformat(),
+            activity_type="running",
+            duration_seconds=1800,
+            avg_hr=142,
+            max_hr=168,
+            zone_seconds=(120, 480, 720, 420, 60),
+        ),
+    )
+
+
+def _garmin_days(now: date) -> tuple[GarminDay, ...]:
+    # Oldest first, matching how `Log.to_json` sorts these by date — same
+    # reasoning as `_garmin_activities` above.
+    return tuple(
+        GarminDay(
+            date=(now - timedelta(days=offset)).isoformat(),
+            steps=[9200, 4100, 11300, 7600, 6200, 10500, 5300][offset],
+            resting_hr=55,
+            sleep_seconds=[27000, 24600, 29400, 25200, 26100, 28200, 23400][offset],
+        )
+        for offset in range(6, -1, -1)
     )
 
 
