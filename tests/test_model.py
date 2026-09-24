@@ -198,6 +198,12 @@ def test_with_insight_appends():
     assert len(log.insights) == 1  # frozen; the original is untouched
 
 
+def test_without_insight_removes_by_id():
+    log = Log(insights=(insight(id="i1"), insight(id="i2")))
+    shrunk = log.without_insight("i1")
+    assert [i.id for i in shrunk.insights] == ["i2"]
+
+
 def test_with_garmin_sync_merges_new_records_and_dedupes_existing_ones():
     log = Log(
         garmin_activities=(garmin_activity(id="a1", date="2026-09-10"),),

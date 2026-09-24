@@ -12,7 +12,17 @@ from datetime import date
 from gymlog.insights import BLOCK_ENDING_SOON_WEEKS, _prompt, generate_insight
 from gymlog.model import Log
 
-from .factories import achievement, block, condition, entry, goal, insight, session
+from .factories import (
+    achievement,
+    block,
+    condition,
+    entry,
+    garmin_activity,
+    garmin_day,
+    goal,
+    insight,
+    session,
+)
 
 
 def test_generates_a_new_insight_when_none_exists(monkeypatch):
@@ -122,3 +132,47 @@ def test_prompt_flags_an_overdue_block_as_due_and_ending_soon():
     prompt = _prompt(log, date(2026, 9, 15))
     assert "(due for rotation)" in prompt
     assert "ending soon" in prompt
+
+
+def test_prompt_omits_the_garmin_section_when_nothing_has_ever_synced():
+    prompt = _prompt(Log(), date(2026, 9, 15))
+    assert "Garmin" not in prompt
+
+
+def test_prompt_includes_recent_garmin_activity_with_its_zone_breakdown():
+    log = Log(
+        garmin_activities=(
+            garmin_activity(
+                date="2026-09-14",
+                activity_type="running",
+                duration_seconds=1800,
+                avg_hr=140,
+                max_hr=165,
+                zone_seconds=(60, 300, 900, 480, 60),
+            ),
+            garmin_activity(id="old", date="2026-08-01", activity_type="cycling"),
+        )
+    )
+    prompt = _prompt(log, date(2026, 9, 15))
+    assert "2026-09-14 running: 30 min, avg 140 bpm, max 165 bpm" in prompt
+    assert "Z2 5m" in prompt
+    assert "2026-08-01" not in prompt  # outside the 7-day window
+
+
+def test_prompt_includes_recovery_averages_from_recent_garmin_days():
+    log = Log(
+        garmin_days=(
+            garmin_day(date="2026-09-13", steps=8000, resting_hr=54, sleep_seconds=27000),
+            garmin_day(date="2026-09-14", steps=10000, resting_hr=56, sleep_seconds=25200),
+        )
+    )
+    prompt = _prompt(log, date(2026, 9, 15))
+    assert "average 9000 steps/day" in prompt
+    assert "average resting heart rate 55 bpm" in prompt
+    assert "average sleep 435m/night" in prompt
+
+
+def test_prompt_notes_no_activities_when_only_days_are_synced():
+    log = Log(garmin_days=(garmin_day(date="2026-09-14"),))
+    prompt = _prompt(log, date(2026, 9, 15))
+    assert "no activities logged" in prompt

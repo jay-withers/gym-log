@@ -19,7 +19,7 @@ import urllib.request
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
-from .model import Insight, Log
+from .model import GARMIN_ZONE_COUNT, Insight, Log
 from .settings import secret
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,12 @@ SYSTEM_PROMPT = (
     "progression by slot, add a short closing paragraph suggesting specific "
     "exercises or progressions for one or two slots that look ready for a "
     "change in the next block, weighing active goals and avoiding anything "
-    "that would aggravate a listed condition."
+    "that would aggravate a listed condition. When Garmin cardio activity or "
+    "recovery data is given, weave in a brief, specific mention of it (a run "
+    "or ride alongside the lifting, time spent in the higher heart rate "
+    "zones, a sleep or resting-heart-rate trend worth flagging) rather than "
+    "listing it separately — it is context for the same week, not a second "
+    "report."
 )
 
 
@@ -97,6 +102,8 @@ def _prompt(log: Log, today: date) -> str:
     else:
         lines.append("- none")
 
+    lines.extend(_garmin_lines(log, cutoff))
+
     block = log.current_block
     lines.append("\nCurrent training block:")
     if block is None:
@@ -123,6 +130,54 @@ def _prompt(log: Log, today: date) -> str:
                 lines.append(f"- {slot}: {progression}")
 
     return "\n".join(lines)
+
+
+def _garmin_lines(log: Log, cutoff: str) -> list[str]:
+    """Cardio activity and recovery from the last 7 days, if any Garmin sync exists.
+
+    Absent entirely (rather than "- none") when nothing has ever been synced,
+    so a log with no Garmin data yet doesn't nudge the model toward
+    commenting on a section it was never actually given.
+    """
+    activities = [a for a in log.garmin_activities if a.date >= cutoff]
+    days = [d for d in log.garmin_days if d.date >= cutoff]
+    if not log.garmin_activities and not log.garmin_days:
+        return []
+
+    lines = ["\nGarmin activity in the last 7 days:"]
+    if activities:
+        for a in activities:
+            detail = f"{a.duration_seconds // 60} min"
+            if a.avg_hr:
+                detail += f", avg {a.avg_hr} bpm"
+            if a.max_hr:
+                detail += f", max {a.max_hr} bpm"
+            if len(a.zone_seconds) == GARMIN_ZONE_COUNT:
+                zones = ", ".join(
+                    f"Z{zone + 1} {seconds // 60}m"
+                    for zone, seconds in enumerate(a.zone_seconds)
+                    if seconds
+                )
+                if zones:
+                    detail += f" ({zones})"
+            lines.append(f"- {a.date} {a.activity_type}: {detail}")
+    else:
+        lines.append("- no activities logged")
+
+    if days:
+        avg_steps = sum(d.steps for d in days) // len(days)
+        resting_hrs = [d.resting_hr for d in days if d.resting_hr]
+        sleeps = [d.sleep_seconds for d in days if d.sleep_seconds]
+        recovery = [f"average {avg_steps} steps/day"]
+        if resting_hrs:
+            recovery.append(
+                f"average resting heart rate {sum(resting_hrs) // len(resting_hrs)} bpm"
+            )
+        if sleeps:
+            recovery.append(f"average sleep {sum(sleeps) // len(sleeps) // 60}m/night")
+        lines.append("\nRecovery, last 7 days: " + ", ".join(recovery) + ".")
+
+    return lines
 
 
 def _complete(prompt: str) -> str:
