@@ -90,6 +90,7 @@ def sample_log(today: date | None = None) -> Log:
         insights=_insights(now),
         garmin_activities=_garmin_activities(now),
         garmin_days=_garmin_days(now),
+        garmin_synced_at=f"{now.isoformat()}T07:15:00+00:00",
     )
 
 

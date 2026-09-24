@@ -32,6 +32,7 @@ def test_round_trips_through_json():
         insights=(insight(),),
         garmin_activities=(garmin_activity(),),
         garmin_days=(garmin_day(),),
+        garmin_synced_at="2026-09-15T07:00:00+00:00",
     )
     assert Log.from_json(log.to_json()) == log
 
@@ -230,6 +231,20 @@ def test_with_garmin_sync_prunes_anything_older_than_keep_since():
     updated = log.with_garmin_sync(activities=[], days=[], keep_since="2026-09-01")
     assert updated.garmin_activities == ()
     assert updated.garmin_days == ()
+
+
+def test_with_garmin_sync_records_when_it_ran():
+    log = Log()
+    updated = log.with_garmin_sync(
+        activities=[], days=[], keep_since="2026-08-01", synced_at="2026-09-15T07:00:00+00:00"
+    )
+    assert updated.garmin_synced_at == "2026-09-15T07:00:00+00:00"
+
+
+def test_with_garmin_sync_keeps_the_previous_timestamp_if_none_is_given():
+    log = Log(garmin_synced_at="2026-09-15T07:00:00+00:00")
+    updated = log.with_garmin_sync(activities=[], days=[], keep_since="2026-08-01")
+    assert updated.garmin_synced_at == "2026-09-15T07:00:00+00:00"
 
 
 def test_garmin_zone_seconds_since_sums_across_activities_on_or_after_cutoff():

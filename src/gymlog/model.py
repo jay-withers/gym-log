@@ -545,6 +545,7 @@ class Log:
     insights: tuple[Insight, ...] = ()
     garmin_activities: tuple[GarminActivity, ...] = ()
     garmin_days: tuple[GarminDay, ...] = ()
+    garmin_synced_at: str = ""
 
     @property
     def current_block(self) -> Block | None:
@@ -682,6 +683,7 @@ class Log:
         activities: Iterable[GarminActivity],
         days: Iterable[GarminDay],
         keep_since: str,
+        synced_at: str = "",
     ) -> Log:
         """Merge freshly-synced Garmin records and drop anything older than `keep_since`.
 
@@ -689,6 +691,12 @@ class Log:
         every read: a rolling window this way is a size the document can never
         outgrow, instead of a display filter over an archive that keeps growing
         underneath it.
+
+        `synced_at` is the caller's timestamp, not read from the wall clock
+        here — same reasoning as `keep_since` being passed in rather than
+        derived from `date.today()` inside this method: what "now" means is
+        the caller's decision, this method just records it. Left blank rather
+        than made required so a test can merge records without caring when.
         """
         merged_activities = {a.id: a for a in self.garmin_activities} | {
             a.id: a for a in activities
@@ -708,6 +716,7 @@ class Log:
                     key=lambda d: d.date,
                 )
             ),
+            garmin_synced_at=synced_at or self.garmin_synced_at,
         )
 
     def garmin_zone_seconds_since(self, cutoff: str) -> tuple[int, ...]:
@@ -764,6 +773,7 @@ class Log:
                 "garmin_days": [
                     d.to_json() for d in sorted(self.garmin_days, key=lambda d: d.date)
                 ],
+                "garmin_synced_at": self.garmin_synced_at,
             },
             indent=2,
         )
@@ -820,4 +830,5 @@ class Log:
                 for d in payload.get("garmin_days", []) or ()
                 if isinstance(d, dict)
             ),
+            garmin_synced_at=str(payload.get("garmin_synced_at", "") or ""),
         )

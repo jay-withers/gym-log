@@ -1258,17 +1258,20 @@ def test_garmin_page_lists_synced_activities_and_days(client, seeded):
             activities=[garmin_activity(id="a1", activity_type="cycling")],
             days=[garmin_day(date="2026-09-15", steps=9000)],
             keep_since="2020-01-01",
+            synced_at="2026-09-15T07:30:00+00:00",
         )
     )
     login(client)
     page = client.get("/garmin").text
     assert "cycling" in page
     assert "9000 steps" in page
+    assert "Last synced 15 Sep 2026, 07:30 UTC" in page
 
 
 def test_garmin_page_when_empty(client, seeded):
     login(client)
-    assert client.get("/garmin").status_code == 200
+    page = client.get("/garmin").text
+    assert "Never synced yet" in page
 
 
 def test_sync_garmin_now_calls_garmin_and_redirects_back(client, seeded, monkeypatch):
@@ -1282,3 +1285,4 @@ def test_sync_garmin_now_calls_garmin_and_redirects_back(client, seeded, monkeyp
     assert response.headers["location"] == "/garmin"
     page = client.get("/garmin").text
     assert "swimming" in page
+    assert "Last synced" in page

@@ -900,8 +900,24 @@ def garmin_list(request: Request) -> Any:
         {
             "activities": sorted(log.garmin_activities, key=lambda a: a.date, reverse=True),
             "days": sorted(log.garmin_days, key=lambda d: d.date, reverse=True),
+            "synced_at": _format_synced_at(log.garmin_synced_at),
         },
     )
+
+
+def _format_synced_at(raw: str) -> str:
+    """ "24 Sep 2026, 14:32 UTC" from the stored ISO timestamp, or "" before any sync.
+
+    Formatted here rather than in the template so a change of format is one
+    line, not a `.replace()` chain wherever it's shown.
+    """
+    if not raw:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return ""
+    return parsed.strftime("%-d %b %Y, %H:%M UTC")
 
 
 @router.post("/garmin/sync", include_in_schema=False)
@@ -916,8 +932,11 @@ def sync_garmin_now() -> Any:
 
     activities, days = sync_garmin()
     keep_since = (_today() - timedelta(days=GARMIN_RETENTION_DAYS)).isoformat()
+    synced_at = datetime.now(UTC).isoformat(timespec="seconds")
     try:
-        store.update(lambda current: current.with_garmin_sync(activities, days, keep_since))
+        store.update(
+            lambda current: current.with_garmin_sync(activities, days, keep_since, synced_at)
+        )
     except store.ConflictError as exc:
         raise ConflictResponse("the log was changed elsewhere; the sync was not saved") from exc
     return RedirectResponse("/garmin", status_code=status.HTTP_303_SEE_OTHER)
