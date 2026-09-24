@@ -26,6 +26,7 @@
   .zonebar .segment:focus-visible { outline: 2px solid var(--text); outline-offset: -2px; }
   .zone-legend { width: 100%; border-collapse: collapse; font-size: 13px; }
   .zone-legend th, .zone-legend td { padding: 7px 4px; }
+  .bpm-range { color: var(--dim); font-size: 11px; }
   .zone-swatch {
     display: inline-block; width: 10px; height: 10px; border-radius: 2px;
     margin-right: 6px; vertical-align: middle;
@@ -37,7 +38,7 @@
   <div class="zonebar">
     {% for z in zones if z.week_pct > 0 %}
     <div class="segment" tabindex="0" style="--pct: {{ z.week_pct }}; background: var(--zone-{{ z.zone }})"
-         title="Zone {{ z.zone }}: {{ z.week_minutes }}m ({{ z.week_pct }}%)"></div>
+         title="Zone {{ z.zone }}{% if z.bpm_label %} ({{ z.bpm_label }}){% endif %}: {{ z.week_minutes }}m ({{ z.week_pct }}%)"></div>
     {% endfor %}
   </div>
 
@@ -45,7 +46,7 @@
   <div class="zonebar">
     {% for z in zones if z.month_pct > 0 %}
     <div class="segment" tabindex="0" style="--pct: {{ z.month_pct }}; background: var(--zone-{{ z.zone }})"
-         title="Zone {{ z.zone }}: {{ z.month_minutes }}m ({{ z.month_pct }}%)"></div>
+         title="Zone {{ z.zone }}{% if z.bpm_label %} ({{ z.bpm_label }}){% endif %}: {{ z.month_minutes }}m ({{ z.month_pct }}%)"></div>
     {% endfor %}
   </div>
 
@@ -53,7 +54,7 @@
     <tr><th></th><th>This week</th><th>Last 30 days</th></tr>
     {% for z in zones %}
     <tr>
-      <td><span class="zone-swatch" style="background: var(--zone-{{ z.zone }})"></span>Zone {{ z.zone }}</td>
+      <td><span class="zone-swatch" style="background: var(--zone-{{ z.zone }})"></span>Zone {{ z.zone }}{% if z.bpm_label %}<br><span class="bpm-range">{{ z.bpm_label }}</span>{% endif %}</td>
       <td>{{ z.week_minutes }}m · {{ z.week_pct }}%</td>
       <td>{{ z.month_minutes }}m · {{ z.month_pct }}%</td>
     </tr>

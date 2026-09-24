@@ -851,12 +851,20 @@ def _zone_summary(log: Any) -> list[dict[str, int]]:
     ever covers workout time. `or 1` on each total sidesteps a division by
     zero when nothing has synced yet; the numerators are then all 0 too, so
     the result is a correct 0% rather than a crash.
+
+    `bpm_label` comes from the most recent run's own thresholds
+    (`Log.latest_garmin_zone_boundaries`), not this period's — a zone's bpm
+    range doesn't change week to week, so there is no "this week's zone 3"
+    boundary distinct from "the current one". Empty when no run has yielded
+    boundaries yet. Built here rather than in the template so the "top zone
+    is open-ended" rule lives in one place.
     """
     today = _today()
     week_seconds = log.garmin_zone_seconds_since((today - timedelta(days=7)).isoformat())
     month_seconds = log.garmin_zone_seconds_since((today - timedelta(days=30)).isoformat())
     week_total = sum(week_seconds) or 1
     month_total = sum(month_seconds) or 1
+    boundaries = log.latest_garmin_zone_boundaries()
     return [
         {
             "zone": zone + 1,
@@ -864,9 +872,20 @@ def _zone_summary(log: Any) -> list[dict[str, int]]:
             "week_pct": round(100 * week_seconds[zone] / week_total),
             "month_minutes": month_seconds[zone] // 60,
             "month_pct": round(100 * month_seconds[zone] / month_total),
+            "bpm_label": _bpm_label(boundaries, zone),
         }
         for zone in range(len(week_seconds))
     ]
+
+
+def _bpm_label(boundaries: tuple[int, ...], zone: int) -> str:
+    """ "142-155 bpm" for a bounded zone, "161+ bpm" for the top one, "" if unknown."""
+    if not boundaries:
+        return ""
+    low = boundaries[zone]
+    if zone + 1 < len(boundaries):
+        return f"{low}-{boundaries[zone + 1] - 1} bpm"
+    return f"{low}+ bpm"
 
 
 # --- Garmin sync: a cut-down browser for the last 30 days of synced data -----

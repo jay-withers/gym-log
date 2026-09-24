@@ -71,11 +71,11 @@ ACTIVITY_PAYLOAD = {
 }
 
 ZONE_PAYLOAD = [
-    {"zoneNumber": 1, "secsInZone": 60},
-    {"zoneNumber": 2, "secsInZone": 300},
-    {"zoneNumber": 3, "secsInZone": 900},
-    {"zoneNumber": 4, "secsInZone": 480},
-    {"zoneNumber": 5, "secsInZone": 60},
+    {"zoneNumber": 1, "secsInZone": 60, "zoneLowBoundary": 96},
+    {"zoneNumber": 2, "secsInZone": 300, "zoneLowBoundary": 114},
+    {"zoneNumber": 3, "secsInZone": 900, "zoneLowBoundary": 132},
+    {"zoneNumber": 4, "secsInZone": 480, "zoneLowBoundary": 150},
+    {"zoneNumber": 5, "secsInZone": 60, "zoneLowBoundary": 161},
 ]
 
 
@@ -127,6 +127,7 @@ def test_an_activity_is_mapped_with_its_heart_rate_zones(
     assert activity.avg_hr == 140
     assert activity.max_hr == 165
     assert activity.zone_seconds == (60, 300, 900, 480, 60)
+    assert activity.zone_low_bpm == (96, 114, 132, 150, 161)
 
 
 def test_a_failed_zone_fetch_degrades_to_empty_without_aborting_the_sync(
@@ -150,7 +151,9 @@ def test_a_failed_zone_fetch_degrades_to_empty_without_aborting_the_sync(
     assert len(activities) == 2
     failed, ok = activities
     assert failed.zone_seconds == ()
+    assert failed.zone_low_bpm == ()
     assert ok.zone_seconds == (60, 300, 900, 480, 60)
+    assert ok.zone_low_bpm == (96, 114, 132, 150, 161)
 
 
 def test_a_day_summary_tolerates_a_missing_field(monkeypatch: pytest.MonkeyPatch) -> None:
