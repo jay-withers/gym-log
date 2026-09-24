@@ -39,12 +39,13 @@ def test_the_block_is_part_way_through_rather_than_due(log):
     assert not block.due(TODAY)
 
 
-def test_both_days_have_every_slot(log):
+def test_both_days_have_every_prescribed_slot(log):
+    """Mirrors the spreadsheet's seven slots. `core` is manual-only, never prescribed."""
     block = log.current_block
     assert sorted(block.days) == ["A", "B"]
     for day in block.days.values():
         slots = [e.slot for e in day.exercises]
-        assert slots == list(Log().slots)
+        assert slots == [s for s in Log().slots if s != "core"]
 
 
 def test_the_days_have_different_amounts_of_history(log):
