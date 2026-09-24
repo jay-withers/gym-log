@@ -908,13 +908,30 @@ def _bpm_label(boundaries: tuple[int, ...], zone: int) -> str:
 
 
 @router.get("/garmin", response_class=HTMLResponse, include_in_schema=False)
-def garmin_list(request: Request) -> Any:
+def garmin_list(request: Request, view: str = "activities", activity_type: str = "") -> Any:
+    """Activities and days are two different shapes of data — steps/sleep vs.
+    duration/heart rate — so only one is ever on screen, picked by `view`
+    (`?view=days` for the other; anything else falls back to activities
+    rather than 404ing on a typo'd link).
+
+    `activity_type` narrows the activities list to one Garmin activity type
+    (`running`, `cycling`, ...); the options offered come from the *full*
+    list, not the filtered one, so picking "running" does not make every
+    other type disappear from the chip row too.
+    """
     log, _etag = store.load()
+    activities = sorted(log.garmin_activities, key=lambda a: a.date, reverse=True)
+    activity_types = sorted({a.activity_type for a in activities if a.activity_type})
+    if activity_type:
+        activities = [a for a in activities if a.activity_type == activity_type]
     return templates.TemplateResponse(
         request,
         "garmin.html",
         {
-            "activities": sorted(log.garmin_activities, key=lambda a: a.date, reverse=True),
+            "view": view if view == "days" else "activities",
+            "activities": activities,
+            "activity_types": activity_types,
+            "selected_type": activity_type,
             "days": sorted(log.garmin_days, key=lambda d: d.date, reverse=True),
             "synced_at": _format_synced_at(log.garmin_synced_at),
         },

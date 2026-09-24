@@ -10,7 +10,21 @@
 <p class="last" style="margin-top:8px">Takes a few seconds — pulls the last 30 days from Garmin Connect.</p>
 <p class="last">{% if synced_at %}Last synced {{ synced_at }}{% else %}Never synced yet{% endif %}</p>
 
-<h2 class="slot" style="margin-top:24px">Activities</h2>
+<div class="chips" style="margin-top:20px">
+  <a class="chip {% if view == 'activities' %}on{% endif %}" href="/garmin?view=activities">Activities</a>
+  <a class="chip {% if view == 'days' %}on{% endif %}" href="/garmin?view=days">Days</a>
+</div>
+
+{% if view == 'activities' %}
+{% if activity_types %}
+<div class="chips">
+  <a class="chip {% if not selected_type %}on{% endif %}" href="/garmin?view=activities">All</a>
+  {% for t in activity_types %}
+  <a class="chip {% if t == selected_type %}on{% endif %}" href="/garmin?view=activities&activity_type={{ t }}">{{ t }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if activities %}
 {% for a in activities %}
 <div class="card">
@@ -24,10 +38,10 @@
 </div>
 {% endfor %}
 {% else %}
-<p class="last">No activities synced yet.</p>
+<p class="last">{% if selected_type %}No {{ selected_type }} activities synced yet.{% else %}No activities synced yet.{% endif %}</p>
 {% endif %}
 
-<h2 class="slot" style="margin-top:24px">Days</h2>
+{% else %}
 {% if days %}
 {% for d in days %}
 <div class="card">
@@ -41,5 +55,6 @@
 {% endfor %}
 {% else %}
 <p class="last">No daily summaries synced yet.</p>
+{% endif %}
 {% endif %}
 {% endblock %}
