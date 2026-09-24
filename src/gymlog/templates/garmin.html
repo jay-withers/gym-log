@@ -4,7 +4,7 @@
 {% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
 {% block body %}
 
-<form method="post" action="/garmin/sync">
+<form method="post" action="/garmin/sync" data-loading-label="Syncing…">
   <button type="submit" class="btn small">Sync now</button>
 </form>
 <p class="last" style="margin-top:8px">Takes a few seconds — pulls the last 30 days from Garmin Connect.</p>
