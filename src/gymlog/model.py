@@ -33,8 +33,9 @@ from typing import Any
 # discarding a training history it could not read.
 SCHEMA_VERSION = 1
 
-# The seven slots off the spreadsheet, in the order they are performed. `finisher`
-# is deliberately last and deliberately untracked (see Exercise.tracked): Sled Push
+# The slots off the spreadsheet, in the order they are performed, plus `core`
+# for manually-logged core work the sheet never tracked. `finisher` is
+# deliberately last and deliberately untracked (see Exercise.tracked): Sled Push
 # and Sandbag Lunges carried no sets, reps or weight in the sheet either.
 DEFAULT_SLOTS: tuple[str, ...] = (
     "chest",
@@ -43,6 +44,7 @@ DEFAULT_SLOTS: tuple[str, ...] = (
     "shoulders",
     "triceps",
     "biceps",
+    "core",
     "finisher",
 )
 

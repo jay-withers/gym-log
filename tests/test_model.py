@@ -113,9 +113,9 @@ def test_with_block_replaces_by_id():
 
 def test_ensuring_slot_adds_an_unseen_slot():
     log = Log()
-    grown = log.ensuring_slot("core")
-    assert "core" in grown.slots
-    assert "core" not in log.slots  # frozen; the original is untouched
+    grown = log.ensuring_slot("mobility")
+    assert "mobility" in grown.slots
+    assert "mobility" not in log.slots  # frozen; the original is untouched
 
 
 def test_ensuring_slot_does_not_duplicate_a_known_slot():
