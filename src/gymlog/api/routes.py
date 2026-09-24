@@ -824,6 +824,17 @@ def generate_insight_now() -> Any:
     return RedirectResponse("/insights/ai", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@router.post("/insights/ai/{insight_id}/delete", include_in_schema=False)
+def delete_insight(insight_id: str) -> Any:
+    try:
+        store.update(lambda current: current.without_insight(insight_id))
+    except store.ConflictError as exc:
+        raise ConflictResponse(
+            "the log was changed elsewhere; the insight was not deleted"
+        ) from exc
+    return RedirectResponse("/insights/ai", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @router.get("/insights/hr-zones", response_class=HTMLResponse, include_in_schema=False)
 def hr_zone_insights(request: Request) -> Any:
     log, _etag = store.load()
@@ -833,15 +844,26 @@ def hr_zone_insights(request: Request) -> Any:
 
 
 def _zone_summary(log: Any) -> list[dict[str, int]]:
-    """Time in each heart rate zone, in minutes, for "this week" and "last 30 days"."""
+    """Time in each heart rate zone, in minutes and as a share of the period.
+
+    The percentage is of time *tracked in a zone*, not of the whole period —
+    there is no untracked/rest bucket to make it sum against, since this only
+    ever covers workout time. `or 1` on each total sidesteps a division by
+    zero when nothing has synced yet; the numerators are then all 0 too, so
+    the result is a correct 0% rather than a crash.
+    """
     today = _today()
     week_seconds = log.garmin_zone_seconds_since((today - timedelta(days=7)).isoformat())
     month_seconds = log.garmin_zone_seconds_since((today - timedelta(days=30)).isoformat())
+    week_total = sum(week_seconds) or 1
+    month_total = sum(month_seconds) or 1
     return [
         {
             "zone": zone + 1,
             "week_minutes": week_seconds[zone] // 60,
+            "week_pct": round(100 * week_seconds[zone] / week_total),
             "month_minutes": month_seconds[zone] // 60,
+            "month_pct": round(100 * month_seconds[zone] / month_total),
         }
         for zone in range(len(week_seconds))
     ]

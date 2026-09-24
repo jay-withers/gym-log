@@ -1211,7 +1211,19 @@ def test_generate_insight_now_calls_deepseek_and_redirects_back(client, seeded, 
     assert "Fresh from the button." in page
 
 
-def test_hr_zone_insights_page_shows_minutes(client, seeded):
+def test_delete_insight_removes_it_and_redirects_back(client, seeded):
+    store.update(lambda current: current.with_insight(insight(id="ins1", summary="Old one.")))
+    login(client)
+
+    response = client.post("/insights/ai/ins1/delete", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/insights/ai"
+    log, _etag = store.load()
+    assert log.insights == ()
+
+
+def test_hr_zone_insights_page_shows_minutes_and_percentages(client, seeded):
     store.update(
         lambda current: current.with_garmin_sync(
             activities=[
@@ -1223,8 +1235,10 @@ def test_hr_zone_insights_page_shows_minutes(client, seeded):
     )
     login(client)
     page = client.get("/insights/hr-zones").text
-    assert "1m" in page  # zone 1: 60s
-    assert "2m" in page  # zone 2: 120s
+    assert "1m · 33%" in page  # zone 1: 60s of 180s tracked
+    assert "2m · 67%" in page  # zone 2: 120s of 180s tracked
+    assert "--pct: 33" in page  # the bar segment's proportional width
+    assert "--pct: 67" in page
 
 
 def test_hr_zone_insights_page_is_empty_before_any_sync(client, seeded):

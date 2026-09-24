@@ -665,6 +665,9 @@ class Log:
         """Append an insight."""
         return replace(self, insights=(*self.insights, insight))
 
+    def without_insight(self, insight_id: str) -> Log:
+        return replace(self, insights=tuple(i for i in self.insights if i.id != insight_id))
+
     def with_garmin_sync(
         self,
         activities: Iterable[GarminActivity],

@@ -14,6 +14,12 @@
 <div class="card">
   <div class="slot">{{ i.generated_at }}</div>
   <p class="last" style="color:var(--text);font-size:14px;white-space:pre-line">{{ i.summary }}</p>
+  <div class="actions">
+    <form method="post" action="/insights/ai/{{ i.id }}/delete"
+          onsubmit="return confirm('Delete this insight?')">
+      <button type="submit" class="btn ghost small">Delete</button>
+    </form>
+  </div>
 </div>
 {% endfor %}
 {% else %}

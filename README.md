@@ -81,10 +81,17 @@ Five sections that are not derived from sets and reps:
   runs, so the page also has a "Generate insight now" button that calls
   DeepSeek in-process and blocks the request for the few seconds that takes;
   `make insight` runs the same generation by hand against the real log, and
-  `az containerapp job start` triggers it on the deployed job directly.
-  **HR Zone Insights** (`/insights/hr-zones`) is a read-only summary — time in
-  each of the 5 zones, this week and over the last 30 days — computed from
-  whatever Garmin sync (below) has synced; it has no button of its own.
+  `az containerapp job start` triggers it on the deployed job directly. Each
+  entry can be deleted individually. When Garmin data has been synced, the
+  prompt includes the last 7 days of cardio activity and recovery (steps,
+  resting heart rate, sleep) alongside the lift log, so the summary can speak
+  to the whole week rather than just the barbell work.
+  **HR Zone Insights** (`/insights/hr-zones`) is a read-only summary — a
+  segmented bar plus minutes and percentage per zone, this week and over the
+  last 30 days — computed from whatever Garmin sync (below) has synced; it
+  has no button of its own. Zones are colored with a single-hue ordinal ramp
+  (light = zone 1, dark = zone 5) rather than categorical colors, since the
+  zones are an ordered tier, not independent identities.
 - **Garmin** (`/garmin`) — a cut-down browser (not a full analysis surface;
   that's HR Zone Insights above) for the last 30 days of activities and daily
   summaries (steps, resting heart rate, sleep) synced from a personal Garmin
