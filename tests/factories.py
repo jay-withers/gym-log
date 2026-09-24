@@ -52,11 +52,18 @@ def entry(
     )
 
 
-def block(block_id: str = "2026-09-01", *exercises: Exercise) -> Block:
+def block(
+    block_id: str = "2026-09-01",
+    *exercises: Exercise,
+    name: str = "Test block",
+    started: str | None = None,
+    weeks: int = 8,
+) -> Block:
     return Block(
         id=block_id,
-        name="Test block",
-        started=block_id,
+        name=name,
+        started=started if started is not None else block_id,
+        weeks=weeks,
         days={"A": Day(label="Tues", exercises=exercises or (exercise(),))},
     )
 

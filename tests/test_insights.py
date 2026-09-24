@@ -11,10 +11,10 @@ from datetime import date, timedelta
 
 import pytest
 
-from gymlog.insights import MIN_DAYS_BETWEEN, _prompt, generate_insight
+from gymlog.insights import BLOCK_ENDING_SOON_WEEKS, MIN_DAYS_BETWEEN, _prompt, generate_insight
 from gymlog.model import Log
 
-from .factories import achievement, condition, entry, goal, insight, session
+from .factories import achievement, block, condition, entry, goal, insight, session
 
 
 def test_generates_a_new_insight_when_none_exists(monkeypatch):
@@ -89,3 +89,49 @@ def test_prompt_includes_achievements_logged_that_week():
     log = Log(achievements=(achievement(date="2026-09-14", title="Ran a 5k"),))
     prompt = _prompt(log, date(2026, 9, 15))
     assert "Ran a 5k" in prompt
+
+
+def test_prompt_says_no_block_when_none_started():
+    prompt = _prompt(Log(), date(2026, 9, 15))
+    assert "Current training block:\n- none" in prompt
+
+
+def test_prompt_includes_current_block_week_when_not_ending_soon():
+    log = Log(blocks=(block("2026-08-01", weeks=8),))
+    prompt = _prompt(log, date(2026, 8, 15))
+    assert "Test block, week 3 of 8" in prompt
+    assert "(due for rotation)" not in prompt
+    assert "ending soon" not in prompt
+
+
+def test_prompt_does_not_flag_ending_soon_with_weeks_of_headroom():
+    log = Log(
+        blocks=(block("2026-07-01", weeks=8),),
+        sessions=(
+            session("2026-08-10", "2026-07-01", "A", entry("Bench Press", "chest", (8, 60.0))),
+        ),
+    )
+    prompt = _prompt(log, date(2026, 8, 5))
+    assert "ending soon" not in prompt
+    assert "chest:" not in prompt
+
+
+def test_prompt_flags_block_ending_soon_with_recent_slot_progression():
+    assert BLOCK_ENDING_SOON_WEEKS == 1
+    log = Log(
+        blocks=(block("2026-07-01", weeks=8),),
+        sessions=(
+            session("2026-08-10", "2026-07-01", "A", entry("Bench Press", "chest", (8, 60.0))),
+        ),
+    )
+    prompt = _prompt(log, date(2026, 8, 19))
+    assert "week 8 of 8" in prompt
+    assert "ending soon" in prompt
+    assert "chest: 2026-08-10 Bench Press (8x60.0kg)" in prompt
+
+
+def test_prompt_flags_an_overdue_block_as_due_and_ending_soon():
+    log = Log(blocks=(block("2026-06-01", weeks=8),))
+    prompt = _prompt(log, date(2026, 9, 15))
+    assert "(due for rotation)" in prompt
+    assert "ending soon" in prompt
