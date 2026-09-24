@@ -268,12 +268,19 @@ def test_garmin_zone_seconds_since_only_counts_runs():
     """A strength session's heart rate tracks the rest between sets, not effort."""
     log = Log(
         garmin_activities=(
-            garmin_activity(activity_type="running", zone_seconds=(1, 2, 3, 4, 5)),
-            garmin_activity(activity_type="cycling", zone_seconds=(10, 20, 30, 40, 50)),
-            garmin_activity(activity_type="strength_training", zone_seconds=(10, 20, 30, 40, 50)),
+            garmin_activity(id="a1", activity_type="running", zone_seconds=(1, 2, 3, 4, 5)),
+            garmin_activity(
+                id="a2", activity_type="treadmill_running", zone_seconds=(1, 1, 1, 1, 1)
+            ),
+            garmin_activity(id="a3", activity_type="cycling", zone_seconds=(10, 20, 30, 40, 50)),
+            garmin_activity(
+                id="a4",
+                activity_type="strength_training",
+                zone_seconds=(10, 20, 30, 40, 50),
+            ),
         )
     )
-    assert log.garmin_zone_seconds_since("2026-01-01") == (1, 2, 3, 4, 5)
+    assert log.garmin_zone_seconds_since("2026-01-01") == (2, 3, 4, 5, 6)
 
 
 @pytest.mark.parametrize(
