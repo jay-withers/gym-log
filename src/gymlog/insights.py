@@ -30,12 +30,22 @@ MODEL = "deepseek-chat"
 # in the same week — not a calendar-week check, just "not too soon again".
 MIN_DAYS_BETWEEN = 6
 
+# How many weeks of headroom before a block is due count as "ending soon".
+# 1 gives exactly one weekly insight with next-block suggestions before the
+# block page's own "due" banner appears.
+BLOCK_ENDING_SOON_WEEKS = 1
+
 SYSTEM_PROMPT = (
     "You write a short, encouraging weekly summary of someone's strength "
     "training for them to read in their training log. Two or three short "
     "paragraphs, plain text, no headings or bullet points. Note real "
     "progress, flag anything that looks stalled, and never suggest anything "
-    "that would aggravate a listed active injury or condition."
+    "that would aggravate a listed active injury or condition. When the "
+    "prompt says the current block is ending soon and gives recent "
+    "progression by slot, add a short closing paragraph suggesting specific "
+    "exercises or progressions for one or two slots that look ready for a "
+    "change in the next block, weighing active goals and avoiding anything "
+    "that would aggravate a listed condition."
 )
 
 
@@ -99,6 +109,31 @@ def _prompt(log: Log, today: date) -> str:
         lines.extend(f"- {g.title}" for g in active_goals)
     else:
         lines.append("- none")
+
+    block = log.current_block
+    lines.append("\nCurrent training block:")
+    if block is None:
+        lines.append("- none")
+    else:
+        week = block.week_of(today)
+        remaining = block.weeks - week
+        status = " (due for rotation)" if block.due(today) else ""
+        lines.append(f"- {block.name}, week {week} of {block.weeks}{status}")
+
+        if remaining <= BLOCK_ENDING_SOON_WEEKS:
+            lines.append(
+                "\nThis block is ending soon. Recent progression by slot, for "
+                "suggesting exercises for the next block:"
+            )
+            for slot in log.slots:
+                history = log.history(slot)
+                if not history:
+                    continue
+                progression = ", ".join(
+                    f"{when} {exercise} ({set_.reps}x{set_.weight}kg)"
+                    for when, exercise, set_ in history[-3:]
+                )
+                lines.append(f"- {slot}: {progression}")
 
     return "\n".join(lines)
 
