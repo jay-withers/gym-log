@@ -1168,11 +1168,10 @@ def test_conditions_are_listed_most_recently_started_first(client, seeded):
     assert page.index("Newer") < page.index("Older")
 
 
-# --- weekly AI insight ----------------------------------------------------------
+# --- AI insight --------------------------------------------------------------
 
 
 def test_insights_page_lists_stored_insights(client, seeded):
-    """Read-only: the page never writes one, only the scheduled job's CLI does."""
     store.update(lambda current: current.with_insight(insight(summary="Good week overall.")))
     login(client)
     page = client.get("/insights").text
@@ -1182,3 +1181,19 @@ def test_insights_page_lists_stored_insights(client, seeded):
 def test_insights_page_when_empty(client, seeded):
     login(client)
     assert client.get("/insights").status_code == 200
+
+
+def test_generate_insight_now_calls_deepseek_and_redirects_back(client, seeded, monkeypatch):
+    """The button's route, not the scheduled job — mocked the same way test_cli.py mocks it."""
+    monkeypatch.setattr(
+        "gymlog.insights.generate_insight",
+        lambda log: insight(summary="Fresh from the button."),
+    )
+    login(client)
+
+    response = client.post("/insights", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/insights"
+    page = client.get("/insights").text
+    assert "Fresh from the button." in page

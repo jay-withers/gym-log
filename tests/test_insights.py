@@ -1,4 +1,4 @@
-"""Weekly AI insight generation: the idempotency guard and the prompt shape.
+"""AI insight generation: the prompt shape.
 
 `_complete` is always mocked here — the suite must never reach
 api.deepseek.com, the same reasoning conftest.py's `fake_secrets` applies to
@@ -7,11 +7,9 @@ Key Vault and blob storage.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
-import pytest
-
-from gymlog.insights import BLOCK_ENDING_SOON_WEEKS, MIN_DAYS_BETWEEN, _prompt, generate_insight
+from gymlog.insights import BLOCK_ENDING_SOON_WEEKS, _prompt, generate_insight
 from gymlog.model import Log
 
 from .factories import achievement, block, condition, entry, goal, insight, session
@@ -22,30 +20,19 @@ def test_generates_a_new_insight_when_none_exists(monkeypatch):
 
     result = generate_insight(Log(), today=date(2026, 9, 15))
 
-    assert result is not None
     assert result.summary == "Solid week."
     assert result.week_of == "2026-09-15"
     assert result.generated_at == "2026-09-15"
 
 
-def test_declines_when_the_last_insight_is_too_recent(monkeypatch):
-    monkeypatch.setattr(
-        "gymlog.insights._complete", lambda prompt: pytest.fail("should not call the API")
-    )
-    log = Log(insights=(insight(generated_at="2026-09-12"),))
+def test_generates_even_when_the_last_insight_was_just_generated(monkeypatch):
+    """No cooldown: running the job (or the CLI) again right away still produces one."""
+    monkeypatch.setattr("gymlog.insights._complete", lambda prompt: "Another one.")
+    log = Log(insights=(insight(generated_at="2026-09-15"),))
 
-    assert generate_insight(log, today=date(2026, 9, 15)) is None
+    result = generate_insight(log, today=date(2026, 9, 15))
 
-
-def test_generates_again_once_enough_days_have_passed(monkeypatch):
-    monkeypatch.setattr("gymlog.insights._complete", lambda prompt: "Another week done.")
-    log = Log(insights=(insight(generated_at="2026-09-01"),))
-    today = date(2026, 9, 1) + timedelta(days=MIN_DAYS_BETWEEN)
-
-    result = generate_insight(log, today=today)
-
-    assert result is not None
-    assert result.summary == "Another week done."
+    assert result.summary == "Another one."
 
 
 def test_prompt_includes_recent_sessions_and_excludes_old_ones():

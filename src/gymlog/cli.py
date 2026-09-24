@@ -92,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         help="overwrite an existing local log",
     )
 
-    sub.add_parser("insight", help="generate this week's AI training insight")
+    sub.add_parser("insight", help="generate an AI training insight")
 
     args = parser.parse_args(argv)
 
@@ -200,10 +200,6 @@ def _insight() -> int:
 
     log, _etag = store.load()
     insight = generate_insight(log)
-    if insight is None:
-        logging.getLogger("gymlog").info("no new insight needed yet")
-        return 0
-
     store.update(lambda current: current.with_insight(insight))
     logging.getLogger("gymlog").info("recorded insight for week of %s", insight.week_of)
     return 0

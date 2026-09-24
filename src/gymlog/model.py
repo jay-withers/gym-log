@@ -366,7 +366,7 @@ class Goal:
 
 @dataclass(frozen=True)
 class Insight:
-    """A weekly AI-generated summary, written only by the scheduled job."""
+    """An AI-generated training summary, written by generate_insight()."""
 
     id: str
     week_of: str
@@ -584,7 +584,7 @@ class Log:
         return replace(self, goals=tuple(g for g in self.goals if g.id != goal_id))
 
     def with_insight(self, insight: Insight) -> Log:
-        """Append a weekly insight."""
+        """Append an insight."""
         return replace(self, insights=(*self.insights, insight))
 
     def to_json(self) -> str:

@@ -101,16 +101,6 @@ def test_insight_records_what_generate_insight_returns(monkeypatch):
     assert log.insights == (generated,)
 
 
-def test_insight_is_a_no_op_when_generate_insight_declines(monkeypatch):
-    """Too soon since the last one — see insights.MIN_DAYS_BETWEEN."""
-    monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: None)
-
-    assert main(["insight"]) == 0
-
-    log, _etag = store.load()
-    assert log.insights == ()
-
-
 def test_a_missing_subcommand_is_refused(capsys):
     """`args` on the container app is what picks one; an empty one must not serve."""
     with pytest.raises(SystemExit):

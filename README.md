@@ -69,16 +69,17 @@ Four sections that are not derived from sets and reps:
   achieved by hand. Not tied to a specific exercise or weight.
 - **Injuries & conditions** (`/conditions`) — structured records (body part,
   status, start/resolved dates, a note), marked resolved by hand. Read by the
-  weekly insight so it does not suggest anything that would aggravate an
-  active one.
-- **Weekly insight** (`/insights`, read-only) — a DeepSeek-generated summary
-  of the week, written once a week by `azurerm_container_app_job.insight`
-  (`terraform/main.container-apps-job.tf`), not by the web app. The app
-  scales to zero between workouts, so nothing in-process could fire a weekly
-  timer; the job exists specifically to run on a schedule regardless of
-  whether anyone has opened the app that week. `make insight` runs it by hand
-  against the real log, and `az containerapp job start` triggers it on the
-  deployed job directly.
+  insight so it does not suggest anything that would aggravate an active one.
+- **Insight** (`/insights`) — a DeepSeek-generated summary of the week,
+  written on a weekly schedule by `azurerm_container_app_job.insight`
+  (`terraform/main.container-apps-job.tf`). The app scales to zero between
+  workouts, so nothing in-process could fire a weekly timer; the job exists
+  specifically to run on a schedule regardless of whether anyone has opened
+  the app that week. There is no cooldown between runs, so the page also has
+  a "Generate insight now" button that calls DeepSeek in-process and blocks
+  the request for the few seconds that takes; `make insight` runs the same
+  generation by hand against the real log, and `az containerapp job start`
+  triggers it on the deployed job directly.
 
 ## Design
 
