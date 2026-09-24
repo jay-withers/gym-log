@@ -1226,8 +1226,10 @@ def test_delete_insight_removes_it_and_redirects_back(client, seeded):
 def test_hr_zone_insights_page_shows_minutes_and_percentages(client, seeded):
     store.update(
         lambda current: current.with_garmin_sync(
+            # zone 1's 999s is excluded from the totals entirely, so it must
+            # not appear in the page and must not water down the percentages.
             activities=[
-                garmin_activity(date=date.today().isoformat(), zone_seconds=(60, 120, 0, 0, 0))
+                garmin_activity(date=date.today().isoformat(), zone_seconds=(999, 120, 60, 0, 0))
             ],
             days=[],
             keep_since="2020-01-01",
@@ -1236,11 +1238,13 @@ def test_hr_zone_insights_page_shows_minutes_and_percentages(client, seeded):
     )
     login(client)
     page = client.get("/insights/hr-zones").text
-    assert "1m · 33%" in page  # zone 1: 60s of 180s tracked
+    assert "zone-swatch" in page  # zones 2-5 still render as legend rows
+    assert "background: var(--zone-1)" not in page  # zone 1 has no row at all
     assert "2m · 67%" in page  # zone 2: 120s of 180s tracked
-    assert "--pct: 33" in page  # the bar segment's proportional width
-    assert "--pct: 67" in page
-    assert "96-113 bpm" in page  # zone 1's range, from the run's own thresholds
+    assert "1m · 33%" in page  # zone 3: 60s of 180s tracked
+    assert "--pct: 67" in page  # the bar segment's proportional width
+    assert "--pct: 33" in page
+    assert "114-131 bpm" in page  # zone 2's range, from the activity's own thresholds
     assert "161+ bpm" in page  # zone 5 is open-ended
     assert "Garmin last synced 24 Sep 2026, 06:00 UTC" in page
 

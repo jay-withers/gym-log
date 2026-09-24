@@ -33,10 +33,6 @@ from typing import Any
 # empty when a per-activity detail fetch failed — never a partial length.
 GARMIN_ZONE_COUNT = 5
 
-# Garmin's `activityType.typeKey` values that mean "a run" for heart rate zone
-# purposes. Treadmill runs get their own typeKey rather than "running".
-GARMIN_RUNNING_ACTIVITY_TYPES = frozenset({"running", "treadmill_running"})
-
 # Bumped when the shape changes incompatibly. A document from the future is left
 # alone rather than overwritten — the alternative is a newer deployment silently
 # discarding a training history it could not read.
@@ -724,35 +720,35 @@ class Log:
         )
 
     def garmin_zone_seconds_since(self, cutoff: str) -> tuple[int, ...]:
-        """Total time in each heart rate zone across runs on/after `cutoff`.
+        """Total time in each heart rate zone across activities on/after `cutoff`.
 
-        Runs only, not every Garmin activity: a strength session's heart rate
-        swings with the rest between sets rather than with effort, and mixing
-        that into a "time in zone" figure would misrepresent it. Running is
-        the one activity type this is meaningful for today, and that includes
-        treadmill runs, which Garmin reports under a separate typeKey.
+        Zone 1 is excluded (always 0) regardless of activity: it's dominated by
+        the rest between sets in a strength session and by warm-up/cool-down
+        drift elsewhere, so folding it into a "time in zone" figure would
+        skew it toward whichever activity spends the most time barely moving
+        rather than toward real training effort. Zones 2-5 are counted across
+        every activity type, not just runs.
         """
         totals = [0] * GARMIN_ZONE_COUNT
         for activity in self.garmin_activities:
-            if activity.activity_type not in GARMIN_RUNNING_ACTIVITY_TYPES:
-                continue
             if activity.date < cutoff or len(activity.zone_seconds) != GARMIN_ZONE_COUNT:
                 continue
             for zone, seconds in enumerate(activity.zone_seconds):
+                if zone == 0:
+                    continue
                 totals[zone] += seconds
         return tuple(totals)
 
     def latest_garmin_zone_boundaries(self) -> tuple[int, ...]:
-        """The bpm each zone starts at, from the most recent run that has them.
+        """The bpm each zone starts at, from the most recent activity that has them.
 
         Boundaries come from Garmin's own threshold settings, which barely
-        move day to day, so the latest run's figures stand in for "current"
-        rather than needing to be recomputed per activity. `garmin_activities`
-        is sorted ascending by date, so the last match is the most recent.
+        move day to day, so the latest activity's figures stand in for
+        "current" rather than needing to be recomputed per activity.
+        `garmin_activities` is sorted ascending by date, so the last match is
+        the most recent.
         """
         for activity in reversed(self.garmin_activities):
-            if activity.activity_type not in GARMIN_RUNNING_ACTIVITY_TYPES:
-                continue
             if len(activity.zone_low_bpm) == GARMIN_ZONE_COUNT:
                 return activity.zone_low_bpm
         return ()

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Running HR Zone Insights · Health{% endblock %}
-{% block subtitle %}Running HR Zone Insights{% endblock %}
+{% block title %}HR Zone Insights · Health{% endblock %}
+{% block subtitle %}HR Zone Insights{% endblock %}
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
 
-<p class="last">Runs only — a strength session's heart rate tracks the rest between sets, not effort, so it isn't counted here.</p>
+<p class="last">Zone 1 is left out — it's mostly rest between sets or warm-up drift, not training effort.</p>
 
 {% if zones and (zones | sum(attribute="month_minutes")) > 0 %}
 <style>
@@ -14,7 +14,7 @@
      scripts/validate_palette.js --ordinal --mode dark --surface #1a1a20
      (this app's --card): lightness monotone, adjacent steps >= 0.06 apart,
      darkest step clears 2:1 against the card surface. */
-  .hrz { --zone-1: #9ec5f4; --zone-2: #6da7ec; --zone-3: #3987e5; --zone-4: #256abf; --zone-5: #184f95; }
+  .hrz { --zone-2: #6da7ec; --zone-3: #3987e5; --zone-4: #256abf; --zone-5: #184f95; }
   .zonebar {
     display: flex; height: 20px; border-radius: 4px; overflow: hidden;
     background: var(--card); gap: 2px; margin-bottom: 10px;
