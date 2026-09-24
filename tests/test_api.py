@@ -1264,10 +1264,39 @@ def test_garmin_page_lists_synced_activities_and_days(client, seeded):
         )
     )
     login(client)
-    page = client.get("/garmin").text
-    assert "cycling" in page
-    assert "9000 steps" in page
-    assert "Last synced 15 Sep 2026, 07:30 UTC" in page
+    activities_page = client.get("/garmin").text
+    assert "cycling" in activities_page
+    assert "9000 steps" not in activities_page  # days is a separate view
+    assert "Last synced 15 Sep 2026, 07:30 UTC" in activities_page
+
+    days_page = client.get("/garmin?view=days").text
+    assert "9000 steps" in days_page
+    assert "cycling" not in days_page
+
+
+def test_garmin_page_filters_activities_by_type(client, seeded):
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[
+                garmin_activity(id="a1", activity_type="cycling"),
+                garmin_activity(id="a2", activity_type="running"),
+            ],
+            days=[],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+
+    all_page = client.get("/garmin").text
+    assert "cycling" in all_page
+    assert "running" in all_page
+
+    running_page = client.get("/garmin?activity_type=running").text
+    assert '<div class="name">running</div>' in running_page
+    assert '<div class="name">cycling</div>' not in running_page
+
+    empty_page = client.get("/garmin?activity_type=swimming").text
+    assert "No swimming activities synced yet." in empty_page
 
 
 def test_garmin_page_when_empty(client, seeded):
