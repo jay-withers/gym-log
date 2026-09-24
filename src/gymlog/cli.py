@@ -210,15 +210,16 @@ def _insight() -> int:
 
 
 def _garmin_sync() -> int:
-    from datetime import timedelta
+    from datetime import UTC, datetime, timedelta
 
     from . import store
     from .garmin import GARMIN_RETENTION_DAYS, sync_garmin
 
     activities, days = sync_garmin()
     keep_since = (date.today() - timedelta(days=GARMIN_RETENTION_DAYS)).isoformat()
+    synced_at = datetime.now(UTC).isoformat(timespec="seconds")
 
-    store.update(lambda current: current.with_garmin_sync(activities, days, keep_since))
+    store.update(lambda current: current.with_garmin_sync(activities, days, keep_since, synced_at))
     logging.getLogger("gymlog").info(
         "synced %d activities, %d days from garmin", len(activities), len(days)
     )

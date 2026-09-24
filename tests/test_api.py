@@ -1231,6 +1231,7 @@ def test_hr_zone_insights_page_shows_minutes_and_percentages(client, seeded):
             ],
             days=[],
             keep_since="2020-01-01",
+            synced_at="2026-09-24T06:00:00+00:00",
         )
     )
     login(client)
@@ -1241,6 +1242,7 @@ def test_hr_zone_insights_page_shows_minutes_and_percentages(client, seeded):
     assert "--pct: 67" in page
     assert "96-113 bpm" in page  # zone 1's range, from the run's own thresholds
     assert "161+ bpm" in page  # zone 5 is open-ended
+    assert "Garmin last synced 24 Sep 2026, 06:00 UTC" in page
 
 
 def test_hr_zone_insights_page_is_empty_before_any_sync(client, seeded):
@@ -1258,17 +1260,20 @@ def test_garmin_page_lists_synced_activities_and_days(client, seeded):
             activities=[garmin_activity(id="a1", activity_type="cycling")],
             days=[garmin_day(date="2026-09-15", steps=9000)],
             keep_since="2020-01-01",
+            synced_at="2026-09-15T07:30:00+00:00",
         )
     )
     login(client)
     page = client.get("/garmin").text
     assert "cycling" in page
     assert "9000 steps" in page
+    assert "Last synced 15 Sep 2026, 07:30 UTC" in page
 
 
 def test_garmin_page_when_empty(client, seeded):
     login(client)
-    assert client.get("/garmin").status_code == 200
+    page = client.get("/garmin").text
+    assert "Never synced yet" in page
 
 
 def test_sync_garmin_now_calls_garmin_and_redirects_back(client, seeded, monkeypatch):
@@ -1282,3 +1287,22 @@ def test_sync_garmin_now_calls_garmin_and_redirects_back(client, seeded, monkeyp
     assert response.headers["location"] == "/garmin"
     page = client.get("/garmin").text
     assert "swimming" in page
+    assert "Last synced" in page
+
+
+def test_sync_garmin_now_reports_a_friendly_error_when_garmin_is_unreachable(
+    client, seeded, monkeypatch
+):
+    def _boom() -> tuple[list, list]:
+        raise RuntimeError("Garmin said no")
+
+    monkeypatch.setattr("gymlog.garmin.sync_garmin", _boom)
+    login(client)
+
+    response = client.post("/garmin/sync")
+
+    assert response.status_code == 502
+    assert "could not reach Garmin" in response.json()["detail"]
+    # Nothing was recorded, so an unrelated read is unaffected.
+    log, _etag = store.load()
+    assert log.garmin_synced_at == ""

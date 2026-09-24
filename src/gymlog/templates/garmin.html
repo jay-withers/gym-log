@@ -8,6 +8,7 @@
   <button type="submit" class="btn small">Sync now</button>
 </form>
 <p class="last" style="margin-top:8px">Takes a few seconds — pulls the last 30 days from Garmin Connect.</p>
+<p class="last">{% if synced_at %}Last synced {{ synced_at }}{% else %}Never synced yet{% endif %}</p>
 
 <h2 class="slot" style="margin-top:24px">Activities</h2>
 {% if activities %}

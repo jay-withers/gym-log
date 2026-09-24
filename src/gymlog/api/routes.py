@@ -48,6 +48,17 @@ class ConflictResponse(Exception):
     """Raised when a write lost its race twice. Handled in main.create_app."""
 
 
+class GarminSyncFailed(Exception):
+    """Raised when a manual Garmin sync errors out. Handled in main.create_app.
+
+    `garmin.sync_garmin` deliberately lets auth/API failures propagate
+    uncaught, so the scheduled CLI job exits non-zero and pages whoever
+    watches it. A person tapping "Sync now" in the browser needs the other
+    behaviour — a readable message instead of a stack trace — so this route
+    is the one place that catches it.
+    """
+
+
 def _today() -> date:
     return datetime.now(UTC).date()
 
@@ -839,7 +850,12 @@ def delete_insight(insight_id: str) -> Any:
 def hr_zone_insights(request: Request) -> Any:
     log, _etag = store.load()
     return templates.TemplateResponse(
-        request, "insights_hr_zones.html", {"zones": _zone_summary(log)}
+        request,
+        "insights_hr_zones.html",
+        {
+            "zones": _zone_summary(log),
+            "synced_at": _format_synced_at(log.garmin_synced_at),
+        },
     )
 
 
@@ -900,8 +916,24 @@ def garmin_list(request: Request) -> Any:
         {
             "activities": sorted(log.garmin_activities, key=lambda a: a.date, reverse=True),
             "days": sorted(log.garmin_days, key=lambda d: d.date, reverse=True),
+            "synced_at": _format_synced_at(log.garmin_synced_at),
         },
     )
+
+
+def _format_synced_at(raw: str) -> str:
+    """ "24 Sep 2026, 14:32 UTC" from the stored ISO timestamp, or "" before any sync.
+
+    Formatted here rather than in the template so a change of format is one
+    line, not a `.replace()` chain wherever it's shown.
+    """
+    if not raw:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return ""
+    return parsed.strftime("%-d %b %Y, %H:%M UTC")
 
 
 @router.post("/garmin/sync", include_in_schema=False)
@@ -914,10 +946,21 @@ def sync_garmin_now() -> Any:
     """
     from ..garmin import GARMIN_RETENTION_DAYS, sync_garmin
 
-    activities, days = sync_garmin()
-    keep_since = (_today() - timedelta(days=GARMIN_RETENTION_DAYS)).isoformat()
     try:
-        store.update(lambda current: current.with_garmin_sync(activities, days, keep_since))
+        activities, days = sync_garmin()
+    except Exception as exc:
+        logger.warning("manual garmin sync failed", exc_info=True)
+        raise GarminSyncFailed(
+            "could not reach Garmin — the credentials may need refreshing, or Garmin's "
+            "own service may be down. Try again shortly."
+        ) from exc
+
+    keep_since = (_today() - timedelta(days=GARMIN_RETENTION_DAYS)).isoformat()
+    synced_at = datetime.now(UTC).isoformat(timespec="seconds")
+    try:
+        store.update(
+            lambda current: current.with_garmin_sync(activities, days, keep_since, synced_at)
+        )
     except store.ConflictError as exc:
         raise ConflictResponse("the log was changed elsewhere; the sync was not saved") from exc
     return RedirectResponse("/garmin", status_code=status.HTTP_303_SEE_OTHER)

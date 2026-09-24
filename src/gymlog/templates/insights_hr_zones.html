@@ -61,6 +61,7 @@
     {% endfor %}
   </table>
 </div>
+<p class="last" style="margin-top:10px">{% if synced_at %}Garmin last synced {{ synced_at }}{% else %}Never synced yet{% endif %} — <a href="/garmin">sync</a></p>
 {% else %}
 <p class="last">No heart rate zone data yet — sync some runs from <a href="/garmin">Garmin</a> first.</p>
 {% endif %}
