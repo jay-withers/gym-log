@@ -254,8 +254,8 @@ def test_garmin_zone_seconds_since_sums_across_activities_on_or_after_cutoff():
             garmin_activity(date="2026-09-10", zone_seconds=(1, 2, 3, 4, 5)),
         )
     )
-    assert log.garmin_zone_seconds_since("2026-09-05") == (1, 2, 3, 4, 5)
-    assert log.garmin_zone_seconds_since("2026-08-01") == (11, 22, 33, 44, 55)
+    assert log.garmin_zone_seconds_since("2026-09-05") == (0, 2, 3, 4, 5)
+    assert log.garmin_zone_seconds_since("2026-08-01") == (0, 22, 33, 44, 55)
 
 
 def test_garmin_zone_seconds_since_ignores_a_failed_zone_fetch():
@@ -264,16 +264,26 @@ def test_garmin_zone_seconds_since_ignores_a_failed_zone_fetch():
     assert log.garmin_zone_seconds_since("2026-01-01") == (0, 0, 0, 0, 0)
 
 
-def test_garmin_zone_seconds_since_only_counts_runs():
-    """A strength session's heart rate tracks the rest between sets, not effort."""
+def test_garmin_zone_seconds_since_counts_every_activity_type():
+    """Not runs only — a lift or ride's zones 2-5 count the same as a run's."""
     log = Log(
         garmin_activities=(
-            garmin_activity(activity_type="running", zone_seconds=(1, 2, 3, 4, 5)),
-            garmin_activity(activity_type="cycling", zone_seconds=(10, 20, 30, 40, 50)),
-            garmin_activity(activity_type="strength_training", zone_seconds=(10, 20, 30, 40, 50)),
+            garmin_activity(id="a1", activity_type="running", zone_seconds=(1, 2, 3, 4, 5)),
+            garmin_activity(id="a2", activity_type="cycling", zone_seconds=(10, 20, 30, 40, 50)),
+            garmin_activity(
+                id="a3",
+                activity_type="strength_training",
+                zone_seconds=(10, 20, 30, 40, 50),
+            ),
         )
     )
-    assert log.garmin_zone_seconds_since("2026-01-01") == (1, 2, 3, 4, 5)
+    assert log.garmin_zone_seconds_since("2026-01-01") == (0, 42, 63, 84, 105)
+
+
+def test_garmin_zone_seconds_since_excludes_zone_one():
+    """Zone 1 is mostly rest between sets or warm-up drift, not training effort."""
+    log = Log(garmin_activities=(garmin_activity(zone_seconds=(999, 1, 1, 1, 1)),))
+    assert log.garmin_zone_seconds_since("2026-01-01") == (0, 1, 1, 1, 1)
 
 
 @pytest.mark.parametrize(

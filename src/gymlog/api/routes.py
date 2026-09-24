@@ -862,18 +862,22 @@ def hr_zone_insights(request: Request) -> Any:
 def _zone_summary(log: Any) -> list[dict[str, int]]:
     """Time in each heart rate zone, in minutes and as a share of the period.
 
-    The percentage is of time *tracked in a zone*, not of the whole period —
-    there is no untracked/rest bucket to make it sum against, since this only
-    ever covers workout time. `or 1` on each total sidesteps a division by
-    zero when nothing has synced yet; the numerators are then all 0 too, so
-    the result is a correct 0% rather than a crash.
+    Zone 1 is left out of the result entirely, not just zeroed: `Log.
+    garmin_zone_seconds_since` never accumulates it, so a "Zone 1" row would
+    only ever read 0m/0% and add nothing but noise.
 
-    `bpm_label` comes from the most recent run's own thresholds
+    The percentage is of time *tracked in zones 2-5*, not of the whole period
+    — there is no untracked/rest bucket to make it sum against, since this
+    only ever covers workout time. `or 1` on each total sidesteps a division
+    by zero when nothing has synced yet; the numerators are then all 0 too,
+    so the result is a correct 0% rather than a crash.
+
+    `bpm_label` comes from the most recent activity's own thresholds
     (`Log.latest_garmin_zone_boundaries`), not this period's — a zone's bpm
     range doesn't change week to week, so there is no "this week's zone 3"
-    boundary distinct from "the current one". Empty when no run has yielded
-    boundaries yet. Built here rather than in the template so the "top zone
-    is open-ended" rule lives in one place.
+    boundary distinct from "the current one". Empty when no activity has
+    yielded boundaries yet. Built here rather than in the template so the
+    "top zone is open-ended" rule lives in one place.
     """
     today = _today()
     week_seconds = log.garmin_zone_seconds_since((today - timedelta(days=7)).isoformat())
@@ -890,7 +894,7 @@ def _zone_summary(log: Any) -> list[dict[str, int]]:
             "month_pct": round(100 * month_seconds[zone] / month_total),
             "bpm_label": _bpm_label(boundaries, zone),
         }
-        for zone in range(len(week_seconds))
+        for zone in range(1, len(week_seconds))
     ]
 
 
