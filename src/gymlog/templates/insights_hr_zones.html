@@ -4,6 +4,8 @@
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
 
+<p class="last">Runs only — a strength session's heart rate tracks the rest between sets, not effort, so it isn't counted here.</p>
+
 {% if zones and (zones | sum(attribute="month_minutes")) > 0 %}
 <style>
   /* One hue, light -> dark: zones are an ordered tier (easy -> max effort), not
@@ -59,6 +61,6 @@
   </table>
 </div>
 {% else %}
-<p class="last">No heart rate zone data yet — sync some activities from <a href="/garmin">Garmin</a> first.</p>
+<p class="last">No heart rate zone data yet — sync some runs from <a href="/garmin">Garmin</a> first.</p>
 {% endif %}
 {% endblock %}

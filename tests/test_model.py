@@ -249,6 +249,18 @@ def test_garmin_zone_seconds_since_ignores_a_failed_zone_fetch():
     assert log.garmin_zone_seconds_since("2026-01-01") == (0, 0, 0, 0, 0)
 
 
+def test_garmin_zone_seconds_since_only_counts_runs():
+    """A strength session's heart rate tracks the rest between sets, not effort."""
+    log = Log(
+        garmin_activities=(
+            garmin_activity(activity_type="running", zone_seconds=(1, 2, 3, 4, 5)),
+            garmin_activity(activity_type="cycling", zone_seconds=(10, 20, 30, 40, 50)),
+            garmin_activity(activity_type="strength_training", zone_seconds=(10, 20, 30, 40, 50)),
+        )
+    )
+    assert log.garmin_zone_seconds_since("2026-01-01") == (1, 2, 3, 4, 5)
+
+
 @pytest.mark.parametrize(
     ("today", "week", "due"),
     [

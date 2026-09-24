@@ -702,9 +702,17 @@ class Log:
         )
 
     def garmin_zone_seconds_since(self, cutoff: str) -> tuple[int, ...]:
-        """Total time in each heart rate zone across activities on/after `cutoff`."""
+        """Total time in each heart rate zone across runs on/after `cutoff`.
+
+        Runs only, not every Garmin activity: a strength session's heart rate
+        swings with the rest between sets rather than with effort, and mixing
+        that into a "time in zone" figure would misrepresent it. Running is
+        the one activity type this is meaningful for today.
+        """
         totals = [0] * GARMIN_ZONE_COUNT
         for activity in self.garmin_activities:
+            if activity.activity_type != "running":
+                continue
             if activity.date < cutoff or len(activity.zone_seconds) != GARMIN_ZONE_COUNT:
                 continue
             for zone, seconds in enumerate(activity.zone_seconds):

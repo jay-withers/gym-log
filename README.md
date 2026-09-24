@@ -89,9 +89,12 @@ Five sections that are not derived from sets and reps:
   **HR Zone Insights** (`/insights/hr-zones`) is a read-only summary — a
   segmented bar plus minutes and percentage per zone, this week and over the
   last 30 days — computed from whatever Garmin sync (below) has synced; it
-  has no button of its own. Zones are colored with a single-hue ordinal ramp
-  (light = zone 1, dark = zone 5) rather than categorical colors, since the
-  zones are an ordered tier, not independent identities.
+  has no button of its own. Scoped to running activities only
+  (`Log.garmin_zone_seconds_since`): a strength session's heart rate tracks
+  the rest between sets rather than effort, so it would misrepresent a "time
+  in zone" figure. Zones are colored with a single-hue ordinal ramp (light =
+  zone 1, dark = zone 5) rather than categorical colors, since the zones are
+  an ordered tier, not independent identities.
 - **Garmin** (`/garmin`) — a cut-down browser (not a full analysis surface;
   that's HR Zone Insights above) for the last 30 days of activities and daily
   summaries (steps, resting heart rate, sleep) synced from a personal Garmin
