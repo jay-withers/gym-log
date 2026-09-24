@@ -1239,6 +1239,8 @@ def test_hr_zone_insights_page_shows_minutes_and_percentages(client, seeded):
     assert "2m · 67%" in page  # zone 2: 120s of 180s tracked
     assert "--pct: 33" in page  # the bar segment's proportional width
     assert "--pct: 67" in page
+    assert "96-113 bpm" in page  # zone 1's range, from the run's own thresholds
+    assert "161+ bpm" in page  # zone 5 is open-ended
 
 
 def test_hr_zone_insights_page_is_empty_before_any_sync(client, seeded):

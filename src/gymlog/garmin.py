@@ -10,11 +10,11 @@ of friction (MFA challenges, rate limiting) an unofficial API punishes.
 
 Field names below (`activityId`, `startTimeLocal`, `activityType.typeKey`,
 `averageHR`/`maxHR`, `totalSteps`, `restingHeartRate`,
-`dailySleepDTO.sleepTimeSeconds`, `zoneNumber`/`secsInZone`) are Garmin's own,
-confirmed against community-documented response shapes rather than this
-library's (minimal) type hints — Garmin can change them without notice, which
-is why every read here is defensive (`.get()` with a fallback), never a bare
-index.
+`dailySleepDTO.sleepTimeSeconds`, `zoneNumber`/`secsInZone`/`zoneLowBoundary`)
+are Garmin's own, confirmed against community-documented response shapes
+rather than this library's (minimal) type hints — Garmin can change them
+without notice, which is why every read here is defensive (`.get()` with a
+fallback), never a bare index.
 """
 
 from __future__ import annotations
@@ -90,38 +90,48 @@ def _activity(payload: dict[str, Any], client: Any) -> GarminActivity:
         duration_seconds=int(payload.get("duration") or 0),
         avg_hr=int(payload.get("averageHR") or 0),
         max_hr=int(payload.get("maxHR") or 0),
-        zone_seconds=_zone_seconds(activity_id, client),
+        **_zones(activity_id, client),
     )
 
 
-def _zone_seconds(activity_id: str, client: Any) -> tuple[int, ...]:
-    """Time in each of the 5 zones for one activity, or `()` if the detail call failed.
+def _zones(activity_id: str, client: Any) -> dict[str, tuple[int, ...]]:
+    """Time in, and the bpm each of the 5 zones starts at, or `()` for both
+    if the detail call failed.
 
     Wrapped per-activity rather than once for the whole sync: one activity
     with no zone detail (an indoor strength session Garmin doesn't compute
-    zones for, say) should not cost the rest of the sync.
+    zones for, say) should not cost the rest of the sync. Returned together
+    since both come off the same response and either fails or succeeds as a
+    pair — no scenario needs one without the other.
     """
     if not activity_id:
-        return ()
+        return {"zone_seconds": (), "zone_low_bpm": ()}
     try:
         raw_zones = client.get_activity_hr_in_timezones(activity_id)
     except Exception:
         logger.warning(
             "could not fetch heart rate zones for activity %s", activity_id, exc_info=True
         )
-        return ()
+        return {"zone_seconds": (), "zone_low_bpm": ()}
 
-    by_zone = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    seconds_by_zone = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    low_bpm_by_zone = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
     for entry in raw_zones if isinstance(raw_zones, list) else ():
         if not isinstance(entry, dict):
             continue
         zone_number = int(entry.get("zoneNumber") or 0)
         if 1 <= zone_number <= GARMIN_ZONE_COUNT:
-            by_zone[zone_number - 1] = int(entry.get("secsInZone") or 0)
+            seconds_by_zone[zone_number - 1] = int(entry.get("secsInZone") or 0)
+            low_bpm_by_zone[zone_number - 1] = int(entry.get("zoneLowBoundary") or 0)
 
-    if not any(by_zone.values()):
-        return ()
-    return tuple(by_zone[zone] for zone in range(GARMIN_ZONE_COUNT))
+    if not any(seconds_by_zone.values()):
+        return {"zone_seconds": (), "zone_low_bpm": ()}
+    return {
+        "zone_seconds": tuple(seconds_by_zone[zone] for zone in range(GARMIN_ZONE_COUNT)),
+        "zone_low_bpm": tuple(low_bpm_by_zone[zone] for zone in range(GARMIN_ZONE_COUNT))
+        if all(low_bpm_by_zone.values())
+        else (),
+    }
 
 
 def _day(client: Any, cdate: str) -> GarminDay:

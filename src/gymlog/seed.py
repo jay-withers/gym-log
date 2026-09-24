@@ -245,6 +245,7 @@ def _garmin_activities(now: date) -> tuple[GarminActivity, ...]:
             avg_hr=142,
             max_hr=168,
             zone_seconds=(120, 480, 720, 420, 60),
+            zone_low_bpm=(97, 116, 135, 152, 163),
         ),
     )
 

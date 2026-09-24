@@ -404,6 +404,11 @@ class GarminActivity:
     (`hrTimeInZones`) — there is no whole-day equivalent, so heart rate zones
     are always scoped to a workout. Empty rather than missing when that one
     detail call failed, so a partial sync still keeps the activity itself.
+
+    `zone_low_bpm` is that same response's `zoneLowBoundary` per zone — the
+    bpm a zone starts at, per Garmin's own threshold settings at the time of
+    the activity. Kept alongside rather than looked up separately, since
+    there is no other endpoint this app calls that exposes it.
     """
 
     id: str
@@ -413,6 +418,7 @@ class GarminActivity:
     avg_hr: int = 0
     max_hr: int = 0
     zone_seconds: tuple[int, ...] = ()
+    zone_low_bpm: tuple[int, ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -425,6 +431,8 @@ class GarminActivity:
         }
         if self.zone_seconds:
             payload["zone_seconds"] = list(self.zone_seconds)
+        if self.zone_low_bpm:
+            payload["zone_low_bpm"] = list(self.zone_low_bpm)
         return payload
 
     @classmethod
@@ -437,6 +445,7 @@ class GarminActivity:
             avg_hr=int(payload.get("avg_hr", 0) or 0),
             max_hr=int(payload.get("max_hr", 0) or 0),
             zone_seconds=tuple(int(z) for z in payload.get("zone_seconds", []) or ()),
+            zone_low_bpm=tuple(int(z) for z in payload.get("zone_low_bpm", []) or ()),
         )
 
 
@@ -718,6 +727,21 @@ class Log:
             for zone, seconds in enumerate(activity.zone_seconds):
                 totals[zone] += seconds
         return tuple(totals)
+
+    def latest_garmin_zone_boundaries(self) -> tuple[int, ...]:
+        """The bpm each zone starts at, from the most recent run that has them.
+
+        Boundaries come from Garmin's own threshold settings, which barely
+        move day to day, so the latest run's figures stand in for "current"
+        rather than needing to be recomputed per activity. `garmin_activities`
+        is sorted ascending by date, so the last match is the most recent.
+        """
+        for activity in reversed(self.garmin_activities):
+            if activity.activity_type != "running":
+                continue
+            if len(activity.zone_low_bpm) == GARMIN_ZONE_COUNT:
+                return activity.zone_low_bpm
+        return ()
 
     def to_json(self) -> str:
         return json.dumps(
