@@ -12,7 +12,7 @@ import pathlib
 import re
 import uuid
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Form, Request, status
@@ -786,20 +786,26 @@ def delete_condition(condition_id: str) -> Any:
     return RedirectResponse("/conditions", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# --- AI insight --------------------------------------------------------------
+# --- Insights: an index over an AI summary and a heart-rate-zone breakdown ---
 
 
 @router.get("/insights", response_class=HTMLResponse, include_in_schema=False)
-def insights_list(request: Request) -> Any:
+def insights_index(request: Request) -> Any:
+    """Just the two tiles below — neither subsection needs the log to link to itself."""
+    return templates.TemplateResponse(request, "insights.html", {})
+
+
+@router.get("/insights/ai", response_class=HTMLResponse, include_in_schema=False)
+def ai_insights_list(request: Request) -> Any:
     log, _etag = store.load()
     return templates.TemplateResponse(
         request,
-        "insights.html",
-        {"insights": sorted(log.insights, key=lambda i: i.week_of, reverse=True)},
+        "insights_ai.html",
+        {"insights": sorted(log.insights, key=lambda i: i.generated_at, reverse=True)},
     )
 
 
-@router.post("/insights", include_in_schema=False)
+@router.post("/insights/ai", include_in_schema=False)
 def generate_insight_now() -> Any:
     """The same generation the scheduled job runs, done here instead of waiting for it.
 
@@ -815,7 +821,65 @@ def generate_insight_now() -> Any:
         store.update(lambda current: current.with_insight(new_insight))
     except store.ConflictError as exc:
         raise ConflictResponse("the log was changed elsewhere; the insight was not saved") from exc
-    return RedirectResponse("/insights", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse("/insights/ai", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/insights/hr-zones", response_class=HTMLResponse, include_in_schema=False)
+def hr_zone_insights(request: Request) -> Any:
+    log, _etag = store.load()
+    return templates.TemplateResponse(
+        request, "insights_hr_zones.html", {"zones": _zone_summary(log)}
+    )
+
+
+def _zone_summary(log: Any) -> list[dict[str, int]]:
+    """Time in each heart rate zone, in minutes, for "this week" and "last 30 days"."""
+    today = _today()
+    week_seconds = log.garmin_zone_seconds_since((today - timedelta(days=7)).isoformat())
+    month_seconds = log.garmin_zone_seconds_since((today - timedelta(days=30)).isoformat())
+    return [
+        {
+            "zone": zone + 1,
+            "week_minutes": week_seconds[zone] // 60,
+            "month_minutes": month_seconds[zone] // 60,
+        }
+        for zone in range(len(week_seconds))
+    ]
+
+
+# --- Garmin sync: a cut-down browser for the last 30 days of synced data -----
+
+
+@router.get("/garmin", response_class=HTMLResponse, include_in_schema=False)
+def garmin_list(request: Request) -> Any:
+    log, _etag = store.load()
+    return templates.TemplateResponse(
+        request,
+        "garmin.html",
+        {
+            "activities": sorted(log.garmin_activities, key=lambda a: a.date, reverse=True),
+            "days": sorted(log.garmin_days, key=lambda d: d.date, reverse=True),
+        },
+    )
+
+
+@router.post("/garmin/sync", include_in_schema=False)
+def sync_garmin_now() -> Any:
+    """Same generation the scheduled job runs, triggered from the page instead.
+
+    Blocks on the Garmin API calls rather than handing off to a background
+    job — same trade-off as the insight button: a person clicking once, not a
+    timer, so the wait is worth seeing the result immediately.
+    """
+    from ..garmin import GARMIN_RETENTION_DAYS, sync_garmin
+
+    activities, days = sync_garmin()
+    keep_since = (_today() - timedelta(days=GARMIN_RETENTION_DAYS)).isoformat()
+    try:
+        store.update(lambda current: current.with_garmin_sync(activities, days, keep_since))
+    except store.ConflictError as exc:
+        raise ConflictResponse("the log was changed elsewhere; the sync was not saved") from exc
+    return RedirectResponse("/garmin", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # --- helpers -----------------------------------------------------------------

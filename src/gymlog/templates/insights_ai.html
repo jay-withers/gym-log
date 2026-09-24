@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}AI Insights · Health{% endblock %}
+{% block subtitle %}AI Insights{% endblock %}
+{% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
+{% block body %}
+
+<form method="post" action="/insights/ai">
+  <button type="submit" class="btn small">Generate insight now</button>
+</form>
+<p class="last" style="margin-top:8px">Takes a few seconds — it's a live call to DeepSeek.</p>
+
+{% if insights %}
+{% for i in insights %}
+<div class="card">
+  <div class="slot">{{ i.generated_at }}</div>
+  <p class="last" style="color:var(--text);font-size:14px;white-space:pre-line">{{ i.summary }}</p>
+</div>
+{% endfor %}
+{% else %}
+<p class="last">No insight yet — the insight job writes the first one after enough sessions are logged.</p>
+{% endif %}
+{% endblock %}

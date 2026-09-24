@@ -24,9 +24,14 @@ tripped, which `from_json` tolerating missing fields gives.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any
+
+# Zones 1-5. Every `zone_seconds` tuple has exactly this many entries, or is
+# empty when a per-activity detail fetch failed — never a partial length.
+GARMIN_ZONE_COUNT = 5
 
 # Bumped when the shape changes incompatibly. A document from the future is left
 # alone rather than overwritten — the alternative is a newer deployment silently
@@ -392,6 +397,77 @@ class Insight:
 
 
 @dataclass(frozen=True)
+class GarminActivity:
+    """One Garmin-logged activity, synced by `gymlog.garmin.sync_garmin`.
+
+    `zone_seconds` is Garmin's own per-activity time-in-zone breakdown
+    (`hrTimeInZones`) — there is no whole-day equivalent, so heart rate zones
+    are always scoped to a workout. Empty rather than missing when that one
+    detail call failed, so a partial sync still keeps the activity itself.
+    """
+
+    id: str
+    date: str
+    activity_type: str
+    duration_seconds: int = 0
+    avg_hr: int = 0
+    max_hr: int = 0
+    zone_seconds: tuple[int, ...] = ()
+
+    def to_json(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "id": self.id,
+            "date": self.date,
+            "activity_type": self.activity_type,
+            "duration_seconds": self.duration_seconds,
+            "avg_hr": self.avg_hr,
+            "max_hr": self.max_hr,
+        }
+        if self.zone_seconds:
+            payload["zone_seconds"] = list(self.zone_seconds)
+        return payload
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> GarminActivity:
+        return cls(
+            id=str(payload.get("id", "")),
+            date=str(payload.get("date", "")),
+            activity_type=str(payload.get("activity_type", "")),
+            duration_seconds=int(payload.get("duration_seconds", 0) or 0),
+            avg_hr=int(payload.get("avg_hr", 0) or 0),
+            max_hr=int(payload.get("max_hr", 0) or 0),
+            zone_seconds=tuple(int(z) for z in payload.get("zone_seconds", []) or ()),
+        )
+
+
+@dataclass(frozen=True)
+class GarminDay:
+    """One day's Garmin summary — steps, resting heart rate, sleep."""
+
+    date: str
+    steps: int = 0
+    resting_hr: int = 0
+    sleep_seconds: int = 0
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "date": self.date,
+            "steps": self.steps,
+            "resting_hr": self.resting_hr,
+            "sleep_seconds": self.sleep_seconds,
+        }
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> GarminDay:
+        return cls(
+            date=str(payload.get("date", "")),
+            steps=int(payload.get("steps", 0) or 0),
+            resting_hr=int(payload.get("resting_hr", 0) or 0),
+            sleep_seconds=int(payload.get("sleep_seconds", 0) or 0),
+        )
+
+
+@dataclass(frozen=True)
 class Session:
     """One training session, as performed.
 
@@ -458,6 +534,8 @@ class Log:
     conditions: tuple[Condition, ...] = ()
     goals: tuple[Goal, ...] = ()
     insights: tuple[Insight, ...] = ()
+    garmin_activities: tuple[GarminActivity, ...] = ()
+    garmin_days: tuple[GarminDay, ...] = ()
 
     @property
     def current_block(self) -> Block | None:
@@ -587,6 +665,49 @@ class Log:
         """Append an insight."""
         return replace(self, insights=(*self.insights, insight))
 
+    def with_garmin_sync(
+        self,
+        activities: Iterable[GarminActivity],
+        days: Iterable[GarminDay],
+        keep_since: str,
+    ) -> Log:
+        """Merge freshly-synced Garmin records and drop anything older than `keep_since`.
+
+        Retention is enforced here, at write time, rather than by filtering on
+        every read: a rolling window this way is a size the document can never
+        outgrow, instead of a display filter over an archive that keeps growing
+        underneath it.
+        """
+        merged_activities = {a.id: a for a in self.garmin_activities} | {
+            a.id: a for a in activities
+        }
+        merged_days = {d.date: d for d in self.garmin_days} | {d.date: d for d in days}
+        return replace(
+            self,
+            garmin_activities=tuple(
+                sorted(
+                    (a for a in merged_activities.values() if a.date >= keep_since),
+                    key=lambda a: a.date,
+                )
+            ),
+            garmin_days=tuple(
+                sorted(
+                    (d for d in merged_days.values() if d.date >= keep_since),
+                    key=lambda d: d.date,
+                )
+            ),
+        )
+
+    def garmin_zone_seconds_since(self, cutoff: str) -> tuple[int, ...]:
+        """Total time in each heart rate zone across activities on/after `cutoff`."""
+        totals = [0] * GARMIN_ZONE_COUNT
+        for activity in self.garmin_activities:
+            if activity.date < cutoff or len(activity.zone_seconds) != GARMIN_ZONE_COUNT:
+                continue
+            for zone, seconds in enumerate(activity.zone_seconds):
+                totals[zone] += seconds
+        return tuple(totals)
+
     def to_json(self) -> str:
         return json.dumps(
             {
@@ -602,6 +723,12 @@ class Log:
                 ],
                 "goals": [g.to_json() for g in sorted(self.goals, key=lambda g: g.id)],
                 "insights": [i.to_json() for i in sorted(self.insights, key=lambda i: i.week_of)],
+                "garmin_activities": [
+                    a.to_json() for a in sorted(self.garmin_activities, key=lambda a: a.date)
+                ],
+                "garmin_days": [
+                    d.to_json() for d in sorted(self.garmin_days, key=lambda d: d.date)
+                ],
             },
             indent=2,
         )
@@ -647,5 +774,15 @@ class Log:
                 Insight.from_json(i)
                 for i in payload.get("insights", []) or ()
                 if isinstance(i, dict)
+            ),
+            garmin_activities=tuple(
+                GarminActivity.from_json(a)
+                for a in payload.get("garmin_activities", []) or ()
+                if isinstance(a, dict)
+            ),
+            garmin_days=tuple(
+                GarminDay.from_json(d)
+                for d in payload.get("garmin_days", []) or ()
+                if isinstance(d, dict)
             ),
         )

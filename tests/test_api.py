@@ -12,7 +12,7 @@ from gymlog import store
 from gymlog.api.main import create_app
 from gymlog.model import Block, Day, Log, SetLog
 
-from .factories import block, entry, exercise, insight, session
+from .factories import block, entry, exercise, garmin_activity, garmin_day, insight, session
 
 
 @pytest.fixture
@@ -135,7 +135,7 @@ def test_the_manifest_starts_at_strength_not_the_home_menu(client):
 def test_home_links_to_every_section(client, seeded):
     login(client)
     page = client.get("/").text
-    for href in ("/strength", "/achievements", "/goals", "/conditions", "/insights"):
+    for href in ("/strength", "/achievements", "/goals", "/conditions", "/insights", "/garmin"):
         assert f'href="{href}"' in page
 
 
@@ -1168,19 +1168,31 @@ def test_conditions_are_listed_most_recently_started_first(client, seeded):
     assert page.index("Newer") < page.index("Older")
 
 
-# --- AI insight --------------------------------------------------------------
+# --- Insights: an index, an AI summary, and a heart-rate-zone breakdown -----
 
 
-def test_insights_page_lists_stored_insights(client, seeded):
-    store.update(lambda current: current.with_insight(insight(summary="Good week overall.")))
+def test_insights_index_links_to_both_subsections(client, seeded):
     login(client)
     page = client.get("/insights").text
-    assert "Good week overall." in page
+    assert 'href="/insights/ai"' in page
+    assert 'href="/insights/hr-zones"' in page
 
 
-def test_insights_page_when_empty(client, seeded):
+def test_ai_insights_page_lists_stored_insights(client, seeded):
+    store.update(
+        lambda current: current.with_insight(
+            insight(summary="Good week overall.", generated_at="2026-09-20")
+        )
+    )
     login(client)
-    assert client.get("/insights").status_code == 200
+    page = client.get("/insights/ai").text
+    assert "Good week overall." in page
+    assert "2026-09-20" in page
+
+
+def test_ai_insights_page_when_empty(client, seeded):
+    login(client)
+    assert client.get("/insights/ai").status_code == 200
 
 
 def test_generate_insight_now_calls_deepseek_and_redirects_back(client, seeded, monkeypatch):
@@ -1191,9 +1203,66 @@ def test_generate_insight_now_calls_deepseek_and_redirects_back(client, seeded, 
     )
     login(client)
 
-    response = client.post("/insights", follow_redirects=False)
+    response = client.post("/insights/ai", follow_redirects=False)
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/insights"
-    page = client.get("/insights").text
+    assert response.headers["location"] == "/insights/ai"
+    page = client.get("/insights/ai").text
     assert "Fresh from the button." in page
+
+
+def test_hr_zone_insights_page_shows_minutes(client, seeded):
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[
+                garmin_activity(date=date.today().isoformat(), zone_seconds=(60, 120, 0, 0, 0))
+            ],
+            days=[],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/hr-zones").text
+    assert "1m" in page  # zone 1: 60s
+    assert "2m" in page  # zone 2: 120s
+
+
+def test_hr_zone_insights_page_is_empty_before_any_sync(client, seeded):
+    login(client)
+    page = client.get("/insights/hr-zones").text
+    assert "No heart rate zone data yet" in page
+
+
+# --- Garmin sync: a cut-down browser for the last 30 days of synced data -----
+
+
+def test_garmin_page_lists_synced_activities_and_days(client, seeded):
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[garmin_activity(id="a1", activity_type="cycling")],
+            days=[garmin_day(date="2026-09-15", steps=9000)],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/garmin").text
+    assert "cycling" in page
+    assert "9000 steps" in page
+
+
+def test_garmin_page_when_empty(client, seeded):
+    login(client)
+    assert client.get("/garmin").status_code == 200
+
+
+def test_sync_garmin_now_calls_garmin_and_redirects_back(client, seeded, monkeypatch):
+    synced_activity = garmin_activity(id="a1", activity_type="swimming")
+    monkeypatch.setattr("gymlog.garmin.sync_garmin", lambda: ([synced_activity], []))
+    login(client)
+
+    response = client.post("/garmin/sync", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/garmin"
+    page = client.get("/garmin").text
+    assert "swimming" in page

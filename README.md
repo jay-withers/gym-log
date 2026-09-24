@@ -61,7 +61,7 @@ linking to it and to the sections below; the installed-to-home-screen phone
 icon still opens straight to `/strength`, since that is the twice-a-week fast
 path this app exists for.
 
-Four sections that are not derived from sets and reps:
+Five sections that are not derived from sets and reps:
 
 - **Achievements** (`/achievements`) — a free-text, append-only list of
   milestones. Never edited, only added to.
@@ -70,16 +70,35 @@ Four sections that are not derived from sets and reps:
 - **Injuries & conditions** (`/conditions`) — structured records (body part,
   status, start/resolved dates, a note), marked resolved by hand. Read by the
   insight so it does not suggest anything that would aggravate an active one.
-- **Insight** (`/insights`) — a DeepSeek-generated summary of the week,
-  written on a weekly schedule by `azurerm_container_app_job.insight`
-  (`terraform/main.container-apps-job.tf`). The app scales to zero between
-  workouts, so nothing in-process could fire a weekly timer; the job exists
-  specifically to run on a schedule regardless of whether anyone has opened
-  the app that week. There is no cooldown between runs, so the page also has
-  a "Generate insight now" button that calls DeepSeek in-process and blocks
-  the request for the few seconds that takes; `make insight` runs the same
-  generation by hand against the real log, and `az containerapp job start`
-  triggers it on the deployed job directly.
+- **Insights** (`/insights`) — an index linking to two sub-pages, not a page
+  in its own right. **AI Insights** (`/insights/ai`) is a DeepSeek-generated
+  summary of the week, dated by when it was generated rather than the week it
+  covers, written on a weekly schedule by
+  `azurerm_container_app_job.insight` (`terraform/main.container-apps-job.tf`).
+  The app scales to zero between workouts, so nothing in-process could fire a
+  weekly timer; the job exists specifically to run on a schedule regardless of
+  whether anyone has opened the app that week. There is no cooldown between
+  runs, so the page also has a "Generate insight now" button that calls
+  DeepSeek in-process and blocks the request for the few seconds that takes;
+  `make insight` runs the same generation by hand against the real log, and
+  `az containerapp job start` triggers it on the deployed job directly.
+  **HR Zone Insights** (`/insights/hr-zones`) is a read-only summary — time in
+  each of the 5 zones, this week and over the last 30 days — computed from
+  whatever Garmin sync (below) has synced; it has no button of its own.
+- **Garmin** (`/garmin`) — a cut-down browser (not a full analysis surface;
+  that's HR Zone Insights above) for the last 30 days of activities and daily
+  summaries (steps, resting heart rate, sleep) synced from a personal Garmin
+  Connect account, via the unofficial `garminconnect` library since Garmin has
+  no public API for one. Written on a daily schedule by
+  `azurerm_container_app_job.garmin_sync`
+  (`terraform/main.container-apps-job.garmin.tf`), same reasoning as the
+  insight job, plus a "Sync now" button on the page. Retention is a fixed
+  rolling 30 days, enforced at write time (`Log.with_garmin_sync`) rather than
+  as a display filter, so the document this app is built around stays a size
+  it can never outgrow. A cached login session is stored as a second small
+  blob in the same container the log lives in, so the job re-authenticates
+  with a password only when that cache is missing or rejected — not on every
+  run, which is the kind of thing an unofficial API punishes.
 
 ## Design
 
@@ -203,10 +222,11 @@ Ordering-sensitive:
 2. Set `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` as
    repository variables, or the plan legs stay skipped.
 3. `make apply`.
-4. `make secrets` and run what it prints to set `APP-PASSCODE` and
-   `DEEPSEEK-API-KEY`. The insight job fails at the next scheduled run,
-   rather than at apply time, if the latter is skipped — it resolves the key
-   the same way `APP-PASSCODE` is resolved, lazily and at runtime.
+4. `make secrets` and run what it prints to set `APP-PASSCODE`,
+   `DEEPSEEK-API-KEY`, `GARMIN-EMAIL` and `GARMIN-PASSWORD`. The insight and
+   Garmin sync jobs fail at their next scheduled run, rather than at apply
+   time, if any of these are skipped — they resolve secrets the same way
+   `APP-PASSCODE` is resolved, lazily and at runtime.
 5. **Flip the GHCR package to public.** New packages default to private
    regardless of repository visibility, and there is no pull secret.
 6. `make import FILE=Gym_3.xlsx NAME="Block 3"`.

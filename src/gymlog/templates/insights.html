@@ -4,19 +4,18 @@
 {% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
 {% block body %}
 
-<form method="post" action="/insights">
-  <button type="submit" class="btn small">Generate insight now</button>
-</form>
-<p class="last" style="margin-top:8px">Takes a few seconds — it's a live call to DeepSeek.</p>
-
-{% if insights %}
-{% for i in insights %}
-<div class="card">
-  <div class="slot">week of {{ i.week_of }}</div>
-  <p class="last" style="color:var(--text);font-size:14px;white-space:pre-line">{{ i.summary }}</p>
+<div class="tiles">
+  <a class="tile" href="/insights/ai">
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z"/>
+    </svg>
+    <span>AI Insights</span>
+  </a>
+  <a class="tile" href="/insights/hr-zones">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 12h-4l-3 7-6-14-3 7H2"/>
+    </svg>
+    <span>HR Zone Insights</span>
+  </a>
 </div>
-{% endfor %}
-{% else %}
-<p class="last">No insight yet — the insight job writes the first one after enough sessions are logged.</p>
-{% endif %}
 {% endblock %}

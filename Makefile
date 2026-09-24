@@ -10,7 +10,7 @@ IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint test run seed build push deploy url logs import show insight insight-local init fmt validate plan apply secrets
+.PHONY: help install lint test run seed build push deploy url logs import show insight insight-local garmin-sync garmin-sync-local init fmt validate plan apply secrets
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -83,7 +83,7 @@ push: ## Push the image to ghcr.io (needs write:packages)
 # to the local git SHA, which is what you want when iterating. Deploying is
 # different: the default would silently roll the app onto whatever commit
 # happens to be checked out, which may never have been pushed to ghcr.io at all.
-deploy: ## Roll an image tag onto the app and the weekly insight job (IMAGE_TAG required)
+deploy: ## Roll an image tag onto the app and both jobs (IMAGE_TAG required)
 	@if [ -z "$(IMAGE_TAG_EXPLICIT)" ]; then \
 		echo "error: pass a tag explicitly, e.g. make deploy IMAGE_TAG=v0.1.0" >&2; exit 1; fi
 	@case "$(IMAGE_TAG)" in latest|main|unset) \
@@ -101,6 +101,12 @@ deploy: ## Roll an image tag onto the app and the weekly insight job (IMAGE_TAG 
 		--image $(IMAGE_REGISTRY)/gymlog:$(IMAGE_TAG) \
 		--set-env-vars IMAGE_TAG=$(IMAGE_TAG) \
 		STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)"
+	az containerapp job update \
+		--name "$$(terraform -chdir=$(TF_DIR) output -raw container_app_job_garmin_name)" \
+		--resource-group "$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
+		--image $(IMAGE_REGISTRY)/gymlog:$(IMAGE_TAG) \
+		--set-env-vars IMAGE_TAG=$(IMAGE_TAG) \
+		STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)"
 
 url: ## Print the application's URL
 	@terraform -chdir=$(TF_DIR) output -raw app_url; echo
@@ -114,6 +120,8 @@ logs: ## Tail the deployed app's logs
 secrets: ## Print the az commands that populate this project's Key Vault
 	@echo "az keyvault secret set --vault-name $$(terraform -chdir=$(TF_DIR) output -raw key_vault_name) --name APP-PASSCODE --value <passcode>"
 	@echo "az keyvault secret set --vault-name $$(terraform -chdir=$(TF_DIR) output -raw key_vault_name) --name DEEPSEEK-API-KEY --value <api-key>"
+	@echo "az keyvault secret set --vault-name $$(terraform -chdir=$(TF_DIR) output -raw key_vault_name) --name GARMIN-EMAIL --value <email>"
+	@echo "az keyvault secret set --vault-name $$(terraform -chdir=$(TF_DIR) output -raw key_vault_name) --name GARMIN-PASSWORD --value <password>"
 
 insight: ## Generate a weekly insight against the real blob (needs DEEPSEEK-API-KEY in Key Vault)
 	STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)" \
@@ -124,6 +132,16 @@ insight: ## Generate a weekly insight against the real blob (needs DEEPSEEK-API-
 # (see settings.py), so this needs no Key Vault to actually call DeepSeek.
 insight-local: ## Generate a weekly insight against the local log (needs DEEPSEEK_API_KEY)
 	STATE_CONTAINER_URL= uv run gymlog insight
+
+garmin-sync: ## Sync the last 30 days from Garmin against the real blob (needs GARMIN-EMAIL/PASSWORD in Key Vault)
+	STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)" \
+		uv run gymlog garmin-sync
+
+# Same STATE_CONTAINER_URL= pattern as `insight-local`: the local file, never
+# the real log, and GARMIN_EMAIL/GARMIN_PASSWORD resolve from the environment
+# first, so this needs no Key Vault either.
+garmin-sync-local: ## Sync the last 30 days from Garmin against the local log (needs GARMIN_EMAIL/GARMIN_PASSWORD)
+	STATE_CONTAINER_URL= uv run gymlog garmin-sync
 
 init: ## terraform init, without configuring the state backend
 	terraform -chdir=$(TF_DIR) init -backend=false

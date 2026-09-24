@@ -60,3 +60,5 @@ apps/dashboard/dist/
 
 # The local training log, when running without a storage account.
 .gymlog.json
+# The cached Garmin login session that goes with it locally — see store.py.
+.gymlog.garmin-session.json

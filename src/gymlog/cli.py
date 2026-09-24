@@ -94,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("insight", help="generate an AI training insight")
 
+    sub.add_parser("garmin-sync", help="sync recent activities and daily summaries from Garmin")
+
     args = parser.parse_args(argv)
 
     _configure_logging()
@@ -112,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
             return _seed(args)
         if args.command == "insight":
             return _insight()
+        if args.command == "garmin-sync":
+            return _garmin_sync()
     finally:
         telemetry.flush()
 
@@ -202,4 +206,20 @@ def _insight() -> int:
     insight = generate_insight(log)
     store.update(lambda current: current.with_insight(insight))
     logging.getLogger("gymlog").info("recorded insight for week of %s", insight.week_of)
+    return 0
+
+
+def _garmin_sync() -> int:
+    from datetime import timedelta
+
+    from . import store
+    from .garmin import GARMIN_RETENTION_DAYS, sync_garmin
+
+    activities, days = sync_garmin()
+    keep_since = (date.today() - timedelta(days=GARMIN_RETENTION_DAYS)).isoformat()
+
+    store.update(lambda current: current.with_garmin_sync(activities, days, keep_since))
+    logging.getLogger("gymlog").info(
+        "synced %d activities, %d days from garmin", len(activities), len(days)
+    )
     return 0
