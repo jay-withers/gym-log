@@ -48,6 +48,17 @@ class ConflictResponse(Exception):
     """Raised when a write lost its race twice. Handled in main.create_app."""
 
 
+class GarminSyncFailed(Exception):
+    """Raised when a manual Garmin sync errors out. Handled in main.create_app.
+
+    `garmin.sync_garmin` deliberately lets auth/API failures propagate
+    uncaught, so the scheduled CLI job exits non-zero and pages whoever
+    watches it. A person tapping "Sync now" in the browser needs the other
+    behaviour — a readable message instead of a stack trace — so this route
+    is the one place that catches it.
+    """
+
+
 def _today() -> date:
     return datetime.now(UTC).date()
 
@@ -839,7 +850,12 @@ def delete_insight(insight_id: str) -> Any:
 def hr_zone_insights(request: Request) -> Any:
     log, _etag = store.load()
     return templates.TemplateResponse(
-        request, "insights_hr_zones.html", {"zones": _zone_summary(log)}
+        request,
+        "insights_hr_zones.html",
+        {
+            "zones": _zone_summary(log),
+            "synced_at": _format_synced_at(log.garmin_synced_at),
+        },
     )
 
 
@@ -930,7 +946,15 @@ def sync_garmin_now() -> Any:
     """
     from ..garmin import GARMIN_RETENTION_DAYS, sync_garmin
 
-    activities, days = sync_garmin()
+    try:
+        activities, days = sync_garmin()
+    except Exception as exc:
+        logger.warning("manual garmin sync failed", exc_info=True)
+        raise GarminSyncFailed(
+            "could not reach Garmin — the credentials may need refreshing, or Garmin's "
+            "own service may be down. Try again shortly."
+        ) from exc
+
     keep_since = (_today() - timedelta(days=GARMIN_RETENTION_DAYS)).isoformat()
     synced_at = datetime.now(UTC).isoformat(timespec="seconds")
     try:
