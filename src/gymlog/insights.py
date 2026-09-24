@@ -1,8 +1,9 @@
-"""Weekly AI training insight.
+"""AI training insight.
 
-Generated once a week by a scheduled Container App Job (see
-terraform/main.container-apps-job.tf), never on request from the web app: an
-LLM call is slow, and this process only ever reads what the job already wrote.
+Generated on a weekly schedule by a Container App Job (see
+terraform/main.container-apps-job.tf), and also on request — from the CLI by
+hand, or from a button on the web app's `/insights` page. There is no
+cooldown between runs; whatever calls this gets a fresh insight.
 
 DeepSeek's API is OpenAI-compatible, so a plain `urllib.request` call is
 enough — the same reasoning that keeps the Dockerfile's own healthcheck off a
@@ -26,10 +27,6 @@ logger = logging.getLogger(__name__)
 DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 MODEL = "deepseek-chat"
 
-# Guards against the job's replica_retry_limit producing a duplicate insight
-# in the same week — not a calendar-week check, just "not too soon again".
-MIN_DAYS_BETWEEN = 6
-
 # How many weeks of headroom before a block is due count as "ending soon".
 # 1 gives exactly one weekly insight with next-block suggestions before the
 # block page's own "due" banner appears.
@@ -49,12 +46,9 @@ SYSTEM_PROMPT = (
 )
 
 
-def generate_insight(log: Log, today: date | None = None) -> Insight | None:
-    """This week's insight, or None if one was already generated recently."""
+def generate_insight(log: Log, today: date | None = None) -> Insight:
+    """A new training insight, built from the log as it stands right now."""
     today = today or datetime.now(UTC).date()
-    if log.insights and _days_since(log.insights[-1].generated_at, today) < MIN_DAYS_BETWEEN:
-        return None
-
     summary = _complete(_prompt(log, today))
     return Insight(
         id=uuid.uuid4().hex[:12],
@@ -62,13 +56,6 @@ def generate_insight(log: Log, today: date | None = None) -> Insight | None:
         summary=summary,
         generated_at=today.isoformat(),
     )
-
-
-def _days_since(generated_at: str, today: date) -> int:
-    try:
-        return (today - date.fromisoformat(generated_at)).days
-    except ValueError:
-        return MIN_DAYS_BETWEEN
 
 
 def _prompt(log: Log, today: date) -> str:

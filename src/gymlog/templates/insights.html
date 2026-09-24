@@ -1,8 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Weekly Insights · Health{% endblock %}
-{% block subtitle %}Weekly Insights{% endblock %}
+{% block title %}Insights · Health{% endblock %}
+{% block subtitle %}Insights{% endblock %}
 {% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
 {% block body %}
+
+<form method="post" action="/insights">
+  <button type="submit" class="btn small">Generate insight now</button>
+</form>
+<p class="last" style="margin-top:8px">Takes a few seconds — it's a live call to DeepSeek.</p>
 
 {% if insights %}
 {% for i in insights %}
@@ -12,6 +17,6 @@
 </div>
 {% endfor %}
 {% else %}
-<p class="last">No insight yet — the weekly job writes the first one after enough sessions are logged.</p>
+<p class="last">No insight yet — the insight job writes the first one after enough sessions are logged.</p>
 {% endif %}
 {% endblock %}

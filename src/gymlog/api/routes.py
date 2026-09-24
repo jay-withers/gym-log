@@ -786,18 +786,36 @@ def delete_condition(condition_id: str) -> Any:
     return RedirectResponse("/conditions", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# --- weekly AI insight ----------------------------------------------------------
+# --- AI insight --------------------------------------------------------------
 
 
 @router.get("/insights", response_class=HTMLResponse, include_in_schema=False)
 def insights_list(request: Request) -> Any:
-    """Read-only. Insights are written by the scheduled job's CLI path, not here."""
     log, _etag = store.load()
     return templates.TemplateResponse(
         request,
         "insights.html",
         {"insights": sorted(log.insights, key=lambda i: i.week_of, reverse=True)},
     )
+
+
+@router.post("/insights", include_in_schema=False)
+def generate_insight_now() -> Any:
+    """The same generation the scheduled job runs, done here instead of waiting for it.
+
+    Blocks on the DeepSeek call rather than handing off to a background job:
+    this is a person clicking a button once, not a timer, so the few seconds
+    it takes is the acceptable trade-off for seeing the result immediately.
+    """
+    from ..insights import generate_insight
+
+    log, _etag = store.load()
+    new_insight = generate_insight(log)
+    try:
+        store.update(lambda current: current.with_insight(new_insight))
+    except store.ConflictError as exc:
+        raise ConflictResponse("the log was changed elsewhere; the insight was not saved") from exc
+    return RedirectResponse("/insights", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # --- helpers -----------------------------------------------------------------

@@ -19,7 +19,7 @@ it has rather than to look like anyone's actual training:
 - the **finisher** carries a time on some sessions and not others, because it is
   optional and that is worth being able to see.
 
-Achievements, goals, injuries/conditions and the weekly insight get the same
+Achievements, goals, injuries/conditions and the insight get the same
 treatment: a handful of invented entries chosen to put those screens into more
 than one state (active and achieved, active and resolved) rather than left
 empty, since an empty section is the one state local work has the least
