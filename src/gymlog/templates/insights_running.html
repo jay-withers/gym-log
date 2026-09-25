@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Running Insights · Health{% endblock %}
+{% block subtitle %}Running Insights{% endblock %}
+{% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
+{% block body %}
+
+{% if totals.month_runs > 0 %}
+<style>
+  .run-km { font-size: 24px; font-weight: 600; }
+  .run-count { color: var(--dim); font-size: 13px; }
+  /* Four wide columns rather than a much thinner day-by-day row: a
+     week-over-week bar earns a direct value label and a category label,
+     which a daily bar was too narrow to carry. */
+  .runweeks { display: flex; gap: 10px; margin-top: 6px; }
+  .runweek { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+  .runweek-val { font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .runweek-track { height: 64px; width: 100%; display: flex; align-items: flex-end; justify-content: center; margin-top: 4px; }
+  /* A 2px min-height keeps a rest week tabbable/hoverable — a 0%-tall box
+     has no hit target — and reads as "no runs", not a gap in the row. */
+  .runweek-bar {
+    width: 28px; min-height: 2px;
+    background: var(--accent); border-radius: 4px 4px 0 0;
+  }
+  .runweek-bar:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+  .runweek-label { color: var(--dim); font-size: 11px; margin-top: 6px; text-align: center; }
+</style>
+
+<div class="row">
+  <div class="card">
+    <div class="slot">This week</div>
+    <div class="run-km">{{ totals.week_km }} km</div>
+    <div class="run-count">{{ totals.week_runs }} run{{ "" if totals.week_runs == 1 else "s" }}</div>
+  </div>
+
+  <div class="card">
+    <div class="slot">Last 30 days</div>
+    <div class="run-km">{{ totals.month_km }} km</div>
+    <div class="run-count">{{ totals.month_runs }} run{{ "" if totals.month_runs == 1 else "s" }}</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="slot">Weekly distance</div>
+  <div class="runweeks">
+    {% for w in weeks %}
+    <div class="runweek">
+      <div class="runweek-val">{{ w.km }} km</div>
+      <div class="runweek-track">
+        <div class="runweek-bar" tabindex="0" style="height: {{ w.pct }}%"
+             title="{{ w.range }}: {{ w.km }} km · {{ w.runs }} run{{ '' if w.runs == 1 else 's' }}"></div>
+      </div>
+      <div class="runweek-label">{{ w.label }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<p class="last">{% if synced_at %}Garmin last synced {{ synced_at }}{% else %}Never synced yet{% endif %} — <a href="/garmin">sync</a></p>
+{% else %}
+<p class="last">No running data yet — sync some runs from <a href="/garmin">Garmin</a> first.</p>
+{% endif %}
+{% endblock %}

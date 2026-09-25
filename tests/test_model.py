@@ -286,6 +286,34 @@ def test_garmin_zone_seconds_since_excludes_zone_one():
     assert log.garmin_zone_seconds_since("2026-01-01") == (0, 1, 1, 1, 1)
 
 
+def test_garmin_running_distance_since_sums_only_runs_on_or_after_cutoff():
+    log = Log(
+        garmin_activities=(
+            garmin_activity(id="a1", date="2026-09-01", distance_meters=5000),
+            garmin_activity(id="a2", date="2026-09-10", distance_meters=10000),
+            garmin_activity(
+                id="a3", date="2026-09-10", activity_type="cycling", distance_meters=20000
+            ),
+        )
+    )
+    assert log.garmin_running_distance_since("2026-09-05") == (10000, 1)
+    assert log.garmin_running_distance_since("2026-08-01") == (15000, 2)
+
+
+def test_garmin_running_distance_between_sums_runs_inside_the_range_inclusive():
+    log = Log(
+        garmin_activities=(
+            garmin_activity(id="a1", date="2026-09-05", distance_meters=5000),
+            garmin_activity(id="a2", date="2026-09-10", distance_meters=1000),
+            garmin_activity(id="a3", date="2026-09-11", distance_meters=999999),
+            garmin_activity(
+                id="a4", date="2026-09-08", activity_type="cycling", distance_meters=20000
+            ),
+        )
+    )
+    assert log.garmin_running_distance_between("2026-09-05", "2026-09-10") == (6000, 2)
+
+
 @pytest.mark.parametrize(
     ("today", "week", "due"),
     [

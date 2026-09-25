@@ -417,6 +417,7 @@ class GarminActivity:
     duration_seconds: int = 0
     avg_hr: int = 0
     max_hr: int = 0
+    distance_meters: int = 0
     zone_seconds: tuple[int, ...] = ()
     zone_low_bpm: tuple[int, ...] = ()
 
@@ -428,6 +429,7 @@ class GarminActivity:
             "duration_seconds": self.duration_seconds,
             "avg_hr": self.avg_hr,
             "max_hr": self.max_hr,
+            "distance_meters": self.distance_meters,
         }
         if self.zone_seconds:
             payload["zone_seconds"] = list(self.zone_seconds)
@@ -444,6 +446,7 @@ class GarminActivity:
             duration_seconds=int(payload.get("duration_seconds", 0) or 0),
             avg_hr=int(payload.get("avg_hr", 0) or 0),
             max_hr=int(payload.get("max_hr", 0) or 0),
+            distance_meters=int(payload.get("distance_meters", 0) or 0),
             zone_seconds=tuple(int(z) for z in payload.get("zone_seconds", []) or ()),
             zone_low_bpm=tuple(int(z) for z in payload.get("zone_low_bpm", []) or ()),
         )
@@ -738,6 +741,34 @@ class Log:
                     continue
                 totals[zone] += seconds
         return tuple(totals)
+
+    def garmin_running_distance_since(self, cutoff: str) -> tuple[int, int]:
+        """(total metres, run count) for runs on/after `cutoff`.
+
+        Scoped to `activity_type == "running"` — unlike time-in-zone, which
+        counts every activity type, a "running" distance total mixed with a
+        cycling or swimming session's metres would no longer mean anything
+        as a running figure.
+        """
+        runs = [
+            a for a in self.garmin_activities if a.date >= cutoff and a.activity_type == "running"
+        ]
+        return sum(a.distance_meters for a in runs), len(runs)
+
+    def garmin_running_distance_between(self, start: str, end: str) -> tuple[int, int]:
+        """(total metres, run count) for runs in `[start, end]`, both inclusive.
+
+        A separate method from `garmin_running_distance_since` rather than
+        that one plus an unused upper bound: every existing caller wants
+        "since X, through today", and adding a bound only one caller needs
+        would leave the other passing `today` in every time for no reason.
+        """
+        runs = [
+            a
+            for a in self.garmin_activities
+            if start <= a.date <= end and a.activity_type == "running"
+        ]
+        return sum(a.distance_meters for a in runs), len(runs)
 
     def latest_garmin_zone_boundaries(self) -> tuple[int, ...]:
         """The bpm each zone starts at, from the most recent activity that has them.

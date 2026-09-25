@@ -1,4 +1,4 @@
-"""Garmin sync: the fixed retention window, defensive parsing, and session reuse.
+"""Garmin sync: the fixed sync window, defensive parsing, and session reuse.
 
 The `Garmin` client itself is always faked here — the suite must never reach
 Garmin Connect, the same reasoning `test_insights.py` gives for mocking
@@ -68,6 +68,7 @@ ACTIVITY_PAYLOAD = {
     "duration": 1800.0,
     "averageHR": 140,
     "maxHR": 165,
+    "distance": 5023.7,
 }
 
 ZONE_PAYLOAD = [
@@ -79,7 +80,13 @@ ZONE_PAYLOAD = [
 ]
 
 
-def test_sync_fetches_the_trailing_retention_window(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_sync_fetches_the_trailing_sync_window_not_the_full_retention(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sync only re-asks Garmin about the last `GARMIN_SYNC_DAYS` — far
+    short of the 90 days `GARMIN_RETENTION_DAYS` keeps in the log, since
+    that older history comes from previous syncs merging, not this one
+    re-fetching it."""
     captured: dict[str, Any] = {}
 
     class _Recording(_FakeGarmin):
@@ -93,10 +100,10 @@ def test_sync_fetches_the_trailing_retention_window(monkeypatch: pytest.MonkeyPa
 
     activities, days = garmin.sync_garmin(today=date(2026, 9, 30))
 
-    assert captured["start"] == "2026-08-31"
+    assert captured["start"] == "2026-09-23"
     assert captured["end"] == "2026-09-30"
-    assert len(days) == garmin.GARMIN_RETENTION_DAYS + 1
-    assert days[0].date == "2026-08-31"
+    assert len(days) == garmin.GARMIN_SYNC_DAYS + 1
+    assert days[0].date == "2026-09-23"
     assert days[-1].date == "2026-09-30"
     assert activities == []
 
@@ -126,6 +133,7 @@ def test_an_activity_is_mapped_with_its_heart_rate_zones(
     assert activity.duration_seconds == 1800
     assert activity.avg_hr == 140
     assert activity.max_hr == 165
+    assert activity.distance_meters == 5023
     assert activity.zone_seconds == (60, 300, 900, 480, 60)
     assert activity.zone_low_bpm == (96, 114, 132, 150, 161)
 

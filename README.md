@@ -70,7 +70,7 @@ Five sections that are not derived from sets and reps:
 - **Injuries & conditions** (`/conditions`) — structured records (body part,
   status, start/resolved dates, a note), marked resolved by hand. Read by the
   insight so it does not suggest anything that would aggravate an active one.
-- **Insights** (`/insights`) — an index linking to two sub-pages, not a page
+- **Insights** (`/insights`) — an index linking to three sub-pages, not a page
   in its own right. **AI Insights** (`/insights/ai`) is a DeepSeek-generated
   summary of the week, dated by when it was generated rather than the week it
   covers, written on a weekly schedule by
@@ -95,17 +95,27 @@ Five sections that are not derived from sets and reps:
   in zone" figure. Zones are colored with a single-hue ordinal ramp (light =
   zone 1, dark = zone 5) rather than categorical colors, since the zones are
   an ordered tier, not independent identities.
+  **Running Insights** (`/insights/running`) is the distance-focused
+  counterpart — total km and run count this week and over the last 30 days,
+  plus a 4-bar week-over-week chart (`Log.garmin_running_distance_between`).
+  Scoped to `activity_type == "running"`, unlike the zone breakdown: a
+  cycling or swimming session's metres would no longer mean anything folded
+  into a running total the way its heart-rate zones still do.
 - **Garmin** (`/garmin`) — a cut-down browser (not a full analysis surface;
-  that's HR Zone Insights above) for the last 30 days of activities and daily
+  that's HR Zone Insights above) for the last 90 days of activities and daily
   summaries (steps, resting heart rate, sleep) synced from a personal Garmin
   Connect account, via the unofficial `garminconnect` library since Garmin has
   no public API for one. Written on a daily schedule by
   `azurerm_container_app_job.garmin_sync`
   (`terraform/main.container-apps-job.garmin.tf`), same reasoning as the
-  insight job, plus a "Sync now" button on the page. Retention is a fixed
-  rolling 30 days, enforced at write time (`Log.with_garmin_sync`) rather than
-  as a display filter, so the document this app is built around stays a size
-  it can never outgrow. A cached login session is stored as a second small
+  insight job, plus a "Sync Past 7 Days" button on the page. Retention
+  (`GARMIN_RETENTION_DAYS`) is a fixed rolling 90 days, enforced at write time
+  (`Log.with_garmin_sync`) rather than as a display filter, so the document
+  this app is built around stays a size it can never outgrow — but each sync
+  only re-fetches the trailing 7 days (`GARMIN_SYNC_DAYS`) from Garmin, since
+  a day already synced doesn't change; older history survives because
+  `with_garmin_sync` merges each sync's week on top of what's already there
+  instead of replacing it. A cached login session is stored as a second small
   blob in the same container the log lives in, so the job re-authenticates
   with a password only when that cache is missing or rejected — not on every
   run, which is the kind of thing an unofficial API punishes.
