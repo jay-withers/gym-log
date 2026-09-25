@@ -9,7 +9,7 @@ since re-authenticating with a password on every run risks exactly the kind
 of friction (MFA challenges, rate limiting) an unofficial API punishes.
 
 Field names below (`activityId`, `startTimeLocal`, `activityType.typeKey`,
-`averageHR`/`maxHR`, `totalSteps`, `restingHeartRate`,
+`averageHR`/`maxHR`, `distance`, `totalSteps`, `restingHeartRate`,
 `dailySleepDTO.sleepTimeSeconds`, `zoneNumber`/`secsInZone`/`zoneLowBoundary`)
 are Garmin's own, confirmed against community-documented response shapes
 rather than this library's (minimal) type hints — Garmin can change them
@@ -28,15 +28,27 @@ from .settings import secret
 
 logger = logging.getLogger(__name__)
 
-# How far back every sync looks, and — via Log.with_garmin_sync — how much is
-# ever kept: a fixed rolling window rather than a growing archive. Re-scanning
-# it every run means a missed day self-heals on the next one, with no sync
-# cursor to track or get out of sync.
-GARMIN_RETENTION_DAYS = 30
+# The trailing window each sync actually asks Garmin Connect for. Short on
+# purpose: a day already synced doesn't change, so re-fetching it every run
+# spends an API call per day (two, counting sleep) plus one per activity for
+# zones on data that hasn't moved. A missed day still self-heals within a
+# week, and Log.with_garmin_sync merges each run's window on top of what is
+# already there rather than replacing it, so history outside this window
+# survives untouched as long as it stays within GARMIN_RETENTION_DAYS below.
+GARMIN_SYNC_DAYS = 7
+
+# How far back the log itself keeps Garmin data, enforced at write time by
+# Log.with_garmin_sync rather than anything here — a fixed rolling window
+# rather than a growing archive. Deliberately wider than GARMIN_SYNC_DAYS:
+# retention is how much history the app is willing to hold onto, fetching is
+# how much of it any one sync bothers re-asking Garmin about, and conflating
+# the two would mean either re-fetching 90 days on every run or only ever
+# retaining 7.
+GARMIN_RETENTION_DAYS = 90
 
 
 def sync_garmin(today: date | None = None) -> tuple[list[GarminActivity], list[GarminDay]]:
-    """Fetch the trailing `GARMIN_RETENTION_DAYS` of activities and daily summaries.
+    """Fetch the trailing `GARMIN_SYNC_DAYS` of activities and daily summaries.
 
     An auth failure (bad credentials, an MFA challenge the unofficial API
     can't complete) is not caught here — it propagates, the same way a missing
@@ -44,7 +56,7 @@ def sync_garmin(today: date | None = None) -> tuple[list[GarminActivity], list[G
     job exits non-zero rather than reporting a silent, empty sync.
     """
     today = today or datetime.now(UTC).date()
-    start = today - timedelta(days=GARMIN_RETENTION_DAYS)
+    start = today - timedelta(days=GARMIN_SYNC_DAYS)
 
     client = _client()
 
@@ -52,7 +64,7 @@ def sync_garmin(today: date | None = None) -> tuple[list[GarminActivity], list[G
     activities = [_activity(a, client) for a in raw_activities if isinstance(a, dict)]
 
     days: list[GarminDay] = []
-    for offset in range(GARMIN_RETENTION_DAYS + 1):
+    for offset in range(GARMIN_SYNC_DAYS + 1):
         days.append(_day(client, (start + timedelta(days=offset)).isoformat()))
 
     return activities, days
@@ -90,6 +102,7 @@ def _activity(payload: dict[str, Any], client: Any) -> GarminActivity:
         duration_seconds=int(payload.get("duration") or 0),
         avg_hr=int(payload.get("averageHR") or 0),
         max_hr=int(payload.get("maxHR") or 0),
+        distance_meters=int(payload.get("distance") or 0),
         **_zones(activity_id, client),
     )
 

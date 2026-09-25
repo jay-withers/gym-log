@@ -1176,6 +1176,7 @@ def test_insights_index_links_to_both_subsections(client, seeded):
     page = client.get("/insights").text
     assert 'href="/insights/ai"' in page
     assert 'href="/insights/hr-zones"' in page
+    assert 'href="/insights/running"' in page
 
 
 def test_ai_insights_page_lists_stored_insights(client, seeded):
@@ -1253,6 +1254,42 @@ def test_hr_zone_insights_page_is_empty_before_any_sync(client, seeded):
     login(client)
     page = client.get("/insights/hr-zones").text
     assert "No heart rate zone data yet" in page
+
+
+def test_running_insights_page_shows_distance_and_run_counts(client, seeded):
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[
+                garmin_activity(id="run1", date=date.today().isoformat(), distance_meters=5230),
+                garmin_activity(
+                    id="ride1",
+                    date=date.today().isoformat(),
+                    activity_type="cycling",
+                    distance_meters=20000,
+                ),
+            ],
+            days=[],
+            keep_since="2020-01-01",
+            synced_at="2026-09-24T06:00:00+00:00",
+        )
+    )
+    login(client)
+    page = client.get("/insights/running").text
+    assert "5.2 km" in page  # the run only — the ride's distance is excluded
+    assert "20.0 km" not in page
+    assert "1 run" in page
+    assert "Garmin last synced 24 Sep 2026, 06:00 UTC" in page
+    assert page.count('class="runweek-bar"') == 4  # this week plus the 3 before it
+    assert "This week" in page
+    assert 'height: 100%"' in page  # this week is the only one with a run, so it's the peak
+    assert 'km · 1 run"' in page
+    assert 'km · 0 runs"' in page  # the three empty weeks before it
+
+
+def test_running_insights_page_is_empty_before_any_sync(client, seeded):
+    login(client)
+    page = client.get("/insights/running").text
+    assert "No running data yet" in page
 
 
 # --- Garmin sync: a cut-down browser for the last 30 days of synced data -----

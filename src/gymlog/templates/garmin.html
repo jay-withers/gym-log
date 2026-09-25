@@ -5,10 +5,9 @@
 {% block body %}
 
 <form method="post" action="/garmin/sync" data-loading-label="Syncing…">
-  <button type="submit" class="btn small">Sync now</button>
+  <button type="submit" class="btn small">Sync Past 7 Days</button>
 </form>
-<p class="last" style="margin-top:8px">Takes a few seconds — pulls the last 30 days from Garmin Connect.</p>
-<p class="last">{% if synced_at %}Last synced {{ synced_at }}{% else %}Never synced yet{% endif %}</p>
+<p class="last" style="margin-top:8px">{% if synced_at %}Last synced {{ synced_at }}{% else %}Never synced yet{% endif %}</p>
 
 <div class="chips" style="margin-top:20px">
   <a class="chip {% if view == 'activities' %}on{% endif %}" href="/garmin?view=activities">Activities</a>
