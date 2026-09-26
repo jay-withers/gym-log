@@ -158,9 +158,9 @@ resource "azurerm_container_app" "this" {
 # to zero, not by the resource group going away.
 #
 # **Both DNS records must resolve before apply.** Azure validates them during
-# issuance and binding, not after: the CNAME for gymlog.jaywithers.uk pointing
+# issuance and binding, not after: the CNAME for health.jaywithers.uk pointing
 # at the app's default *.azurecontainerapps.io FQDN, and the TXT record at
-# asuid.gymlog carrying custom_domain_verification_id. `make dns` prints both
+# asuid.health carrying custom_domain_verification_id. `make dns` prints both
 # with their values filled in.
 resource "azurerm_container_app_environment_managed_certificate" "this" {
   count = var.custom_domain_name != "" ? 1 : 0
