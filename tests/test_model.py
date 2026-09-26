@@ -32,7 +32,7 @@ def test_round_trips_through_json():
         goals=(goal(),),
         insights=(insight(),),
         garmin_activities=(garmin_activity(),),
-        garmin_days=(garmin_day(),),
+        garmin_days=(garmin_day(hrv_ms=58, hrv_status="BALANCED", sleep_score=85, stress_avg=31),),
         garmin_fitness=(garmin_fitness(),),
         garmin_synced_at="2026-09-15T07:00:00+00:00",
     )
@@ -290,6 +290,20 @@ def test_latest_garmin_fitness_is_the_most_recent_entry():
 
 def test_latest_garmin_fitness_is_none_before_any_reading():
     assert Log().latest_garmin_fitness is None
+
+
+def test_latest_garmin_day_is_the_most_recently_synced_one():
+    log = Log(
+        garmin_days=(
+            garmin_day(date="2026-09-10", steps=1000),
+            garmin_day(date="2026-09-15", steps=2000),
+        )
+    )
+    assert log.latest_garmin_day.steps == 2000
+
+
+def test_latest_garmin_day_is_none_before_any_sync():
+    assert Log().latest_garmin_day is None
 
 
 def test_garmin_hrv_since_excludes_nights_with_no_reading():

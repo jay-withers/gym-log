@@ -1395,6 +1395,51 @@ def test_fitness_insights_page_shows_overnight_hrv(client, seeded):
     assert "Balanced" in page
 
 
+def test_fitness_insights_page_shows_at_a_glance_from_the_latest_day(client, seeded):
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                garmin_day(
+                    date="2026-09-24",
+                    steps=9500,
+                    resting_hr=48,
+                    sleep_seconds=27300,  # 7h 35m
+                    sleep_score=85,
+                    stress_avg=31,
+                )
+            ],
+            keep_since="2020-01-01",
+            fitness=[garmin_fitness(date="2026-09-24", vo2max=52.3)],
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "9,500" in page
+    assert "48" in page and "bpm" in page
+    assert "7h 35m" in page
+    assert "score 85" in page
+    assert "31" in page
+    assert "52.3" in page
+    assert "as of 24 Sep" in page
+
+
+def test_fitness_insights_page_shows_at_a_glance_from_day_data_alone(client, seeded):
+    """VO2max and the day's own stats can come from different syncs — a
+    missing fitness reading must not hide steps/HR/sleep/stress."""
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[garmin_day(date="2026-09-24", steps=4000, resting_hr=50)],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "4,000" in page
+    assert "No fitness data yet" not in page
+
+
 def test_fitness_insights_page_is_empty_before_any_sync(client, seeded):
     login(client)
     page = client.get("/insights/fitness").text

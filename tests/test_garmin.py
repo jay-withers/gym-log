@@ -38,6 +38,7 @@ class _FakeGarmin:
         self.hrv: dict[str, dict[str, Any]] = {}
         self.max_metrics: dict[str, Any] = {}
         self.lactate_threshold: dict[str, Any] = {}
+        self.stress: dict[str, dict[str, Any]] = {}
         self.calls: list[str] = []
 
     def login(self, tokenstore: str | None = None) -> tuple[None, None]:
@@ -74,6 +75,10 @@ class _FakeGarmin:
     def get_lactate_threshold(self) -> dict[str, Any]:
         self.calls.append("lactate_threshold")
         return self.lactate_threshold
+
+    def get_stress_data(self, cdate: str) -> dict[str, Any]:
+        self.calls.append(f"stress:{cdate}")
+        return self.stress.get(cdate, {})
 
 
 ACTIVITY_PAYLOAD = {
@@ -225,7 +230,9 @@ def test_a_day_summary_tolerates_a_missing_field(monkeypatch: pytest.MonkeyPatch
     assert all(d.steps == 5000 for d in days)
     assert all(d.resting_hr == 0 for d in days)
     assert all(d.sleep_seconds == 0 for d in days)
+    assert all(d.sleep_score == 0 for d in days)
     assert all(d.hrv_ms == 0 for d in days)
+    assert all(d.stress_avg == 0 for d in days)
 
 
 def test_a_day_carries_its_overnight_hrv_reading(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -263,6 +270,88 @@ def test_a_failed_hrv_fetch_degrades_to_zero_without_aborting_the_sync(
 
     assert days[0].hrv_ms == 0
     assert days[0].hrv_status == ""
+
+
+def test_a_day_carries_its_sleep_score_from_the_same_sleep_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The overall sleep score rides along on the same `get_sleep_data`
+    response as sleep_seconds — no separate API call for it."""
+
+    class _WithSleepScore(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    instance = _WithSleepScore("me@example.com", "hunter2")
+    instance.sleep = {
+        "2026-09-15": {
+            "dailySleepDTO": {
+                "sleepTimeSeconds": 27000,
+                "sleepScores": {"overall": {"value": 85, "qualifierKey": "GOOD"}},
+            }
+        }
+    }
+    monkeypatch.setattr("garminconnect.Garmin", lambda email, password: instance)
+
+    _activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+
+    assert days[0].sleep_seconds == 27000
+    assert days[0].sleep_score == 85
+
+
+def test_a_day_carries_its_average_stress_reading(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _WithStress(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    instance = _WithStress("me@example.com", "hunter2")
+    instance.stress = {"2026-09-15": {"overallStressLevel": 31}}
+    monkeypatch.setattr("garminconnect.Garmin", lambda email, password: instance)
+
+    _activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+
+    assert days[0].stress_avg == 31
+
+
+def test_a_negative_stress_reading_is_clamped_to_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Garmin uses -1/-2 for "not enough data" rather than omitting the field."""
+
+    class _NotEnoughData(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    instance = _NotEnoughData("me@example.com", "hunter2")
+    instance.stress = {"2026-09-15": {"overallStressLevel": -1}}
+    monkeypatch.setattr("garminconnect.Garmin", lambda email, password: instance)
+
+    _activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+
+    assert days[0].stress_avg == 0
+
+
+def test_a_failed_stress_fetch_degrades_to_zero_without_aborting_the_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _StressFails(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+        def get_stress_data(self, cdate: str) -> dict[str, Any]:
+            raise RuntimeError("Garmin said no")
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    monkeypatch.setattr("garminconnect.Garmin", _StressFails)
+
+    _activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+
+    assert days[0].stress_avg == 0
 
 
 def test_fitness_reads_vo2max_and_lactate_threshold_for_today_only(

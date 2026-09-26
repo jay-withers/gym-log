@@ -4,7 +4,7 @@
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
 
-{% if current or hrv.nights %}
+{% if glance or current or hrv.nights %}
 <style>
   .fit-val { font-size: 24px; font-weight: 600; }
   .fit-sub { color: var(--dim); font-size: 13px; }
@@ -21,21 +21,48 @@
   }
   .fitbar:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
   .fitbar-label { color: var(--dim); font-size: 11px; margin-top: 6px; text-align: center; }
+  /* A 2-up grid of small tiles rather than the wider This-week/Last-30-days
+     `.row` cards below: five values side by side at phone width need a
+     denser layout than two do. */
+  .glance-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .glance-val { font-size: 20px; font-weight: 600; }
 </style>
 
-{% if current %}
-<div class="row">
-  <div class="card">
-    <div class="slot">VO2 max</div>
-    <div class="fit-val">{{ current.vo2max }}</div>
-    <div class="fit-sub">as of {{ current.as_of }}</div>
+{% if glance %}
+<div class="card">
+  <div class="slot">At a glance</div>
+  <div class="fit-sub" style="margin-bottom: 8px">as of {{ glance.as_of }}</div>
+  <div class="glance-grid">
+    <div>
+      <div class="slot">Steps</div>
+      <div class="glance-val">{{ "{:,}".format(glance.steps) }}</div>
+    </div>
+    <div>
+      <div class="slot">Resting HR</div>
+      <div class="glance-val">{{ glance.resting_hr or "—" }}{% if glance.resting_hr %} bpm{% endif %}</div>
+    </div>
+    <div>
+      <div class="slot">Sleep</div>
+      <div class="glance-val">{% if glance.sleep_hours or glance.sleep_minutes %}{{ glance.sleep_hours }}h {{ glance.sleep_minutes }}m{% else %}—{% endif %}</div>
+      {% if glance.sleep_score %}<div class="fit-sub">score {{ glance.sleep_score }}</div>{% endif %}
+    </div>
+    <div>
+      <div class="slot">Stress</div>
+      <div class="glance-val">{{ glance.stress_avg or "—" }}</div>
+    </div>
+    <div>
+      <div class="slot">VO2 max</div>
+      <div class="glance-val">{{ glance.vo2max or "—" }}</div>
+    </div>
   </div>
+</div>
+{% endif %}
 
-  <div class="card">
-    <div class="slot">Lactate threshold</div>
-    <div class="fit-val">{{ current.lactate_threshold_pace or "—" }}</div>
-    <div class="fit-sub">{% if current.lactate_threshold_bpm %}{{ current.lactate_threshold_bpm }} bpm · {% endif %}as of {{ current.as_of }}</div>
-  </div>
+{% if current %}
+<div class="card">
+  <div class="slot">Lactate threshold</div>
+  <div class="fit-val">{{ current.lactate_threshold_pace or "—" }}</div>
+  <div class="fit-sub">{% if current.lactate_threshold_bpm %}{{ current.lactate_threshold_bpm }} bpm · {% endif %}as of {{ current.as_of }}</div>
 </div>
 {% endif %}
 

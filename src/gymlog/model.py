@@ -454,7 +454,7 @@ class GarminActivity:
 
 @dataclass(frozen=True)
 class GarminDay:
-    """One day's Garmin summary — steps, resting heart rate, sleep, overnight HRV."""
+    """One day's Garmin summary — steps, resting heart rate, sleep, overnight HRV, stress."""
 
     date: str
     steps: int = 0
@@ -462,6 +462,8 @@ class GarminDay:
     sleep_seconds: int = 0
     hrv_ms: int = 0
     hrv_status: str = ""
+    sleep_score: int = 0
+    stress_avg: int = 0
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -471,6 +473,8 @@ class GarminDay:
             "sleep_seconds": self.sleep_seconds,
             "hrv_ms": self.hrv_ms,
             "hrv_status": self.hrv_status,
+            "sleep_score": self.sleep_score,
+            "stress_avg": self.stress_avg,
         }
 
     @classmethod
@@ -482,6 +486,8 @@ class GarminDay:
             sleep_seconds=int(payload.get("sleep_seconds", 0) or 0),
             hrv_ms=int(payload.get("hrv_ms", 0) or 0),
             hrv_status=str(payload.get("hrv_status", "") or ""),
+            sleep_score=int(payload.get("sleep_score", 0) or 0),
+            stress_avg=int(payload.get("stress_avg", 0) or 0),
         )
 
 
@@ -852,6 +858,18 @@ class Log:
         so the last entry is simply the latest — no further filtering needed.
         """
         return self.garmin_fitness[-1] if self.garmin_fitness else None
+
+    @property
+    def latest_garmin_day(self) -> GarminDay | None:
+        """The most recently synced day's steps/resting-HR/sleep/stress.
+
+        None before the first sync. Unlike `latest_garmin_fitness`, this
+        doesn't skip entries with zero fields — every synced day is kept in
+        `garmin_days` regardless of
+        which of its sub-fetches succeeded (see `garmin._day`), so the last
+        one really is "today, as far as the last sync got."
+        """
+        return self.garmin_days[-1] if self.garmin_days else None
 
     def garmin_hrv_since(self, cutoff: str) -> tuple[GarminDay, ...]:
         """Days on/after `cutoff` with an overnight HRV reading, oldest first.

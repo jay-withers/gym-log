@@ -10,13 +10,14 @@ of friction (MFA challenges, rate limiting) an unofficial API punishes.
 
 Field names below (`activityId`, `startTimeLocal`, `activityType.typeKey`,
 `averageHR`/`maxHR`, `distance`, `totalSteps`, `restingHeartRate`,
-`dailySleepDTO.sleepTimeSeconds`, `zoneNumber`/`secsInZone`/`zoneLowBoundary`,
-`hrvSummary.lastNightAvg`/`.status`, `generic.vo2MaxPreciseValue`/
-`.vo2MaxValue`, `speed_and_heart_rate.speed`/`.heartRate`) are Garmin's own,
-confirmed against community-documented response shapes rather than this
-library's (minimal) type hints — Garmin can change them without notice,
-which is why every read here is defensive (`.get()` with a fallback), never
-a bare index.
+`dailySleepDTO.sleepTimeSeconds`/`.sleepScores.overall.value`,
+`zoneNumber`/`secsInZone`/`zoneLowBoundary`, `hrvSummary.lastNightAvg`/
+`.status`, `generic.vo2MaxPreciseValue`/`.vo2MaxValue`,
+`speed_and_heart_rate.speed`/`.heartRate`, `overallStressLevel`) are
+Garmin's own, confirmed against community-documented response shapes
+rather than this library's (minimal) type hints — Garmin can change them
+without notice, which is why every read here is defensive (`.get()` with a
+fallback), never a bare index.
 """
 
 from __future__ import annotations
@@ -32,8 +33,9 @@ logger = logging.getLogger(__name__)
 
 # The trailing window each sync actually asks Garmin Connect for. Short on
 # purpose: a day already synced doesn't change, so re-fetching it every run
-# spends an API call per day (three, counting sleep and HRV) plus one per
-# activity for zones on data that hasn't moved. A missed day still self-heals
+# spends four API calls per day (summary, sleep — which sleep score rides
+# along on for free — HRV, and stress) plus one per activity for zones on
+# data that hasn't moved. A missed day still self-heals
 # within a week, and Log.with_garmin_sync merges each run's window on top of
 # what is already there rather than replacing it, so history outside this
 # window survives untouched as long as it stays within GARMIN_RETENTION_DAYS
@@ -182,10 +184,16 @@ def _day(client: Any, cdate: str) -> GarminDay:
         logger.warning("could not fetch daily summary for %s", cdate, exc_info=True)
 
     sleep_seconds = 0
+    sleep_score = 0
     try:
         sleep = client.get_sleep_data(cdate)
         daily_sleep = (sleep or {}).get("dailySleepDTO") or {}
         sleep_seconds = int(daily_sleep.get("sleepTimeSeconds") or 0)
+        # Same response as sleep_seconds above, not a separate call: the
+        # overall sleep score sits alongside sleepTimeSeconds on this same
+        # dailySleepDTO.
+        overall_score = (daily_sleep.get("sleepScores") or {}).get("overall") or {}
+        sleep_score = int(overall_score.get("value") or 0)
     except Exception:
         logger.warning("could not fetch sleep data for %s", cdate, exc_info=True)
 
@@ -199,6 +207,16 @@ def _day(client: Any, cdate: str) -> GarminDay:
     except Exception:
         logger.warning("could not fetch HRV data for %s", cdate, exc_info=True)
 
+    stress_avg = 0
+    try:
+        stress = client.get_stress_data(cdate)
+        # Garmin uses -1/-2 for "not enough data" rather than omitting the
+        # field, so a negative reading is clamped to 0 rather than kept as a
+        # nonsensical negative stress level.
+        stress_avg = max(0, int((stress or {}).get("overallStressLevel") or 0))
+    except Exception:
+        logger.warning("could not fetch stress data for %s", cdate, exc_info=True)
+
     return GarminDay(
         date=cdate,
         steps=steps,
@@ -206,6 +224,8 @@ def _day(client: Any, cdate: str) -> GarminDay:
         sleep_seconds=sleep_seconds,
         hrv_ms=hrv_ms,
         hrv_status=hrv_status,
+        sleep_score=sleep_score,
+        stress_avg=stress_avg,
     )
 
 

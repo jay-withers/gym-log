@@ -1005,6 +1005,7 @@ def fitness_insights(request: Request) -> Any:
         request,
         "insights_fitness.html",
         {
+            "glance": _at_a_glance(log),
             "current": _current_fitness(log),
             "vo2max_trend": _vo2max_trend(log),
             "hrv": _hrv_summary(log),
@@ -1013,13 +1014,44 @@ def fitness_insights(request: Request) -> Any:
     )
 
 
+def _at_a_glance(log: Any) -> dict[str, Any]:
+    """Steps/resting-HR/sleep/stress from the most recently synced day, plus the latest VO2max.
+
+    One combined snapshot rather than reusing `_current_fitness` and a
+    day-lookup separately in the template. Built from whichever of
+    `garmin_days`/`garmin_fitness` exists, and each independently — not
+    "both or neither" — since VO2max only ever gets a value on the day the
+    sync ran (see `GarminFitness`), so it can legitimately be a day or more
+    stale relative to the latest `GarminDay`, or vice versa if one sub-fetch
+    failed on the more recent sync.
+    """
+    day = log.latest_garmin_day
+    fitness = log.latest_garmin_fitness
+    if day is None and fitness is None:
+        return {}
+    return {
+        "steps": day.steps if day else 0,
+        "resting_hr": day.resting_hr if day else 0,
+        "sleep_hours": (day.sleep_seconds // 3600) if day else 0,
+        "sleep_minutes": ((day.sleep_seconds % 3600) // 60) if day else 0,
+        "sleep_score": day.sleep_score if day else 0,
+        "stress_avg": day.stress_avg if day else 0,
+        "vo2max": fitness.vo2max if fitness else 0,
+        "as_of": _short_date(day.date if day else fitness.date),
+    }
+
+
 def _current_fitness(log: Any) -> dict[str, Any]:
-    """The latest known VO2max and lactate threshold, formatted for display."""
+    """The latest known lactate threshold, formatted for display.
+
+    VO2max isn't repeated here — `_at_a_glance` already shows it alongside
+    steps/HR/sleep/stress, and a second card for the same number a few lines
+    down would just be noise.
+    """
     latest = log.latest_garmin_fitness
     if latest is None:
         return {}
     return {
-        "vo2max": latest.vo2max,
         "lactate_threshold_bpm": latest.lactate_threshold_bpm,
         "lactate_threshold_pace": _pace_label(latest.lactate_threshold_pace_seconds_per_km),
         "as_of": _short_date(latest.date),
