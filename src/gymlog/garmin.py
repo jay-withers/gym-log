@@ -241,7 +241,12 @@ def _fitness(client: Any, cdate: str) -> GarminFitness | None:
         lactate_threshold = client.get_lactate_threshold()
         speed_and_heart_rate = (lactate_threshold or {}).get("speed_and_heart_rate") or {}
         lactate_threshold_bpm = int(speed_and_heart_rate.get("heartRate") or 0)
-        speed_ms = speed_and_heart_rate.get("speed") or 0
+        # Garmin's own `speed` field here is documented to be off by a factor
+        # of 10 from true m/s (e.g. a real ~3.9 m/s threshold comes back as
+        # ~0.39) — a quirk of this specific endpoint, confirmed against other
+        # tools that hit the same one (garmin-grafana#59, garmin_mcp#281),
+        # not a unit this app is misreading.
+        speed_ms = (speed_and_heart_rate.get("speed") or 0) * 10
         if speed_ms:
             lactate_threshold_pace_seconds_per_km = round(1000 / speed_ms)
     except Exception:

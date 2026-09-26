@@ -283,8 +283,10 @@ def test_fitness_reads_vo2max_and_lactate_threshold_for_today_only(
 
         def get_lactate_threshold(self) -> dict[str, Any]:
             calls.append("lactate_threshold")
+            # 0.3876, not 3.876: Garmin's own `speed` field here is off by a
+            # factor of 10 from true m/s (see `_fitness`'s comment).
             return {
-                "speed_and_heart_rate": {"heartRate": 165, "speed": 3.876},
+                "speed_and_heart_rate": {"heartRate": 165, "speed": 0.3876},
                 "power": {},
             }
 
@@ -303,6 +305,32 @@ def test_fitness_reads_vo2max_and_lactate_threshold_for_today_only(
     assert reading.vo2max == 52.3
     assert reading.lactate_threshold_bpm == 165
     assert reading.lactate_threshold_pace_seconds_per_km == round(1000 / 3.876)
+
+
+def test_fitness_corrects_garmins_lactate_threshold_speed_being_off_by_10x(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: Garmin's own `speed` field on this endpoint is documented
+    to read 10x too slow (e.g. a real ~3.9 m/s threshold comes back as
+    ~0.39) — a quirk of this specific endpoint (garmin-grafana#59,
+    garmin_mcp#281), not something this app should pass straight through."""
+
+    class _WithRealisticSpeed(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+        def get_lactate_threshold(self) -> dict[str, Any]:
+            return {"speed_and_heart_rate": {"heartRate": 165, "speed": 0.3888878}}
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    monkeypatch.setattr("garminconnect.Garmin", _WithRealisticSpeed)
+
+    _activities, _days, fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+
+    # ~3.888878 m/s -> ~4:17/km (257s), not the ~42:57/km a straight
+    # 1000/0.3888878 would give.
+    assert fitness[0].lactate_threshold_pace_seconds_per_km == 257
 
 
 def test_fitness_falls_back_to_the_imprecise_vo2max_value(
@@ -351,7 +379,7 @@ def test_a_failed_max_metrics_fetch_still_returns_the_lactate_threshold(
             raise RuntimeError("Garmin said no")
 
         def get_lactate_threshold(self) -> dict[str, Any]:
-            return {"speed_and_heart_rate": {"heartRate": 160, "speed": 3.5}}
+            return {"speed_and_heart_rate": {"heartRate": 160, "speed": 0.35}}
 
     monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
     monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
