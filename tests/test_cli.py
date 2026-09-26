@@ -19,7 +19,7 @@ from gymlog import store, telemetry
 from gymlog.cli import _configure_logging, _terminate, main
 from gymlog.model import Log
 
-from .factories import block, garmin_activity, garmin_day, insight
+from .factories import block, garmin_activity, garmin_day, garmin_fitness, insight
 
 
 def test_serve_runs_the_app_with_the_access_log_off(monkeypatch):
@@ -104,13 +104,17 @@ def test_insight_records_what_generate_insight_returns(monkeypatch):
 def test_garmin_sync_records_what_sync_garmin_returns(monkeypatch):
     activity = garmin_activity(id="a1")
     day = garmin_day(date="2026-09-15")
-    monkeypatch.setattr("gymlog.garmin.sync_garmin", lambda days=None: ([activity], [day]))
+    fitness = garmin_fitness(date="2026-09-15")
+    monkeypatch.setattr(
+        "gymlog.garmin.sync_garmin", lambda days=None: ([activity], [day], [fitness])
+    )
 
     assert main(["garmin-sync"]) == 0
 
     log, _etag = store.load()
     assert log.garmin_activities == (activity,)
     assert log.garmin_days == (day,)
+    assert log.garmin_fitness == (fitness,)
 
 
 def test_garmin_sync_days_flag_is_passed_through_for_a_one_off_backfill(monkeypatch):
@@ -118,7 +122,7 @@ def test_garmin_sync_days_flag_is_passed_through_for_a_one_off_backfill(monkeypa
 
     def fake_sync_garmin(days=None):
         seen_days.append(days)
-        return [], []
+        return [], [], []
 
     monkeypatch.setattr("gymlog.garmin.sync_garmin", fake_sync_garmin)
 

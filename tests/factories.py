@@ -11,6 +11,7 @@ from gymlog.model import (
     Exercise,
     GarminActivity,
     GarminDay,
+    GarminFitness,
     Goal,
     Insight,
     Session,
@@ -146,5 +147,32 @@ def garmin_day(
     steps: int = 8000,
     resting_hr: int = 55,
     sleep_seconds: int = 27000,
+    hrv_ms: int = 0,
+    hrv_status: str = "",
+    sleep_score: int = 0,
+    stress_avg: int = 0,
 ) -> GarminDay:
-    return GarminDay(date=date, steps=steps, resting_hr=resting_hr, sleep_seconds=sleep_seconds)
+    return GarminDay(
+        date=date,
+        steps=steps,
+        resting_hr=resting_hr,
+        sleep_seconds=sleep_seconds,
+        hrv_ms=hrv_ms,
+        hrv_status=hrv_status,
+        sleep_score=sleep_score,
+        stress_avg=stress_avg,
+    )
+
+
+def garmin_fitness(
+    date: str = "2026-09-15",
+    vo2max: float = 52.0,
+    lactate_threshold_bpm: int = 165,
+    lactate_threshold_pace_seconds_per_km: int = 258,
+) -> GarminFitness:
+    return GarminFitness(
+        date=date,
+        vo2max=vo2max,
+        lactate_threshold_bpm=lactate_threshold_bpm,
+        lactate_threshold_pace_seconds_per_km=lactate_threshold_pace_seconds_per_km,
+    )

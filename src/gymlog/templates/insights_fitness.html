@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Fitness Insights · Health{% endblock %}
+{% block subtitle %}Fitness Insights{% endblock %}
+{% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
+{% block body %}
+
+{% if glance or current or hrv.nights %}
+<style>
+  .fit-val { font-size: 24px; font-weight: 600; }
+  .fit-sub { color: var(--dim); font-size: 13px; }
+  /* Same bar-and-label shape as Running Insights' weekly bars, reused here
+     for two different series (VO2max, HRV) rather than a new chart idiom
+     for each — the reader has already learned what this shape means. */
+  .fitbars { display: flex; gap: 10px; margin-top: 6px; }
+  .fitbar-col { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+  .fitbar-val { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .fitbar-track { height: 56px; width: 100%; display: flex; align-items: flex-end; justify-content: center; margin-top: 4px; }
+  .fitbar {
+    width: 24px; min-height: 2px;
+    background: var(--accent); border-radius: 4px 4px 0 0;
+  }
+  .fitbar:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+  .fitbar-label { color: var(--dim); font-size: 11px; margin-top: 6px; text-align: center; }
+  /* A 2-up grid of small tiles rather than the wider This-week/Last-30-days
+     `.row` cards below: five values side by side at phone width need a
+     denser layout than two do. */
+  .glance-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .glance-val { font-size: 20px; font-weight: 600; }
+</style>
+
+{% if glance %}
+<div class="card">
+  <div class="slot">At a glance</div>
+  <div class="fit-sub" style="margin-bottom: 8px">as of {{ glance.as_of }}</div>
+  <div class="glance-grid">
+    <div>
+      <div class="slot">Steps</div>
+      <div class="glance-val">{{ "{:,}".format(glance.steps) }}</div>
+    </div>
+    <div>
+      <div class="slot">Resting HR</div>
+      <div class="glance-val">{{ glance.resting_hr or "—" }}{% if glance.resting_hr %} bpm{% endif %}</div>
+    </div>
+    <div>
+      <div class="slot">Sleep</div>
+      <div class="glance-val">{% if glance.sleep_hours or glance.sleep_minutes %}{{ glance.sleep_hours }}h {{ glance.sleep_minutes }}m{% else %}—{% endif %}</div>
+      {% if glance.sleep_score %}<div class="fit-sub">score {{ glance.sleep_score }}</div>{% endif %}
+    </div>
+    <div>
+      <div class="slot">Stress</div>
+      <div class="glance-val">{{ glance.stress_avg or "—" }}</div>
+    </div>
+    <div>
+      <div class="slot">VO2 max</div>
+      <div class="glance-val">{{ glance.vo2max or "—" }}</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if current %}
+<div class="card">
+  <div class="slot">Lactate threshold</div>
+  <div class="fit-val">{{ current.lactate_threshold_pace or "—" }}</div>
+  <div class="fit-sub">{% if current.lactate_threshold_bpm %}{{ current.lactate_threshold_bpm }} bpm · {% endif %}as of {{ current.as_of }}</div>
+</div>
+{% endif %}
+
+{% if vo2max_trend %}
+<div class="card">
+  <div class="slot">VO2 max trend</div>
+  <div class="fitbars">
+    {% for v in vo2max_trend %}
+    <div class="fitbar-col">
+      <div class="fitbar-val">{{ v.value }}</div>
+      <div class="fitbar-track">
+        <div class="fitbar" tabindex="0" style="height: {{ v.pct }}%" title="{{ v.date }}: {{ v.value }}"></div>
+      </div>
+      <div class="fitbar-label">{{ v.date }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if hrv.nights %}
+<div class="card">
+  <div class="slot">Overnight HRV</div>
+  <div class="fit-sub" style="margin-bottom: 4px">{{ hrv.avg_ms }}ms avg{% if hrv.latest_status %} · last night {{ hrv.latest_status }}{% endif %}</div>
+  <div class="fitbars">
+    {% for n in hrv.nights %}
+    <div class="fitbar-col">
+      <div class="fitbar-val">{{ n.ms }}</div>
+      <div class="fitbar-track">
+        <div class="fitbar" tabindex="0" style="height: {{ n.pct }}%" title="{{ n.label }}: {{ n.ms }}ms"></div>
+      </div>
+      <div class="fitbar-label">{{ n.label }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<p class="last">{% if synced_at %}Garmin last synced {{ synced_at }}{% else %}Never synced yet{% endif %} — <a href="/garmin">sync</a></p>
+{% else %}
+<p class="last">No fitness data yet — sync from <a href="/garmin">Garmin</a> first.</p>
+{% endif %}
+{% endblock %}

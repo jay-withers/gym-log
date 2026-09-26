@@ -16,6 +16,7 @@ from .factories import (
     exercise,
     garmin_activity,
     garmin_day,
+    garmin_fitness,
     goal,
     insight,
     session,
@@ -31,7 +32,8 @@ def test_round_trips_through_json():
         goals=(goal(),),
         insights=(insight(),),
         garmin_activities=(garmin_activity(),),
-        garmin_days=(garmin_day(),),
+        garmin_days=(garmin_day(hrv_ms=58, hrv_status="BALANCED", sleep_score=85, stress_avg=31),),
+        garmin_fitness=(garmin_fitness(),),
         garmin_synced_at="2026-09-15T07:00:00+00:00",
     )
     assert Log.from_json(log.to_json()) == log
@@ -245,6 +247,74 @@ def test_with_garmin_sync_keeps_the_previous_timestamp_if_none_is_given():
     log = Log(garmin_synced_at="2026-09-15T07:00:00+00:00")
     updated = log.with_garmin_sync(activities=[], days=[], keep_since="2026-08-01")
     assert updated.garmin_synced_at == "2026-09-15T07:00:00+00:00"
+
+
+def test_with_garmin_sync_merges_and_dedupes_fitness_readings():
+    log = Log(garmin_fitness=(garmin_fitness(date="2026-09-10", vo2max=50.0),))
+    updated = log.with_garmin_sync(
+        activities=[],
+        days=[],
+        keep_since="2026-08-01",
+        fitness=[
+            garmin_fitness(date="2026-09-10", vo2max=51.0),
+            garmin_fitness(date="2026-09-15", vo2max=52.0),
+        ],
+    )
+    assert [f.date for f in updated.garmin_fitness] == ["2026-09-10", "2026-09-15"]
+    assert updated.garmin_fitness[0].vo2max == 51.0  # replaced, not duplicated
+
+
+def test_with_garmin_sync_prunes_fitness_readings_older_than_keep_since():
+    log = Log(garmin_fitness=(garmin_fitness(date="2026-08-01"),))
+    updated = log.with_garmin_sync(activities=[], days=[], keep_since="2026-09-01")
+    assert updated.garmin_fitness == ()
+
+
+def test_with_garmin_sync_defaults_to_no_fitness_change():
+    """A caller that doesn't pass `fitness` (e.g. an older test) must not wipe
+    out fitness readings a previous sync recorded."""
+    log = Log(garmin_fitness=(garmin_fitness(date="2026-09-10"),))
+    updated = log.with_garmin_sync(activities=[], days=[], keep_since="2026-08-01")
+    assert updated.garmin_fitness == log.garmin_fitness
+
+
+def test_latest_garmin_fitness_is_the_most_recent_entry():
+    log = Log(
+        garmin_fitness=(
+            garmin_fitness(date="2026-09-10", vo2max=50.0),
+            garmin_fitness(date="2026-09-15", vo2max=52.0),
+        )
+    )
+    assert log.latest_garmin_fitness.vo2max == 52.0
+
+
+def test_latest_garmin_fitness_is_none_before_any_reading():
+    assert Log().latest_garmin_fitness is None
+
+
+def test_latest_garmin_day_is_the_most_recently_synced_one():
+    log = Log(
+        garmin_days=(
+            garmin_day(date="2026-09-10", steps=1000),
+            garmin_day(date="2026-09-15", steps=2000),
+        )
+    )
+    assert log.latest_garmin_day.steps == 2000
+
+
+def test_latest_garmin_day_is_none_before_any_sync():
+    assert Log().latest_garmin_day is None
+
+
+def test_garmin_hrv_since_excludes_nights_with_no_reading():
+    log = Log(
+        garmin_days=(
+            garmin_day(date="2026-09-10", hrv_ms=60),
+            garmin_day(date="2026-09-11", hrv_ms=0),  # not worn overnight
+            garmin_day(date="2026-09-12", hrv_ms=58),
+        )
+    )
+    assert [d.date for d in log.garmin_hrv_since("2026-09-01")] == ["2026-09-10", "2026-09-12"]
 
 
 def test_garmin_zone_seconds_since_sums_across_activities_on_or_after_cutoff():
