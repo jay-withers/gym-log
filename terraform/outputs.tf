@@ -45,8 +45,10 @@ output "state_container_url" {
 
 # --- the custom domain --------------------------------------------------------
 #
-# Both are empty when var.custom_domain_name is unset, so `make url` falls back
-# to app_url and `make dns` prints nothing to do.
+# Both are empty when var.custom_domain_name is unset. Neither is consumed by
+# `make url`, which always prints app_url regardless — the custom domain, once
+# bound, works alongside the default *.azurecontainerapps.io URL rather than
+# replacing it, so there is no "the real one" for that target to prefer.
 
 output "custom_domain_url" {
   description = "The bound custom domain, if var.custom_domain_name is set. Empty otherwise."

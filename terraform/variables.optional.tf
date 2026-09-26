@@ -79,7 +79,7 @@ variable "image_tag" {
 # --- the custom domain --------------------------------------------------------
 
 variable "custom_domain_name" {
-  description = "Hostname to bind to the app with a free Azure-managed certificate, e.g. `gymlog.jaywithers.uk`. Empty creates neither the certificate nor the binding; the default `*.azurecontainerapps.io` URL always works either way. The CNAME (to that default FQDN) and the `asuid.<label>` TXT record (holding `custom_domain_verification_id`) must already resolve before apply, because Azure validates both during issuance — `make dns` prints them."
+  description = "Hostname to bind to the app with a free Azure-managed certificate, e.g. `health.jaywithers.uk`. Empty creates neither the certificate nor the binding; the default `*.azurecontainerapps.io` URL always works either way. The CNAME (to that default FQDN, from `terraform output app_url`) and the `asuid.<label>` TXT record (holding `custom_domain_verification_id`, from that output) must already resolve before apply, because Azure validates both during issuance."
   type        = string
   default     = ""
 

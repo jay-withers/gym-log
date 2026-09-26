@@ -1,3 +1,3 @@
 environment = "dev"
 
-custom_domain_name = "gymlog.jaywithers.uk"
+custom_domain_name = "health.jaywithers.uk"

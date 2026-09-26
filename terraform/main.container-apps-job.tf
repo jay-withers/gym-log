@@ -30,6 +30,11 @@ resource "azurerm_container_app_job" "insight" {
   # CLAUDE.md's repo-agent-vs-here table for the exact distinction.
   location = data.azurerm_container_app_environment.platform.location
 
+  # See main.container-apps.tf's identical argument on the app resource: the
+  # shared environment has no other workload profile, and leaving this unset
+  # makes every plan propose clearing what the API already reports back.
+  workload_profile_name = "Consumption"
+
   identity {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.this.id]
