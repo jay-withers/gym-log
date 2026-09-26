@@ -33,6 +33,12 @@ from typing import Any
 # empty when a per-activity detail fetch failed — never a partial length.
 GARMIN_ZONE_COUNT = 5
 
+# Garmin's own `activityType.typeKey` values for a run, on a treadmill or
+# not — a treadmill session is a distinct type from outdoor running, not a
+# variant field on it, so a plain `== "running"` filter silently drops every
+# treadmill run's distance from a "running" total.
+RUNNING_ACTIVITY_TYPES = frozenset({"running", "treadmill_running"})
+
 # Bumped when the shape changes incompatibly. A document from the future is left
 # alone rather than overwritten — the alternative is a newer deployment silently
 # discarding a training history it could not read.
@@ -809,13 +815,15 @@ class Log:
     def garmin_running_distance_since(self, cutoff: str) -> tuple[int, int]:
         """(total metres, run count) for runs on/after `cutoff`.
 
-        Scoped to `activity_type == "running"` — unlike time-in-zone, which
+        Scoped to `RUNNING_ACTIVITY_TYPES` — unlike time-in-zone, which
         counts every activity type, a "running" distance total mixed with a
         cycling or swimming session's metres would no longer mean anything
         as a running figure.
         """
         runs = [
-            a for a in self.garmin_activities if a.date >= cutoff and a.activity_type == "running"
+            a
+            for a in self.garmin_activities
+            if a.date >= cutoff and a.activity_type in RUNNING_ACTIVITY_TYPES
         ]
         return sum(a.distance_meters for a in runs), len(runs)
 
@@ -830,7 +838,7 @@ class Log:
         runs = [
             a
             for a in self.garmin_activities
-            if start <= a.date <= end and a.activity_type == "running"
+            if start <= a.date <= end and a.activity_type in RUNNING_ACTIVITY_TYPES
         ]
         return sum(a.distance_meters for a in runs), len(runs)
 
