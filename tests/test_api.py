@@ -1295,6 +1295,28 @@ def test_running_insights_page_shows_distance_and_run_counts(client, seeded):
     assert 'km · 0 runs"' in page  # the three empty weeks before it
 
 
+def test_running_insights_page_counts_treadmill_runs_alongside_outdoor_ones(client, seeded):
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[
+                garmin_activity(id="run1", date=date.today().isoformat(), distance_meters=5000),
+                garmin_activity(
+                    id="run2",
+                    date=date.today().isoformat(),
+                    activity_type="treadmill_running",
+                    distance_meters=8000,
+                ),
+            ],
+            days=[],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/running").text
+    assert "13.0 km" in page
+    assert "2 runs" in page
+
+
 def test_running_insights_this_week_matches_stat_card_and_chart_bar(client, seeded):
     """This week's stat card and its chart bar must agree on what "this week" means.
 

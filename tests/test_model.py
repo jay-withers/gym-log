@@ -384,6 +384,43 @@ def test_garmin_running_distance_between_sums_runs_inside_the_range_inclusive():
     assert log.garmin_running_distance_between("2026-09-05", "2026-09-10") == (6000, 2)
 
 
+def test_garmin_running_distance_since_counts_treadmill_runs_too():
+    """Garmin's `activityType.typeKey` for a treadmill session is
+    "treadmill_running" — a distinct type from outdoor "running", not a
+    variant of it — so a running distance total must count both or it
+    silently drops every treadmill run."""
+    log = Log(
+        garmin_activities=(
+            garmin_activity(id="a1", date="2026-09-01", distance_meters=5000),
+            garmin_activity(
+                id="a2",
+                date="2026-09-10",
+                activity_type="treadmill_running",
+                distance_meters=8000,
+            ),
+            garmin_activity(
+                id="a3", date="2026-09-10", activity_type="cycling", distance_meters=20000
+            ),
+        )
+    )
+    assert log.garmin_running_distance_since("2026-08-01") == (13000, 2)
+
+
+def test_garmin_running_distance_between_counts_treadmill_runs_too():
+    log = Log(
+        garmin_activities=(
+            garmin_activity(
+                id="a1",
+                date="2026-09-05",
+                activity_type="treadmill_running",
+                distance_meters=5000,
+            ),
+            garmin_activity(id="a2", date="2026-09-10", distance_meters=1000),
+        )
+    )
+    assert log.garmin_running_distance_between("2026-09-01", "2026-09-10") == (6000, 2)
+
+
 @pytest.mark.parametrize(
     ("today", "week", "due"),
     [

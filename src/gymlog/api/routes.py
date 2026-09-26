@@ -930,7 +930,7 @@ def _week_start(day: date) -> date:
 def _running_totals(log: Any) -> dict[str, float | int]:
     """Distance run and run count, this calendar week and over the last 30 days.
 
-    Scoped to `activity_type == "running"` (see `Log.garmin_running_distance_
+    Scoped to `RUNNING_ACTIVITY_TYPES` (see `Log.garmin_running_distance_
     since`). "This week" is deliberately the same Mon-Sun bucket as
     `_weekly_running_series`'s last bar — not an independent "last 7 days"
     cutoff — so the stat card and the chart never disagree about what "this
