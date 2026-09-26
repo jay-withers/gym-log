@@ -1286,6 +1286,35 @@ def test_running_insights_page_shows_distance_and_run_counts(client, seeded):
     assert 'km · 0 runs"' in page  # the three empty weeks before it
 
 
+def test_running_insights_this_week_matches_stat_card_and_chart_bar(client, seeded):
+    """This week's stat card and its chart bar must agree on what "this week" means.
+
+    Regression for a bug where the stat card used a rolling "last 7 days"
+    cutoff while the chart bucketed into rolling trailing-7-day tiles anchored
+    on today — two different, non-calendar-aligned windows that disagreed
+    with each other and with a Mon-Sun week. A run on this week's Monday
+    (however many days ago that is) must count in "this week", not spill into
+    an earlier bucket the way a trailing window could.
+    """
+    from datetime import timedelta
+
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[garmin_activity(id="run1", date=monday.isoformat(), distance_meters=10000)],
+            days=[],
+            keep_since="2020-01-01",
+            synced_at="2026-09-24T06:00:00+00:00",
+        )
+    )
+    login(client)
+    page = client.get("/insights/running").text
+    assert "10.0 km" in page  # the stat card's "this week" figure
+    assert 'height: 100%"' in page  # the same run is this week's chart bar, and the peak
+    assert 'km · 1 run"' in page
+
+
 def test_running_insights_page_is_empty_before_any_sync(client, seeded):
     login(client)
     page = client.get("/insights/running").text

@@ -108,6 +108,32 @@ def test_sync_fetches_the_trailing_sync_window_not_the_full_retention(
     assert activities == []
 
 
+def test_sync_days_can_be_widened_for_a_one_off_backfill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A field added to `GarminActivity` after activities were already stored
+    (e.g. `distance_meters`) leaves those records stuck at that field's
+    default until something re-fetches their date — the daily job's narrow
+    `GARMIN_SYNC_DAYS` window never reaches back far enough on its own, so a
+    wider one-off `days` override is how that gets fixed."""
+    captured: dict[str, Any] = {}
+
+    class _Recording(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            captured["start"], captured["end"] = start, end
+            return []
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    monkeypatch.setattr("garminconnect.Garmin", _Recording)
+
+    activities, days = garmin.sync_garmin(today=date(2026, 9, 30), days=30)
+
+    assert captured["start"] == "2026-08-31"
+    assert len(days) == 31
+    assert activities == []
+
+
 def test_an_activity_is_mapped_with_its_heart_rate_zones(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

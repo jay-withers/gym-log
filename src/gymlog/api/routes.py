@@ -922,16 +922,24 @@ def running_insights(request: Request) -> Any:
     )
 
 
+def _week_start(day: date) -> date:
+    """The Monday on or before `day` — calendar weeks here always run Mon-Sun."""
+    return day - timedelta(days=day.weekday())
+
+
 def _running_totals(log: Any) -> dict[str, float | int]:
-    """Distance run and run count, this week and over the last 30 days.
+    """Distance run and run count, this calendar week and over the last 30 days.
 
     Scoped to `activity_type == "running"` (see `Log.garmin_running_distance_
-    since`), and to the same 7/30-day windows as `_zone_summary` so the two
-    insight pages read as one system rather than picking different periods.
+    since`). "This week" is deliberately the same Mon-Sun bucket as
+    `_weekly_running_series`'s last bar — not an independent "last 7 days"
+    cutoff — so the stat card and the chart never disagree about what "this
+    week" contains.
     """
     today = _today()
-    week_meters, week_runs = log.garmin_running_distance_since(
-        (today - timedelta(days=7)).isoformat()
+    monday = _week_start(today)
+    week_meters, week_runs = log.garmin_running_distance_between(
+        monday.isoformat(), today.isoformat()
     )
     month_meters, month_runs = log.garmin_running_distance_since(
         (today - timedelta(days=30)).isoformat()
@@ -945,27 +953,26 @@ def _running_totals(log: Any) -> dict[str, float | int]:
 
 
 def _weekly_running_series(log: Any) -> list[dict[str, Any]]:
-    """Distance and run count per trailing 7-day week, oldest first, 4 weeks back.
+    """Distance and run count per calendar week (Mon-Sun), oldest first, 4 weeks back.
 
-    4 non-overlapping 7-day windows, not the 8-day `>=` cutoff
-    `_running_totals`'s "This week" uses — that figure only ever needs a
-    single "since X" cutoff, but comparing week to week needs windows that
-    tile the month with no gap and no double-counted day, so this bucket's
-    "this week" (last 7 days) reads a hair lower than the stat card's
-    (last 8). 4 weeks is a compact-card choice, not a data limit — Garmin
-    history goes back much further (`GARMIN_RETENTION_DAYS`); a longer chart
-    is a matter of widening this range, not fetching more.
+    Bucketed on the Monday that starts the current week, not a rolling
+    trailing-7-days window, so "this week" always means the same thing a
+    calendar does and lines up with `_running_totals`'s figure regardless of
+    which day of the week it's viewed on. 4 weeks is a compact-card choice,
+    not a data limit — Garmin history goes back much further
+    (`GARMIN_RETENTION_DAYS`); a longer chart is a matter of widening this
+    range, not fetching more.
 
     `pct` is each week's share of the 4 weeks' single biggest one, not of a
     fixed scale, so the bars stay legible whether the peak week was a 5k or
     marathon-training volume; `or 1` guards the division when nothing has
     been run at all.
     """
-    today = _today()
+    this_monday = _week_start(_today())
     weeks = []
     for weeks_ago in range(3, -1, -1):
-        end = today - timedelta(days=weeks_ago * 7)
-        start = end - timedelta(days=6)
+        start = this_monday - timedelta(days=weeks_ago * 7)
+        end = start + timedelta(days=6)
         meters, runs = log.garmin_running_distance_between(start.isoformat(), end.isoformat())
         weeks.append(
             {

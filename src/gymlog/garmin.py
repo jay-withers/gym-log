@@ -47,27 +47,40 @@ GARMIN_SYNC_DAYS = 7
 GARMIN_RETENTION_DAYS = 90
 
 
-def sync_garmin(today: date | None = None) -> tuple[list[GarminActivity], list[GarminDay]]:
-    """Fetch the trailing `GARMIN_SYNC_DAYS` of activities and daily summaries.
+def sync_garmin(
+    today: date | None = None, days: int | None = None
+) -> tuple[list[GarminActivity], list[GarminDay]]:
+    """Fetch the trailing `days` (default `GARMIN_SYNC_DAYS`) of activities and daily summaries.
 
     An auth failure (bad credentials, an MFA challenge the unofficial API
     can't complete) is not caught here — it propagates, the same way a missing
     secret does elsewhere in this app, so the caller sees it and the scheduled
     job exits non-zero rather than reporting a silent, empty sync.
+
+    `days` exists for a one-off wider backfill (`gymlog garmin-sync --days N`),
+    not for the daily job to vary its own window: a field added to
+    `GarminActivity` after activities were already stored (e.g.
+    `distance_meters`) leaves those older records stuck at that field's
+    default forever, since `with_garmin_sync` only overwrites an activity when
+    this function re-fetches its date. The daily job's narrow window never
+    reaches back far enough to self-heal that; a wider one-off run does,
+    because the merge is keyed by activity id and simply replaces the stale
+    record.
     """
     today = today or datetime.now(UTC).date()
-    start = today - timedelta(days=GARMIN_SYNC_DAYS)
+    start = today - timedelta(days=days if days is not None else GARMIN_SYNC_DAYS)
+    span_days = (today - start).days
 
     client = _client()
 
     raw_activities = client.get_activities_by_date(start.isoformat(), today.isoformat())
     activities = [_activity(a, client) for a in raw_activities if isinstance(a, dict)]
 
-    days: list[GarminDay] = []
-    for offset in range(GARMIN_SYNC_DAYS + 1):
-        days.append(_day(client, (start + timedelta(days=offset)).isoformat()))
+    days_out: list[GarminDay] = []
+    for offset in range(span_days + 1):
+        days_out.append(_day(client, (start + timedelta(days=offset)).isoformat()))
 
-    return activities, days
+    return activities, days_out
 
 
 def _client() -> Any:
