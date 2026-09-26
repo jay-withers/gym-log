@@ -454,12 +454,14 @@ class GarminActivity:
 
 @dataclass(frozen=True)
 class GarminDay:
-    """One day's Garmin summary — steps, resting heart rate, sleep."""
+    """One day's Garmin summary — steps, resting heart rate, sleep, overnight HRV."""
 
     date: str
     steps: int = 0
     resting_hr: int = 0
     sleep_seconds: int = 0
+    hrv_ms: int = 0
+    hrv_status: str = ""
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -467,6 +469,8 @@ class GarminDay:
             "steps": self.steps,
             "resting_hr": self.resting_hr,
             "sleep_seconds": self.sleep_seconds,
+            "hrv_ms": self.hrv_ms,
+            "hrv_status": self.hrv_status,
         }
 
     @classmethod
@@ -476,6 +480,48 @@ class GarminDay:
             steps=int(payload.get("steps", 0) or 0),
             resting_hr=int(payload.get("resting_hr", 0) or 0),
             sleep_seconds=int(payload.get("sleep_seconds", 0) or 0),
+            hrv_ms=int(payload.get("hrv_ms", 0) or 0),
+            hrv_status=str(payload.get("hrv_status", "") or ""),
+        )
+
+
+@dataclass(frozen=True)
+class GarminFitness:
+    """VO2max and lactate threshold as Garmin reported them on `date`.
+
+    Unlike `GarminDay`'s steps/resting-HR/sleep/HRV, which Garmin genuinely
+    answers per historical date, the endpoints behind these two fields always
+    answer with *today's* current reading regardless of the date asked (a
+    documented quirk of both, not a request this app sends wrong) — see
+    `gymlog.garmin._fitness`. So this is only ever created once per sync, for
+    the day the sync actually ran, never backfilled for the rest of the
+    trailing window the way a `GarminDay` is. A real trend still builds up
+    over time, just from this app's own daily snapshots rather than from
+    Garmin's history.
+    """
+
+    date: str
+    vo2max: float = 0.0
+    lactate_threshold_bpm: int = 0
+    lactate_threshold_pace_seconds_per_km: int = 0
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "date": self.date,
+            "vo2max": self.vo2max,
+            "lactate_threshold_bpm": self.lactate_threshold_bpm,
+            "lactate_threshold_pace_seconds_per_km": self.lactate_threshold_pace_seconds_per_km,
+        }
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> GarminFitness:
+        return cls(
+            date=str(payload.get("date", "")),
+            vo2max=float(payload.get("vo2max", 0) or 0),
+            lactate_threshold_bpm=int(payload.get("lactate_threshold_bpm", 0) or 0),
+            lactate_threshold_pace_seconds_per_km=int(
+                payload.get("lactate_threshold_pace_seconds_per_km", 0) or 0
+            ),
         )
 
 
@@ -548,6 +594,7 @@ class Log:
     insights: tuple[Insight, ...] = ()
     garmin_activities: tuple[GarminActivity, ...] = ()
     garmin_days: tuple[GarminDay, ...] = ()
+    garmin_fitness: tuple[GarminFitness, ...] = ()
     garmin_synced_at: str = ""
 
     @property
@@ -687,13 +734,17 @@ class Log:
         days: Iterable[GarminDay],
         keep_since: str,
         synced_at: str = "",
+        fitness: Iterable[GarminFitness] = (),
     ) -> Log:
         """Merge freshly-synced Garmin records and drop anything older than `keep_since`.
 
         Retention is enforced here, at write time, rather than by filtering on
         every read: a rolling window this way is a size the document can never
         outgrow, instead of a display filter over an archive that keeps growing
-        underneath it.
+        underneath it. `fitness` is keyed and retained the same way as
+        `activities`/`days` even though a sync only ever produces at most one
+        entry for it (see `GarminFitness`) — one merge rule for all three
+        rather than a special case for the one that happens to be sparse.
 
         `synced_at` is the caller's timestamp, not read from the wall clock
         here — same reasoning as `keep_since` being passed in rather than
@@ -705,6 +756,7 @@ class Log:
             a.id: a for a in activities
         }
         merged_days = {d.date: d for d in self.garmin_days} | {d.date: d for d in days}
+        merged_fitness = {f.date: f for f in self.garmin_fitness} | {f.date: f for f in fitness}
         return replace(
             self,
             garmin_activities=tuple(
@@ -717,6 +769,12 @@ class Log:
                 sorted(
                     (d for d in merged_days.values() if d.date >= keep_since),
                     key=lambda d: d.date,
+                )
+            ),
+            garmin_fitness=tuple(
+                sorted(
+                    (f for f in merged_fitness.values() if f.date >= keep_since),
+                    key=lambda f: f.date,
                 )
             ),
             garmin_synced_at=synced_at or self.garmin_synced_at,
@@ -784,6 +842,26 @@ class Log:
                 return activity.zone_low_bpm
         return ()
 
+    @property
+    def latest_garmin_fitness(self) -> GarminFitness | None:
+        """The most recent VO2max/lactate threshold snapshot, or None before the first one.
+
+        `garmin_fitness` is sorted ascending by date (see `with_garmin_sync`),
+        and every entry in it was worth keeping when it was recorded (`_fitness`
+        only ever returns one when at least one of its two readings came back),
+        so the last entry is simply the latest — no further filtering needed.
+        """
+        return self.garmin_fitness[-1] if self.garmin_fitness else None
+
+    def garmin_hrv_since(self, cutoff: str) -> tuple[GarminDay, ...]:
+        """Days on/after `cutoff` with an overnight HRV reading, oldest first.
+
+        Scoped to `hrv_ms > 0` rather than returning every day in range: a day
+        the sync ran but Garmin had no overnight reading for (no watch worn
+        overnight, say) should not show up as a zero-HRV night.
+        """
+        return tuple(d for d in self.garmin_days if d.date >= cutoff and d.hrv_ms > 0)
+
     def to_json(self) -> str:
         return json.dumps(
             {
@@ -804,6 +882,9 @@ class Log:
                 ],
                 "garmin_days": [
                     d.to_json() for d in sorted(self.garmin_days, key=lambda d: d.date)
+                ],
+                "garmin_fitness": [
+                    f.to_json() for f in sorted(self.garmin_fitness, key=lambda f: f.date)
                 ],
                 "garmin_synced_at": self.garmin_synced_at,
             },
@@ -861,6 +942,11 @@ class Log:
                 GarminDay.from_json(d)
                 for d in payload.get("garmin_days", []) or ()
                 if isinstance(d, dict)
+            ),
+            garmin_fitness=tuple(
+                GarminFitness.from_json(f)
+                for f in payload.get("garmin_fitness", []) or ()
+                if isinstance(f, dict)
             ),
             garmin_synced_at=str(payload.get("garmin_synced_at", "") or ""),
         )

@@ -35,6 +35,9 @@ class _FakeGarmin:
         self.zones_by_activity: dict[str, Any] = {}
         self.summaries: dict[str, dict[str, Any]] = {}
         self.sleep: dict[str, dict[str, Any]] = {}
+        self.hrv: dict[str, dict[str, Any]] = {}
+        self.max_metrics: dict[str, Any] = {}
+        self.lactate_threshold: dict[str, Any] = {}
         self.calls: list[str] = []
 
     def login(self, tokenstore: str | None = None) -> tuple[None, None]:
@@ -59,6 +62,18 @@ class _FakeGarmin:
     def get_sleep_data(self, cdate: str) -> dict[str, Any]:
         self.calls.append(f"sleep:{cdate}")
         return self.sleep.get(cdate, {})
+
+    def get_hrv_data(self, cdate: str) -> dict[str, Any]:
+        self.calls.append(f"hrv:{cdate}")
+        return self.hrv.get(cdate, {})
+
+    def get_max_metrics(self, cdate: str) -> dict[str, Any]:
+        self.calls.append(f"max_metrics:{cdate}")
+        return self.max_metrics
+
+    def get_lactate_threshold(self) -> dict[str, Any]:
+        self.calls.append("lactate_threshold")
+        return self.lactate_threshold
 
 
 ACTIVITY_PAYLOAD = {
@@ -98,7 +113,7 @@ def test_sync_fetches_the_trailing_sync_window_not_the_full_retention(
     monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
     monkeypatch.setattr("garminconnect.Garmin", _Recording)
 
-    activities, days = garmin.sync_garmin(today=date(2026, 9, 30))
+    activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 30))
 
     assert captured["start"] == "2026-09-23"
     assert captured["end"] == "2026-09-30"
@@ -127,7 +142,7 @@ def test_sync_days_can_be_widened_for_a_one_off_backfill(
     monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
     monkeypatch.setattr("garminconnect.Garmin", _Recording)
 
-    activities, days = garmin.sync_garmin(today=date(2026, 9, 30), days=30)
+    activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 30), days=30)
 
     assert captured["start"] == "2026-08-31"
     assert len(days) == 31
@@ -149,7 +164,7 @@ def test_an_activity_is_mapped_with_its_heart_rate_zones(
     monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
     monkeypatch.setattr("garminconnect.Garmin", _WithOneActivity)
 
-    activities, _days = garmin.sync_garmin(today=date(2026, 9, 15))
+    activities, _days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15))
 
     assert len(activities) == 1
     activity = activities[0]
@@ -180,7 +195,7 @@ def test_a_failed_zone_fetch_degrades_to_empty_without_aborting_the_sync(
     monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
     monkeypatch.setattr("garminconnect.Garmin", _ZonesFail)
 
-    activities, _days = garmin.sync_garmin(today=date(2026, 9, 15))
+    activities, _days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15))
 
     assert len(activities) == 2
     failed, ok = activities
@@ -205,11 +220,147 @@ def test_a_day_summary_tolerates_a_missing_field(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
     monkeypatch.setattr("garminconnect.Garmin", _SparseDay)
 
-    _activities, days = garmin.sync_garmin(today=date(2026, 9, 15))
+    _activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15))
 
     assert all(d.steps == 5000 for d in days)
     assert all(d.resting_hr == 0 for d in days)
     assert all(d.sleep_seconds == 0 for d in days)
+    assert all(d.hrv_ms == 0 for d in days)
+
+
+def test_a_day_carries_its_overnight_hrv_reading(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _WithHrv(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    instance = _WithHrv("me@example.com", "hunter2")
+    instance.hrv = {"2026-09-15": {"hrvSummary": {"lastNightAvg": 62, "status": "BALANCED"}}}
+    monkeypatch.setattr("garminconnect.Garmin", lambda email, password: instance)
+
+    _activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+
+    assert days[0].hrv_ms == 62
+    assert days[0].hrv_status == "BALANCED"
+
+
+def test_a_failed_hrv_fetch_degrades_to_zero_without_aborting_the_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _HrvFails(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+        def get_hrv_data(self, cdate: str) -> dict[str, Any]:
+            raise RuntimeError("Garmin said no")
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    monkeypatch.setattr("garminconnect.Garmin", _HrvFails)
+
+    _activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+
+    assert days[0].hrv_ms == 0
+    assert days[0].hrv_status == ""
+
+
+def test_fitness_reads_vo2max_and_lactate_threshold_for_today_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both endpoints only ever answer for "today", so this must be fetched
+    once per sync — not looped across the whole trailing window the way
+    `_day` is — and stamped with the sync's own `today`."""
+    calls: list[str] = []
+
+    class _WithFitness(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+        def get_max_metrics(self, cdate: str) -> dict[str, Any]:
+            calls.append(f"max_metrics:{cdate}")
+            return {"generic": {"vo2MaxPreciseValue": 52.3, "vo2MaxValue": 52}}
+
+        def get_lactate_threshold(self) -> dict[str, Any]:
+            calls.append("lactate_threshold")
+            return {
+                "speed_and_heart_rate": {"heartRate": 165, "speed": 3.876},
+                "power": {},
+            }
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    monkeypatch.setattr("garminconnect.Garmin", _WithFitness)
+
+    _activities, days, fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=3)
+
+    assert calls.count("max_metrics:2026-09-15") == 1
+    assert calls.count("lactate_threshold") == 1
+    assert len(days) == 4  # the fetch above is not part of the per-day loop
+    assert len(fitness) == 1
+    reading = fitness[0]
+    assert reading.date == "2026-09-15"
+    assert reading.vo2max == 52.3
+    assert reading.lactate_threshold_bpm == 165
+    assert reading.lactate_threshold_pace_seconds_per_km == round(1000 / 3.876)
+
+
+def test_fitness_falls_back_to_the_imprecise_vo2max_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _WithoutPrecise(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+        def get_max_metrics(self, cdate: str) -> dict[str, Any]:
+            return {"generic": {"vo2MaxValue": 48}}
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    monkeypatch.setattr("garminconnect.Garmin", _WithoutPrecise)
+
+    _activities, _days, fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+
+    assert fitness[0].vo2max == 48
+
+
+def test_fitness_is_none_when_neither_reading_comes_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _NoFitness(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    monkeypatch.setattr("garminconnect.Garmin", _NoFitness)
+
+    _activities, _days, fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+
+    assert fitness == []
+
+
+def test_a_failed_max_metrics_fetch_still_returns_the_lactate_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _MaxMetricsFails(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+        def get_max_metrics(self, cdate: str) -> dict[str, Any]:
+            raise RuntimeError("Garmin said no")
+
+        def get_lactate_threshold(self) -> dict[str, Any]:
+            return {"speed_and_heart_rate": {"heartRate": 160, "speed": 3.5}}
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    monkeypatch.setattr("garminconnect.Garmin", _MaxMetricsFails)
+
+    _activities, _days, fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+
+    assert fitness[0].vo2max == 0
+    assert fitness[0].lactate_threshold_bpm == 160
 
 
 def test_the_cached_session_is_passed_to_login_and_resaved(

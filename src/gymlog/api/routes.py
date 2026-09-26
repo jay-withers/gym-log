@@ -998,6 +998,96 @@ def _week_label(weeks_ago: int) -> str:
     return f"{weeks_ago} wks ago"
 
 
+@router.get("/insights/fitness", response_class=HTMLResponse, include_in_schema=False)
+def fitness_insights(request: Request) -> Any:
+    log, _etag = store.load()
+    return templates.TemplateResponse(
+        request,
+        "insights_fitness.html",
+        {
+            "current": _current_fitness(log),
+            "vo2max_trend": _vo2max_trend(log),
+            "hrv": _hrv_summary(log),
+            "synced_at": _format_synced_at(log.garmin_synced_at),
+        },
+    )
+
+
+def _current_fitness(log: Any) -> dict[str, Any]:
+    """The latest known VO2max and lactate threshold, formatted for display."""
+    latest = log.latest_garmin_fitness
+    if latest is None:
+        return {}
+    return {
+        "vo2max": latest.vo2max,
+        "lactate_threshold_bpm": latest.lactate_threshold_bpm,
+        "lactate_threshold_pace": _pace_label(latest.lactate_threshold_pace_seconds_per_km),
+        "as_of": _short_date(latest.date),
+    }
+
+
+def _vo2max_trend(log: Any, limit: int = 8) -> list[dict[str, Any]]:
+    """Up to the last `limit` VO2max readings this app has itself recorded, oldest first.
+
+    Bar height is scaled between the visible readings' own min and max,
+    not from zero: VO2max moves in a narrow band — a point or two over
+    months — and a zero-based bar chart would flatten every reading to
+    nearly the same height. `max(8, ...)` keeps the lowest reading's bar
+    tall enough to still read as present rather than as a missing week.
+    """
+    readings = [f for f in log.garmin_fitness if f.vo2max > 0][-limit:]
+    if len(readings) < 2:
+        return []
+    values = [r.vo2max for r in readings]
+    lo, hi = min(values), max(values)
+    span = hi - lo
+    return [
+        {
+            "value": r.vo2max,
+            "date": _short_date(r.date),
+            "pct": 100 if span == 0 else max(8, round(100 * (r.vo2max - lo) / span)),
+        }
+        for r in readings
+    ]
+
+
+def _hrv_summary(log: Any, nights: int = 7) -> dict[str, Any]:
+    """The last `nights` nights of overnight HRV, oldest first, plus the latest status/average.
+
+    The cutoff looks back twice `nights` calendar days, not exactly `nights`:
+    `garmin_hrv_since` only returns nights with a real reading, so a missed
+    or unworn night should be skipped over rather than shortening the chart.
+    """
+    cutoff = (_today() - timedelta(days=nights * 2)).isoformat()
+    recent = log.garmin_hrv_since(cutoff)[-nights:]
+    if not recent:
+        return {"nights": []}
+    peak = max(d.hrv_ms for d in recent) or 1
+    return {
+        "nights": [
+            {"ms": d.hrv_ms, "pct": round(100 * d.hrv_ms / peak), "label": _short_date(d.date)}
+            for d in recent
+        ],
+        "latest_status": recent[-1].hrv_status.replace("_", " ").title(),
+        "avg_ms": round(sum(d.hrv_ms for d in recent) / len(recent)),
+    }
+
+
+def _short_date(iso_date: str) -> str:
+    """ "26 Sep" from an ISO date, or "" if it doesn't parse."""
+    try:
+        return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%d %b")
+    except ValueError:
+        return ""
+
+
+def _pace_label(seconds_per_km: int) -> str:
+    """ "4:32 /km" from a per-km pace in seconds, or "" if there isn't one."""
+    if seconds_per_km <= 0:
+        return ""
+    return f"{seconds_per_km // 60}:{seconds_per_km % 60:02d} /km"
+
+
 # --- Garmin sync: a cut-down browser for the last 90 days of synced data -----
 
 
@@ -1058,7 +1148,7 @@ def sync_garmin_now() -> Any:
     from ..garmin import GARMIN_RETENTION_DAYS, sync_garmin
 
     try:
-        activities, days = sync_garmin()
+        activities, days, fitness = sync_garmin()
     except Exception as exc:
         logger.warning("manual garmin sync failed", exc_info=True)
         raise GarminSyncFailed(
@@ -1070,7 +1160,9 @@ def sync_garmin_now() -> Any:
     synced_at = datetime.now(UTC).isoformat(timespec="seconds")
     try:
         store.update(
-            lambda current: current.with_garmin_sync(activities, days, keep_since, synced_at)
+            lambda current: current.with_garmin_sync(
+                activities, days, keep_since, synced_at, fitness
+            )
         )
     except store.ConflictError as exc:
         raise ConflictResponse("the log was changed elsewhere; the sync was not saved") from exc

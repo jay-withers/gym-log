@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,7 +12,16 @@ from gymlog import store
 from gymlog.api.main import create_app
 from gymlog.model import Block, Day, Log, SetLog
 
-from .factories import block, entry, exercise, garmin_activity, garmin_day, insight, session
+from .factories import (
+    block,
+    entry,
+    exercise,
+    garmin_activity,
+    garmin_day,
+    garmin_fitness,
+    insight,
+    session,
+)
 
 
 @pytest.fixture
@@ -1321,6 +1330,77 @@ def test_running_insights_page_is_empty_before_any_sync(client, seeded):
     assert "No running data yet" in page
 
 
+def test_fitness_insights_page_shows_current_vo2max_and_lactate_threshold(client, seeded):
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[],
+            keep_since="2020-01-01",
+            synced_at="2026-09-24T06:00:00+00:00",
+            fitness=[
+                garmin_fitness(
+                    date="2026-09-24",
+                    vo2max=52.3,
+                    lactate_threshold_bpm=165,
+                    lactate_threshold_pace_seconds_per_km=258,
+                )
+            ],
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "52.3" in page
+    assert "165 bpm" in page
+    assert "4:18 /km" in page  # 258s/km formatted
+    assert "as of 24 Sep" in page
+    assert "Garmin last synced 24 Sep 2026, 06:00 UTC" in page
+
+
+def test_fitness_insights_page_shows_the_vo2max_trend(client, seeded):
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[],
+            keep_since="2020-01-01",
+            fitness=[
+                garmin_fitness(date="2026-09-10", vo2max=50.0),
+                garmin_fitness(date="2026-09-24", vo2max=52.0),
+            ],
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert page.count('class="fitbar"') >= 2
+    assert "10 Sep" in page
+    assert "24 Sep" in page
+
+
+def test_fitness_insights_page_shows_overnight_hrv(client, seeded):
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    today = date.today().isoformat()
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                garmin_day(date=yesterday, hrv_ms=58, hrv_status="BALANCED"),
+                garmin_day(date=today, hrv_ms=62, hrv_status="BALANCED"),
+            ],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "62ms avg" not in page  # avg of 58 and 62 is 60, not 62
+    assert "60ms avg" in page
+    assert "Balanced" in page
+
+
+def test_fitness_insights_page_is_empty_before_any_sync(client, seeded):
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "No fitness data yet" in page
+
+
 # --- Garmin sync: a cut-down browser for the last 30 days of synced data -----
 
 
@@ -1377,7 +1457,7 @@ def test_garmin_page_when_empty(client, seeded):
 
 def test_sync_garmin_now_calls_garmin_and_redirects_back(client, seeded, monkeypatch):
     synced_activity = garmin_activity(id="a1", activity_type="swimming")
-    monkeypatch.setattr("gymlog.garmin.sync_garmin", lambda: ([synced_activity], []))
+    monkeypatch.setattr("gymlog.garmin.sync_garmin", lambda: ([synced_activity], [], []))
     login(client)
 
     response = client.post("/garmin/sync", follow_redirects=False)
@@ -1392,7 +1472,7 @@ def test_sync_garmin_now_calls_garmin_and_redirects_back(client, seeded, monkeyp
 def test_sync_garmin_now_reports_a_friendly_error_when_garmin_is_unreachable(
     client, seeded, monkeypatch
 ):
-    def _boom() -> tuple[list, list]:
+    def _boom() -> tuple[list, list, list]:
         raise RuntimeError("Garmin said no")
 
     monkeypatch.setattr("gymlog.garmin.sync_garmin", _boom)

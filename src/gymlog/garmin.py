@@ -10,11 +10,13 @@ of friction (MFA challenges, rate limiting) an unofficial API punishes.
 
 Field names below (`activityId`, `startTimeLocal`, `activityType.typeKey`,
 `averageHR`/`maxHR`, `distance`, `totalSteps`, `restingHeartRate`,
-`dailySleepDTO.sleepTimeSeconds`, `zoneNumber`/`secsInZone`/`zoneLowBoundary`)
-are Garmin's own, confirmed against community-documented response shapes
-rather than this library's (minimal) type hints — Garmin can change them
-without notice, which is why every read here is defensive (`.get()` with a
-fallback), never a bare index.
+`dailySleepDTO.sleepTimeSeconds`, `zoneNumber`/`secsInZone`/`zoneLowBoundary`,
+`hrvSummary.lastNightAvg`/`.status`, `generic.vo2MaxPreciseValue`/
+`.vo2MaxValue`, `speed_and_heart_rate.speed`/`.heartRate`) are Garmin's own,
+confirmed against community-documented response shapes rather than this
+library's (minimal) type hints — Garmin can change them without notice,
+which is why every read here is defensive (`.get()` with a fallback), never
+a bare index.
 """
 
 from __future__ import annotations
@@ -23,18 +25,19 @@ import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from .model import GARMIN_ZONE_COUNT, GarminActivity, GarminDay
+from .model import GARMIN_ZONE_COUNT, GarminActivity, GarminDay, GarminFitness
 from .settings import secret
 
 logger = logging.getLogger(__name__)
 
 # The trailing window each sync actually asks Garmin Connect for. Short on
 # purpose: a day already synced doesn't change, so re-fetching it every run
-# spends an API call per day (two, counting sleep) plus one per activity for
-# zones on data that hasn't moved. A missed day still self-heals within a
-# week, and Log.with_garmin_sync merges each run's window on top of what is
-# already there rather than replacing it, so history outside this window
-# survives untouched as long as it stays within GARMIN_RETENTION_DAYS below.
+# spends an API call per day (three, counting sleep and HRV) plus one per
+# activity for zones on data that hasn't moved. A missed day still self-heals
+# within a week, and Log.with_garmin_sync merges each run's window on top of
+# what is already there rather than replacing it, so history outside this
+# window survives untouched as long as it stays within GARMIN_RETENTION_DAYS
+# below.
 GARMIN_SYNC_DAYS = 7
 
 # How far back the log itself keeps Garmin data, enforced at write time by
@@ -49,7 +52,7 @@ GARMIN_RETENTION_DAYS = 90
 
 def sync_garmin(
     today: date | None = None, days: int | None = None
-) -> tuple[list[GarminActivity], list[GarminDay]]:
+) -> tuple[list[GarminActivity], list[GarminDay], list[GarminFitness]]:
     """Fetch the trailing `days` (default `GARMIN_SYNC_DAYS`) of activities and daily summaries.
 
     An auth failure (bad credentials, an MFA challenge the unofficial API
@@ -66,6 +69,10 @@ def sync_garmin(
     reaches back far enough to self-heal that; a wider one-off run does,
     because the merge is keyed by activity id and simply replaces the stale
     record.
+
+    The fitness snapshot (see `_fitness`) is fetched once for `today` only,
+    never per day in the window — unlike everything else here, its source
+    endpoints don't actually answer for a requested date.
     """
     today = today or datetime.now(UTC).date()
     start = today - timedelta(days=days if days is not None else GARMIN_SYNC_DAYS)
@@ -80,7 +87,10 @@ def sync_garmin(
     for offset in range(span_days + 1):
         days_out.append(_day(client, (start + timedelta(days=offset)).isoformat()))
 
-    return activities, days_out
+    fitness_today = _fitness(client, today.isoformat())
+    fitness = [fitness_today] if fitness_today else []
+
+    return activities, days_out, fitness
 
 
 def _client() -> Any:
@@ -161,7 +171,7 @@ def _zones(activity_id: str, client: Any) -> dict[str, tuple[int, ...]]:
 
 
 def _day(client: Any, cdate: str) -> GarminDay:
-    """One day's steps/resting-HR/sleep, tolerating any of the three failing on its own."""
+    """One day's steps/resting-HR/sleep/HRV, tolerating any of the four failing on its own."""
     steps = 0
     resting_hr = 0
     try:
@@ -179,4 +189,69 @@ def _day(client: Any, cdate: str) -> GarminDay:
     except Exception:
         logger.warning("could not fetch sleep data for %s", cdate, exc_info=True)
 
-    return GarminDay(date=cdate, steps=steps, resting_hr=resting_hr, sleep_seconds=sleep_seconds)
+    hrv_ms = 0
+    hrv_status = ""
+    try:
+        hrv = client.get_hrv_data(cdate)
+        hrv_summary = (hrv or {}).get("hrvSummary") or {}
+        hrv_ms = int(hrv_summary.get("lastNightAvg") or 0)
+        hrv_status = str(hrv_summary.get("status") or "")
+    except Exception:
+        logger.warning("could not fetch HRV data for %s", cdate, exc_info=True)
+
+    return GarminDay(
+        date=cdate,
+        steps=steps,
+        resting_hr=resting_hr,
+        sleep_seconds=sleep_seconds,
+        hrv_ms=hrv_ms,
+        hrv_status=hrv_status,
+    )
+
+
+def _fitness(client: Any, cdate: str) -> GarminFitness | None:
+    """VO2max and lactate threshold as Garmin reports them right now, stamped with `cdate`.
+
+    Both `get_max_metrics` and `get_lactate_threshold` answer with today's
+    current reading no matter what date is asked for — a documented quirk of
+    Garmin's own endpoints (`metrics-service`'s maxmet range and
+    `biometric-service`'s latestLactateThreshold), not a request built wrong
+    here. Calling this once per sync, for `today`, and stamping the result
+    with that date is how a real trend still builds up over the app's own
+    history of daily syncs, rather than either re-stamping the same "current"
+    number onto every day in the trailing window or claiming a history
+    Garmin doesn't actually have.
+
+    Returns None rather than a zeroed `GarminFitness` when neither reading
+    came back, so a wholly failed fetch leaves no trace in the log instead of
+    looking like a real "0 vo2max" data point.
+    """
+    vo2max = 0.0
+    try:
+        raw = client.get_max_metrics(cdate)
+        entry = raw[0] if isinstance(raw, list) and raw else raw if isinstance(raw, dict) else {}
+        generic = (entry or {}).get("generic") or {}
+        vo2max = float(generic.get("vo2MaxPreciseValue") or generic.get("vo2MaxValue") or 0)
+    except Exception:
+        logger.warning("could not fetch max metrics for %s", cdate, exc_info=True)
+
+    lactate_threshold_bpm = 0
+    lactate_threshold_pace_seconds_per_km = 0
+    try:
+        lactate_threshold = client.get_lactate_threshold()
+        speed_and_heart_rate = (lactate_threshold or {}).get("speed_and_heart_rate") or {}
+        lactate_threshold_bpm = int(speed_and_heart_rate.get("heartRate") or 0)
+        speed_ms = speed_and_heart_rate.get("speed") or 0
+        if speed_ms:
+            lactate_threshold_pace_seconds_per_km = round(1000 / speed_ms)
+    except Exception:
+        logger.warning("could not fetch lactate threshold for %s", cdate, exc_info=True)
+
+    if not vo2max and not lactate_threshold_bpm:
+        return None
+    return GarminFitness(
+        date=cdate,
+        vo2max=vo2max,
+        lactate_threshold_bpm=lactate_threshold_bpm,
+        lactate_threshold_pace_seconds_per_km=lactate_threshold_pace_seconds_per_km,
+    )
