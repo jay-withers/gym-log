@@ -104,13 +104,27 @@ def test_insight_records_what_generate_insight_returns(monkeypatch):
 def test_garmin_sync_records_what_sync_garmin_returns(monkeypatch):
     activity = garmin_activity(id="a1")
     day = garmin_day(date="2026-09-15")
-    monkeypatch.setattr("gymlog.garmin.sync_garmin", lambda: ([activity], [day]))
+    monkeypatch.setattr("gymlog.garmin.sync_garmin", lambda days=None: ([activity], [day]))
 
     assert main(["garmin-sync"]) == 0
 
     log, _etag = store.load()
     assert log.garmin_activities == (activity,)
     assert log.garmin_days == (day,)
+
+
+def test_garmin_sync_days_flag_is_passed_through_for_a_one_off_backfill(monkeypatch):
+    seen_days: list[int | None] = []
+
+    def fake_sync_garmin(days=None):
+        seen_days.append(days)
+        return [], []
+
+    monkeypatch.setattr("gymlog.garmin.sync_garmin", fake_sync_garmin)
+
+    assert main(["garmin-sync", "--days", "30"]) == 0
+
+    assert seen_days == [30]
 
 
 def test_a_missing_subcommand_is_refused(capsys):

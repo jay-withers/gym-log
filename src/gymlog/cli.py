@@ -94,7 +94,21 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("insight", help="generate an AI training insight")
 
-    sub.add_parser("garmin-sync", help="sync recent activities and daily summaries from Garmin")
+    garmin_sync = sub.add_parser(
+        "garmin-sync", help="sync recent activities and daily summaries from Garmin"
+    )
+    garmin_sync.add_argument(
+        "--days",
+        type=int,
+        default=None,
+        help=(
+            "override the trailing window (default: GARMIN_SYNC_DAYS). For a "
+            "one-off backfill after a schema change to GarminActivity — a wider "
+            "window re-fetches and overwrites older records that were stored "
+            "under the old shape, which the daily job's narrow window never "
+            "revisits."
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -115,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "insight":
             return _insight()
         if args.command == "garmin-sync":
-            return _garmin_sync()
+            return _garmin_sync(args.days)
     finally:
         telemetry.flush()
 
@@ -209,18 +223,20 @@ def _insight() -> int:
     return 0
 
 
-def _garmin_sync() -> int:
+def _garmin_sync(days: int | None = None) -> int:
     from datetime import UTC, datetime, timedelta
 
     from . import store
     from .garmin import GARMIN_RETENTION_DAYS, sync_garmin
 
-    activities, days = sync_garmin()
+    activities, days_synced = sync_garmin(days=days)
     keep_since = (date.today() - timedelta(days=GARMIN_RETENTION_DAYS)).isoformat()
     synced_at = datetime.now(UTC).isoformat(timespec="seconds")
 
-    store.update(lambda current: current.with_garmin_sync(activities, days, keep_since, synced_at))
+    store.update(
+        lambda current: current.with_garmin_sync(activities, days_synced, keep_since, synced_at)
+    )
     logging.getLogger("gymlog").info(
-        "synced %d activities, %d days from garmin", len(activities), len(days)
+        "synced %d activities, %d days from garmin", len(activities), len(days_synced)
     )
     return 0

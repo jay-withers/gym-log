@@ -133,15 +133,19 @@ insight: ## Generate a weekly insight against the real blob (needs DEEPSEEK-API-
 insight-local: ## Generate a weekly insight against the local log (needs DEEPSEEK_API_KEY)
 	STATE_CONTAINER_URL= uv run gymlog insight
 
-garmin-sync: ## Sync the last 30 days from Garmin against the real blob (needs GARMIN-EMAIL/PASSWORD in Key Vault)
+# DAYS= widens the trailing window past GARMIN_SYNC_DAYS for a one-off
+# backfill — e.g. after a field is added to GarminActivity, the daily job's
+# narrow window never re-fetches (and so never fixes) records stored before
+# that field existed.
+garmin-sync: ## Sync the trailing GARMIN_SYNC_DAYS from Garmin against the real blob (DAYS=N to widen, needs GARMIN-EMAIL/PASSWORD in Key Vault)
 	STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)" \
-		uv run gymlog garmin-sync
+		uv run gymlog garmin-sync $(if $(DAYS),--days $(DAYS))
 
 # Same STATE_CONTAINER_URL= pattern as `insight-local`: the local file, never
 # the real log, and GARMIN_EMAIL/GARMIN_PASSWORD resolve from the environment
 # first, so this needs no Key Vault either.
-garmin-sync-local: ## Sync the last 30 days from Garmin against the local log (needs GARMIN_EMAIL/GARMIN_PASSWORD)
-	STATE_CONTAINER_URL= uv run gymlog garmin-sync
+garmin-sync-local: ## Sync the trailing GARMIN_SYNC_DAYS from Garmin against the local log (DAYS=N to widen, needs GARMIN_EMAIL/GARMIN_PASSWORD)
+	STATE_CONTAINER_URL= uv run gymlog garmin-sync $(if $(DAYS),--days $(DAYS))
 
 init: ## terraform init, without configuring the state backend
 	terraform -chdir=$(TF_DIR) init -backend=false
