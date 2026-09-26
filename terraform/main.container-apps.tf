@@ -158,10 +158,11 @@ resource "azurerm_container_app" "this" {
 # to zero, not by the resource group going away.
 #
 # **Both DNS records must resolve before apply.** Azure validates them during
-# issuance and binding, not after: the CNAME for gymlog.jaywithers.uk pointing
-# at the app's default *.azurecontainerapps.io FQDN, and the TXT record at
-# asuid.gymlog carrying custom_domain_verification_id. `make dns` prints both
-# with their values filled in.
+# issuance and binding, not after: the CNAME for health.jaywithers.uk pointing
+# at the app's default *.azurecontainerapps.io FQDN (`terraform output
+# app_url`), and the TXT record at asuid.health carrying
+# custom_domain_verification_id (`terraform output
+# custom_domain_verification_id`) — there is no Make target for either yet.
 resource "azurerm_container_app_environment_managed_certificate" "this" {
   count = var.custom_domain_name != "" ? 1 : 0
 
@@ -180,7 +181,7 @@ resource "azurerm_container_app_custom_domain" "this" {
 
   name                     = var.custom_domain_name
   container_app_id         = azurerm_container_app.this.id
-  certificate_binding_type = "Disabled"
+  certificate_binding_type = "SniEnabled"
 
   # container_app_environment_certificate_id is deliberately unset. That field
   # accepts a bring-your-own azurerm_container_app_environment_certificate
@@ -188,14 +189,26 @@ resource "azurerm_container_app_custom_domain" "this" {
   # carries a `managedCertificates` segment the provider's parser rejects
   # (hashicorp/terraform-provider-azurerm#25788).
   #
-  # **The apply cannot finish the bind, and says nothing about it.** It reports
-  # certificate_binding_type = "Disabled" with no error while
-  # `az containerapp hostname list` still shows BindingType Disabled: ARM's
-  # bind operation needs the certificate id in the request and the provider has
-  # no field to put it in (hashicorp/terraform-provider-azurerm#27362, open).
-  # Until it lands, `make bind-domain` is the manual step after any apply that
-  # recreates either of these two resources. A plan afterwards reports no diff,
-  # because the CLI sets the same binding type this resource already declares.
+  # **The apply cannot finish the bind, and says nothing about it.** ARM's
+  # bind operation needs the certificate id in the request and the provider
+  # has no field to put it in (hashicorp/terraform-provider-azurerm#27362,
+  # open), so a *fresh* create of this resource reports
+  # certificate_binding_type = "Disabled" with no error, no matter what this
+  # line declares. `az containerapp hostname bind --hostname
+  # var.custom_domain_name` is the manual step after any apply that creates
+  # or recreates either of these two resources — it completes the bind ARM
+  # never got the certificate id for. Declared as "SniEnabled" rather than
+  # "Disabled", verified against the live resource on 2026-09-26, so a plan
+  # reports no diff once that manual bind has actually happened, instead of
+  # a permanent false "must be replaced" for a binding that already works.
+  #
+  # The trade-off this creates: if this resource is ever genuinely recreated
+  # (a `name` change, say — almost happened on 2026-09-26 from a stale
+  # `custom_domain_name` in dev.tfvars), the fresh resource reports back
+  # "Disabled" per the bug above while this line still says "SniEnabled",
+  # which is again a false diff until `az containerapp hostname bind` is
+  # re-run — there is no way to make this line simultaneously correct
+  # immediately after a real recreate and quiet once rebound.
   #
   # market-agent hit and confirmed all of this first; the workaround is the
   # same there.

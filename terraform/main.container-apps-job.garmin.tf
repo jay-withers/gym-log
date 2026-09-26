@@ -29,6 +29,9 @@ resource "azurerm_container_app_job" "garmin_sync" {
   # Unlike the app, which rejects this argument — see main.container-apps-job.tf.
   location = data.azurerm_container_app_environment.platform.location
 
+  # See main.container-apps.tf's identical argument on the app resource.
+  workload_profile_name = "Consumption"
+
   identity {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.this.id]
