@@ -55,6 +55,11 @@ repos:
       - id: shellcheck
         args: [--external-sources]
 
+  - repo: https://github.com/hadolint/hadolint
+    rev: 2eece55955ced00200be9729e9728cb7dacca505 # frozen: v2.15.1
+    hooks:
+      - id: hadolint-docker
+
   # ruff replaces both a linter and a formatter (black/isort/flake8). The
   # config, including the rule selection, lives in pyproject.toml — ruff walks
   # up from each file to find it, so nothing needs pointing at it from here.
