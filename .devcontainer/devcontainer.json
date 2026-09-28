@@ -1,6 +1,6 @@
 {
   "name": "gym-log",
-  "image": "ghcr.io/jay-withers/dev-containers/terraform:v0.15.0@sha256:57149b7fa6da83a468c5ad392223280416bc7b8415a46e9b2518f1447230787e",
+  "image": "ghcr.io/jay-withers/dev-containers/terraform:v0.16.1@sha256:86960700e7020f0c20053f59d78a6de3f4b3c6d45dd042d0cea1cf1cc64ba9e1",
   "mounts": [
     "source=${localEnv:HOME}/Git,target=/Users/jay/Git,type=bind",
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
