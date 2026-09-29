@@ -58,6 +58,11 @@ resource "azurerm_container_app" "this" {
     # replica stays warm for the hour it is being used and only scales back down
     # long after. See the README for the measured figure.
     min_replicas = 0
+    # Time with no requests before scaling to zero. The default is 300s, which a
+    # rest between sets can exceed, and the next save then waits on a cold start.
+    # 3600 is the platform maximum. Idle replicas bill at the reduced idle rate,
+    # so this adds cost only for the hour after the last request.
+    cooldown_period_in_seconds = 3600
     # One. The log is a single document read-modify-written on each save; a
     # second replica would make the ETag precondition in store.py load-bearing
     # rather than belt-and-braces.
