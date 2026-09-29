@@ -208,12 +208,12 @@ def test_the_suggestion_moves_after_a_session(client, seeded):
             "weight_0_2": "7.5",
         },
     )
-    # Every set at the top of 10-12, so the weight goes up and the reps drop
-    # back to the bottom. Asserted on the placeholders because that is now the
-    # only place the suggestion is rendered — the card carries no prose.
+    # Every set at the top of 10-12, so the weight goes up. The reps placeholder
+    # is what was done last time, per set, not the progression target.
     card = _card(client.get("/session/A").text, "Cable Flyes")
     assert 'placeholder="10 kg"' in card
-    assert 'placeholder="10 reps"' in card
+    assert 'placeholder="12 reps"' in card
+    assert 'placeholder="10 reps"' not in card
 
 
 def test_rotating_keeps_the_slot_and_the_history(client, seeded):

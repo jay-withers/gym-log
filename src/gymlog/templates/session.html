@@ -40,7 +40,7 @@
         <span>{{ position + 1 }}</span>
         <input type="number" name="reps_{{ card.index }}_{{ position }}"
                value="{{ logged.reps if logged else '' }}"
-               placeholder="{% if card.last %}{{ card.suggestion.reps }}{% else %}{{ e.target_for(position) }}{% endif %} reps"
+               placeholder="{% if card.last and position < card.last.sets | length %}{{ card.last.sets[position].reps }}{% elif card.last %}{{ card.suggestion.reps }}{% else %}{{ e.target_for(position) }}{% endif %} reps"
                inputmode="numeric" min="0" max="999">
         <input type="number" name="weight_{{ card.index }}_{{ position }}"
                value="{{ '%g' % logged.weight if logged else '' }}"
