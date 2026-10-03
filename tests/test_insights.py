@@ -57,6 +57,26 @@ def test_prompt_includes_recent_sessions_and_excludes_old_ones():
     assert "Old Move" not in prompt
 
 
+def test_prompt_shows_reps_and_weight_for_every_set():
+    """A set count alone hides a stall; the reps at each weight are what show one."""
+    log = Log(
+        sessions=(
+            session(
+                "2026-09-14",
+                "b",
+                "A",
+                entry("DB Step Ups", "legs", (10, 24.0), (10, 24.0), (6, 24.0)),
+                entry("Lat Pulldown", "back", (10, 60.0), (8, 65.0)),
+                entry("Pull-ups", "back", (8, 0.0), (6, 0.0)),
+            ),
+        )
+    )
+    prompt = _prompt(log, date(2026, 9, 15))
+    assert "DB Step Ups (10/10/6 x 24kg)" in prompt
+    assert "Lat Pulldown (10 x 60kg, 8 x 65kg)" in prompt
+    assert "Pull-ups (8/6 reps)" in prompt
+
+
 def test_prompt_includes_active_conditions_but_not_resolved_ones():
     log = Log(
         conditions=(

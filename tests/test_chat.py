@@ -14,7 +14,7 @@ import pytest
 from gymlog import chat
 from gymlog.model import Log
 
-from .factories import condition, entry, session
+from .factories import block, condition, entry, exercise, session
 
 
 @pytest.fixture
@@ -51,6 +51,49 @@ def test_every_turn_carries_the_log_as_context(captured):
     assert "Cable Flyes" in system[1]
     assert "left knee" in system[1]
     assert captured[0][-1] == {"role": "user", "content": "Can I squat?"}
+
+
+def _context(captured) -> str:
+    return [m["content"] for m in captured[0] if m["role"] == "system"][1]
+
+
+def test_a_brand_new_blocks_exercises_are_visible(captured):
+    """Week one of a block, nothing logged against it: the model still sees every exercise."""
+    log = Log(
+        blocks=(
+            block(
+                "2026-09-14",
+                exercise(
+                    slot="chest",
+                    name="Incline DB Press",
+                    sets=3,
+                    rep_low=8,
+                    rep_high=10,
+                    seed_weight=22.5,
+                    rest_seconds=90,
+                ),
+                exercise(slot="finisher", name="Sled Push", sets=0, rep_low=0, rep_high=0),
+                name="Block 4",
+            ),
+        )
+    )
+
+    chat.send(log, (), "Thoughts on my new block?", today=date(2026, 9, 15))
+
+    context = _context(captured)
+    assert "Block 4" in context
+    assert "Incline DB Press (3 sets of 8\u201310, 90s rest, starting at 22.5kg)" in context
+    assert "Sled Push (untracked finisher)" in context
+
+
+def test_recent_results_per_slot_are_included_even_from_an_old_block(captured):
+    log = Log(
+        sessions=(session("2026-07-01", "old", "A", entry("Cable Flyes", "chest", (12, 7.5))),)
+    )
+
+    chat.send(log, (), "How has chest gone?", today=date(2026, 9, 15))
+
+    assert "chest: 2026-07-01 Cable Flyes 12x7.5kg" in _context(captured)
 
 
 def test_only_the_most_recent_turns_are_resent(captured):
