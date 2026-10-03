@@ -7,8 +7,8 @@ from datetime import date, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
+from gymlog import chat, store
 from gymlog import settings as settings_module
-from gymlog import store
 from gymlog.api.main import create_app
 from gymlog.model import Block, Day, Log, SetLog
 
@@ -144,7 +144,15 @@ def test_the_manifest_starts_at_strength_not_the_home_menu(client):
 def test_home_links_to_every_section(client, seeded):
     login(client)
     page = client.get("/").text
-    for href in ("/strength", "/achievements", "/goals", "/conditions", "/insights", "/garmin"):
+    for href in (
+        "/strength",
+        "/achievements",
+        "/goals",
+        "/conditions",
+        "/insights",
+        "/garmin",
+        "/chat",
+    ):
         assert f'href="{href}"' in page
 
 
@@ -1231,6 +1239,68 @@ def test_delete_insight_removes_it_and_redirects_back(client, seeded):
     assert response.headers["location"] == "/insights/ai"
     log, _etag = store.load()
     assert log.insights == ()
+
+
+def test_chat_page_when_empty(client, seeded):
+    login(client)
+    page = client.get("/chat").text
+    assert 'action="/chat"' in page
+    assert "Clear conversation" not in page
+
+
+def test_chat_is_behind_the_gate(client):
+    assert client.get("/chat").status_code == 303
+    assert client.post("/chat", data={"message": "hi"}).status_code == 303
+
+
+def test_sending_a_chat_message_saves_both_sides_and_redirects_back(client, seeded, monkeypatch):
+    login(client)
+    monkeypatch.setattr("gymlog.insights.complete", lambda messages: "Rest up tonight.")
+
+    response = client.post("/chat", data={"message": "Legs are sore"})
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/chat#latest"
+    page = client.get("/chat").text
+    assert "Legs are sore" in page
+    assert "Rest up tonight." in page
+
+
+def test_a_blank_chat_message_is_not_sent(client, seeded, monkeypatch):
+    login(client)
+    monkeypatch.setattr(
+        "gymlog.insights.complete", lambda messages: pytest.fail("should not be called")
+    )
+
+    response = client.post("/chat", data={"message": "   "})
+
+    assert response.status_code == 303
+    assert chat.load() == ()
+
+
+def test_a_failed_chat_reply_is_a_502_and_saves_nothing(client, seeded, monkeypatch):
+    login(client)
+
+    def boom(_messages):
+        raise OSError("deepseek down")
+
+    monkeypatch.setattr("gymlog.insights.complete", boom)
+
+    response = client.post("/chat", data={"message": "hello"})
+
+    assert response.status_code == 502
+    assert "not saved" in response.json()["detail"]
+    assert chat.load() == ()
+
+
+def test_clearing_the_chat_empties_it(client, seeded):
+    login(client)
+    chat.save((chat.Message(role="user", content="old", at=""),))
+
+    response = client.post("/chat/clear")
+
+    assert response.status_code == 303
+    assert chat.load() == ()
 
 
 def test_hr_zone_insights_page_shows_minutes_and_percentages(client, seeded):
