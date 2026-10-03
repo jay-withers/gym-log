@@ -19,7 +19,7 @@ import urllib.request
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
-from .model import GARMIN_ZONE_COUNT, Insight, Log
+from .model import GARMIN_ZONE_COUNT, Insight, Log, SetLog
 from .settings import secret
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ def _prompt(log: Log, today: date) -> str:
     if recent:
         for session in recent:
             performed = ", ".join(
-                f"{entry.exercise} ({len(entry.sets)} sets)" if entry.sets else entry.exercise
+                f"{entry.exercise} ({_sets(entry.sets)})" if entry.sets else entry.exercise
                 for entry in session.entries
             )
             lines.append(f"- {session.date} ({session.day}): {performed or 'nothing logged'}")
@@ -130,6 +130,22 @@ def _prompt(log: Log, today: date) -> str:
                 lines.append(f"- {slot}: {progression}")
 
     return "\n".join(lines)
+
+
+def _sets(sets: tuple[SetLog, ...]) -> str:
+    """Every set as reps and load: `10/10/6 x 24kg`, or per set when the load moved.
+
+    Reps and weight rather than a set count, because a set count cannot show
+    the thing the prompt asks the model to flag — a stall, like step-ups
+    dropping from 10 reps to 6 at the same weight.
+    """
+    reps = "/".join(str(s.reps) for s in sets)
+    weights = {s.weight for s in sets}
+    if weights == {0}:
+        return f"{reps} reps"
+    if len(weights) == 1:
+        return f"{reps} x {sets[0].weight:g}kg"
+    return ", ".join(f"{s.reps} x {s.weight:g}kg" for s in sets)
 
 
 def _garmin_lines(log: Log, cutoff: str) -> list[str]:
