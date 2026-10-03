@@ -9,6 +9,12 @@ recent sessions, active conditions and goals, Garmin recovery — as a second
 system message, built fresh from the log as it stands at that moment. So a
 session logged mid-conversation is visible on the very next reply, and nothing
 derived from the log is ever stored twice.
+
+Chat adds two things the weekly insight leaves out: the current block's full
+prescription, and recent results per slot. The insight only lists either when
+a block is about to end. A chat is where someone asks "what do you think of my
+new block?" in week one, and without them the model cannot see a single
+exercise.
 """
 
 from __future__ import annotations
@@ -25,6 +31,11 @@ from .model import Log
 # coherent; bounded so a long-running conversation does not grow every
 # request's token bill without limit.
 CONTEXT_MESSAGES = 20
+
+# Recent results per slot included in the context — enough to compare a new
+# block's choices against what the last one was doing, without re-sending the
+# whole history every turn.
+SLOT_HISTORY = 3
 
 # Messages kept on disk. Older ones fall off rather than growing the blob
 # forever — this is a chat, not an archive.
@@ -99,9 +110,49 @@ def _messages(log: Log, conversation: tuple[Message, ...], today: date) -> list[
     context = (
         f"Today is {today.isoformat()}. Their training log as it stands right now:\n\n"
         + insights._prompt(log, today)
+        + _block_lines(log)
+        + _history_lines(log)
     )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "system", "content": context},
         *({"role": m.role, "content": m.content} for m in conversation[-CONTEXT_MESSAGES:]),
     ]
+
+
+def _block_lines(log: Log) -> str:
+    """The current block's prescription: every day's exercises, sets and reps."""
+    block = log.current_block
+    if block is None:
+        return ""
+
+    lines = [f"\n\nCurrent block's exercises ({block.name}, started {block.started}):"]
+    for day in block.days.values():
+        lines.append(f"{day.label}:")
+        for e in day.exercises:
+            if not e.tracked:
+                lines.append(f"- {e.slot}: {e.name} (untracked finisher)")
+                continue
+            detail = f"{e.sets} sets of {e.rep_range_label}"
+            if e.rest_seconds:
+                detail += f", {e.rest_seconds}s rest"
+            if e.seed_weight is not None:
+                detail += f", starting at {e.seed_weight:g}kg"
+            lines.append(f"- {e.slot}: {e.name} ({detail})")
+    return "\n".join(lines)
+
+
+def _history_lines(log: Log) -> str:
+    """The last few heaviest sets per slot, across blocks — the before to compare with."""
+    lines = []
+    for slot in log.slots:
+        recent = log.history(slot)[-SLOT_HISTORY:]
+        if recent:
+            progression = ", ".join(
+                f"{when} {exercise} {set_.reps}x{set_.weight:g}kg"
+                for when, exercise, set_ in recent
+            )
+            lines.append(f"- {slot}: {progression}")
+    if not lines:
+        return ""
+    return "\n\nRecent results by slot (heaviest set per session):\n" + "\n".join(lines)

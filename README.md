@@ -122,8 +122,11 @@ Six sections that are not derived from sets and reps:
 - **Chat** (`/chat`) — a conversation with DeepSeek about training, recovery
   and health. Every turn re-sends the same context the weekly insight is built
   from (last 7 days of sessions, active conditions and goals, Garmin recovery),
-  rebuilt from the log at that moment rather than stored, plus the last 20
-  messages. The conversation itself lives in its own `chat.json` blob beside
+  plus the current block's full prescription and the last three results per
+  slot — the insight lists those only when a block is ending, which left a
+  week-one "what do you think of my new block?" unanswerable. All of it is
+  rebuilt from the log at that moment rather than stored, followed by the last
+  20 messages. The conversation itself lives in its own `chat.json` blob beside
   the log, not inside it: it is talk *about* the record, so it neither grows
   the one document that cannot be lost nor competes for its ETag. Capped at
   the last 200 messages, and cleared by hand. A failed reply is a 502 that
