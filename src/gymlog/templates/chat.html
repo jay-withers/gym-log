@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Chat · Health{% endblock %}
+{% block subtitle %}Chat{% endblock %}
+{% block back %}<a class="back" href="/"><span class="arrow">&larr;</span> Home</a>{% endblock %}
+{% block body %}
+
+<style>
+  .msgs { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+  .msg {
+    max-width: 85%; padding: 10px 13px; border-radius: var(--radius);
+    font-size: 15px; white-space: pre-line; overflow-wrap: anywhere;
+  }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #06130c; border-bottom-right-radius: 4px; }
+  .msg.assistant {
+    align-self: flex-start; background: var(--card); border: 1px solid var(--line);
+    border-bottom-left-radius: 4px;
+  }
+  /* 16px for the same reason as the inputs in base.html: any smaller and iOS
+     Safari zooms the page on focus and never zooms back out. */
+  .composer textarea {
+    width: 100%; min-height: 84px; padding: 12px; font: inherit; font-size: 16px;
+    border-radius: 8px; border: 1px solid var(--line); background: #0b0b0e;
+    color: var(--text); resize: vertical;
+  }
+</style>
+
+{% if messages %}
+<div class="msgs">
+  {% for m in messages %}
+  <div class="msg {{ m.role }}"{% if loop.last %} id="latest"{% endif %}>{{ m.content }}</div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="last">Ask about your training, recovery, sleep or an injury. Each reply sees your
+  last week of sessions, active conditions and goals, and any synced Garmin data.</p>
+{% endif %}
+
+<form class="composer" method="post" action="/chat" data-loading-label="Thinking…">
+  <textarea name="message" placeholder="Message" required></textarea>
+  <button type="submit">Send</button>
+</form>
+<p class="last" style="margin-top:8px">A live call to DeepSeek — not medical advice.</p>
+
+{% if messages %}
+<form method="post" action="/chat/clear" onsubmit="return confirm('Clear the whole conversation?')">
+  <button type="submit" class="btn ghost small">Clear conversation</button>
+</form>
+{% endif %}
+{% endblock %}

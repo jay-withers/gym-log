@@ -43,6 +43,11 @@ BLOB_NAME = "gymlog.json"
 # new IAM: the identity's container-scoped role already covers any blob name.
 GARMIN_SESSION_BLOB_NAME = "garmin-session.json"
 
+# The AI chat conversation — see gymlog.chat. Kept out of the log document on
+# purpose: it is conversation, not training record, so it should neither grow
+# the one document this app cannot afford to lose nor race it for its ETag.
+CHAT_BLOB_NAME = "chat.json"
+
 
 class ConflictError(RuntimeError):
     """The document changed between being read and being written."""
@@ -142,10 +147,6 @@ def local_path() -> pathlib.Path:
     return pathlib.Path(settings().local_state_path)
 
 
-def _garmin_session_local_path() -> pathlib.Path:
-    return local_path().with_suffix(".garmin-session.json")
-
-
 def load_garmin_session() -> str | None:
     """The cached Garmin login session, or None if one has never been saved.
 
@@ -153,9 +154,37 @@ def load_garmin_session() -> str | None:
     a first sync (or one that ran before this existed) just falls back to a
     fresh username/password login, same as `login()` does internally.
     """
-    blob = _blob(GARMIN_SESSION_BLOB_NAME)
+    return _load_side(GARMIN_SESSION_BLOB_NAME, ".garmin-session.json")
+
+
+def save_garmin_session(token_json: str) -> None:
+    """Persist a refreshed Garmin login session, overwriting any previous one."""
+    _save_side(GARMIN_SESSION_BLOB_NAME, ".garmin-session.json", token_json)
+
+
+def load_chat() -> str | None:
+    """The saved chat conversation as raw JSON, or None if there has never been one."""
+    return _load_side(CHAT_BLOB_NAME, ".chat.json")
+
+
+def save_chat(conversation_json: str) -> None:
+    """Persist the chat conversation, overwriting the previous one.
+
+    No ETag: one person, one conversation, and the worst a lost race costs is
+    one exchange of chat — not a logged set.
+    """
+    _save_side(CHAT_BLOB_NAME, ".chat.json", conversation_json)
+
+
+def _load_side(name: str, local_suffix: str) -> str | None:
+    """A small blob beside the log, or None if it has never been written.
+
+    Only absence is tolerated; any other storage error propagates, as it does
+    for the log itself.
+    """
+    blob = _blob(name)
     if blob is None:
-        path = _garmin_session_local_path()
+        path = local_path().with_suffix(local_suffix)
         return path.read_text(encoding="utf-8") if path.exists() else None
 
     from azure.core.exceptions import ResourceNotFoundError
@@ -166,17 +195,16 @@ def load_garmin_session() -> str | None:
         return None
 
 
-def save_garmin_session(token_json: str) -> None:
-    """Persist a refreshed Garmin login session, overwriting any previous one."""
-    blob = _blob(GARMIN_SESSION_BLOB_NAME)
+def _save_side(name: str, local_suffix: str, text: str) -> None:
+    blob = _blob(name)
     if blob is None:
-        path = _garmin_session_local_path()
+        path = local_path().with_suffix(local_suffix)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(token_json, encoding="utf-8")
+        tmp.write_text(text, encoding="utf-8")
         tmp.replace(path)
         return
 
-    blob.upload_blob(token_json.encode("utf-8"), overwrite=True)
+    blob.upload_blob(text.encode("utf-8"), overwrite=True)
 
 
 def _load_local() -> tuple[Log, str | None]:

@@ -59,6 +59,15 @@ class GarminSyncFailed(Exception):
     """
 
 
+class ChatFailed(Exception):
+    """Raised when the model call behind `/chat` fails. Handled in main.create_app.
+
+    A 502 with a readable message rather than a 500 with a stack trace, for
+    the same reason as `GarminSyncFailed`: the failure is upstream, and the
+    person on the other end needs to know to try again, not to file a bug.
+    """
+
+
 def _today() -> date:
     return datetime.now(UTC).date()
 
@@ -844,6 +853,46 @@ def delete_insight(insight_id: str) -> Any:
             "the log was changed elsewhere; the insight was not deleted"
         ) from exc
     return RedirectResponse("/insights/ai", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# --- Chat: a conversation with the model, grounded in the log --------------
+
+
+@router.get("/chat", response_class=HTMLResponse, include_in_schema=False)
+def chat_page(request: Request) -> Any:
+    from .. import chat
+
+    return templates.TemplateResponse(request, "chat.html", {"messages": chat.load()})
+
+
+@router.post("/chat", include_in_schema=False)
+def chat_send(message: str = Form(default="")) -> Any:
+    """Send one message and wait for the reply — a blocking call, like
+    "Generate insight now", and greyed out by base.html's script meanwhile."""
+    from .. import chat
+
+    text = message.strip()
+    if not text:
+        return RedirectResponse("/chat", status_code=status.HTTP_303_SEE_OTHER)
+
+    log, _etag = store.load()
+    try:
+        conversation = chat.send(log, chat.load(), text)
+    except Exception as exc:
+        logger.exception("chat reply failed")
+        raise ChatFailed(
+            "could not get a reply from DeepSeek — your message was not saved. Try again shortly."
+        ) from exc
+    chat.save(conversation)
+    return RedirectResponse("/chat#latest", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/chat/clear", include_in_schema=False)
+def chat_clear() -> Any:
+    from .. import chat
+
+    chat.clear()
+    return RedirectResponse("/chat", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/insights/hr-zones", response_class=HTMLResponse, include_in_schema=False)

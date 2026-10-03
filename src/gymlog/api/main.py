@@ -101,6 +101,14 @@ def create_app() -> FastAPI:
             content={"detail": str(exc)},
         )
 
+    @app.exception_handler(routes.ChatFailed)
+    async def _chat_failed(_request: Any, exc: routes.ChatFailed) -> JSONResponse:
+        """The upstream model call failed — a 502, as for a failed Garmin sync."""
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={"detail": str(exc)},
+        )
+
     return app
 
 

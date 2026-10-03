@@ -61,7 +61,7 @@ linking to it and to the sections below; the installed-to-home-screen phone
 icon still opens straight to `/strength`, since that is the twice-a-week fast
 path this app exists for.
 
-Five sections that are not derived from sets and reps:
+Six sections that are not derived from sets and reps:
 
 - **Achievements** (`/achievements`) — a free-text, append-only list of
   milestones. Never edited, only added to.
@@ -119,6 +119,15 @@ Five sections that are not derived from sets and reps:
   blob in the same container the log lives in, so the job re-authenticates
   with a password only when that cache is missing or rejected — not on every
   run, which is the kind of thing an unofficial API punishes.
+- **Chat** (`/chat`) — a conversation with DeepSeek about training, recovery
+  and health. Every turn re-sends the same context the weekly insight is built
+  from (last 7 days of sessions, active conditions and goals, Garmin recovery),
+  rebuilt from the log at that moment rather than stored, plus the last 20
+  messages. The conversation itself lives in its own `chat.json` blob beside
+  the log, not inside it: it is talk *about* the record, so it neither grows
+  the one document that cannot be lost nor competes for its ETag. Capped at
+  the last 200 messages, and cleared by hand. A failed reply is a 502 that
+  saves nothing, so the message has to be retyped rather than half-recorded.
 
 ## Design
 

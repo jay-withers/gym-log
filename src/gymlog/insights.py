@@ -181,15 +181,21 @@ def _garmin_lines(log: Log, cutoff: str) -> list[str]:
 
 
 def _complete(prompt: str) -> str:
-    body = json.dumps(
-        {
-            "model": MODEL,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-        }
-    ).encode("utf-8")
+    return complete(
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ]
+    )
+
+
+def complete(messages: list[dict[str, str]]) -> str:
+    """One DeepSeek chat completion over `messages`, as the assistant's reply text.
+
+    Public because the chat page (gymlog.chat) sends a whole conversation
+    through the same call rather than one system-plus-user pair.
+    """
+    body = json.dumps({"model": MODEL, "messages": messages}).encode("utf-8")
 
     request = urllib.request.Request(
         DEEPSEEK_URL,

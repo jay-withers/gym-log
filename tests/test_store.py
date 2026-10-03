@@ -308,3 +308,26 @@ def test_a_garmin_session_blob_that_has_never_existed_is_none(blob):
 def test_a_saved_garmin_session_blob_reads_back(blob):
     store.save_garmin_session('{"di_token": "abc"}')
     assert store.load_garmin_session() == '{"di_token": "abc"}'
+
+
+# --- the chat blob -------------------------------------------------------------
+
+
+def test_the_chat_is_named_under_the_container_url(blob):
+    store.load_chat()
+    assert blob.url == "https://acct.blob.core.windows.net/state/chat.json"
+
+
+def test_a_chat_blob_that_has_never_existed_is_none(blob):
+    assert store.load_chat() is None
+
+
+def test_a_saved_chat_blob_reads_back(blob):
+    store.save_chat('{"messages": []}')
+    assert store.load_chat() == '{"messages": []}'
+
+
+def test_the_chat_is_stored_apart_from_the_log():
+    """Conversation must never land in, or clobber, the training document."""
+    store.save_chat('{"messages": []}')
+    assert not store.local_path().exists()
