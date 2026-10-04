@@ -1,0 +1,11 @@
+[Unit]
+Description=Health: weekly AI insight, Sundays 20:00 UTC
+
+[Timer]
+# The schedule the Azure job ran on (`0 20 * * SUN`, UTC).
+OnCalendar=Sun *-*-* 20:00:00 UTC
+# If the PC was off at 20:00, run at next boot rather than skip the week.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

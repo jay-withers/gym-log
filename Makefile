@@ -8,9 +8,13 @@ IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
 # `file` means the ?= default fired rather than the caller passing one.
 IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
+# The home PC, as an ssh destination (an alias from ~/.ssh/config, or
+# user@host). See deploy/home/README.md.
+HOME_HOST ?=
+
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint test run seed build push deploy url logs import show insight insight-local garmin-sync garmin-sync-local init fmt validate plan apply secrets
+.PHONY: help install lint test run seed build push deploy url logs import show insight insight-local garmin-sync garmin-sync-local install-home deploy-home migrate-home init fmt validate plan apply secrets
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -146,6 +150,51 @@ garmin-sync: ## Sync the trailing GARMIN_SYNC_DAYS from Garmin against the real 
 # first, so this needs no Key Vault either.
 garmin-sync-local: ## Sync the trailing GARMIN_SYNC_DAYS from Garmin against the local log (DAYS=N to widen, needs GARMIN_EMAIL/GARMIN_PASSWORD)
 	STATE_CONTAINER_URL= uv run gymlog garmin-sync $(if $(DAYS),--days $(DAYS))
+
+# --- the home PC (deploy/home) ----------------------------------------------
+#
+# Each needs HOME_HOST, and an account there that can sudo. `ssh -t` so sudo
+# can prompt for a password.
+
+install-home: ## Install or update compose.yaml, backup.sh and the systemd units on the home PC (HOME_HOST required)
+	@if [ -z "$(HOME_HOST)" ]; then echo "error: pass HOME_HOST=<ssh host>" >&2; exit 1; fi
+	ssh $(HOME_HOST) 'rm -rf /tmp/health-install'
+	scp -rq deploy/home $(HOME_HOST):/tmp/health-install
+	ssh -t $(HOME_HOST) 'sudo /tmp/health-install/install.sh; rm -rf /tmp/health-install'
+
+# Same explicit-tag rule as `deploy`. A moving tag would at least re-pull here,
+# unlike on Container Apps, but it would still leave no record of what is
+# actually running.
+deploy-home: ## Roll an image tag onto the home PC (IMAGE_TAG and HOME_HOST required)
+	@if [ -z "$(HOME_HOST)" ]; then echo "error: pass HOME_HOST=<ssh host>" >&2; exit 1; fi
+	@if [ -z "$(IMAGE_TAG_EXPLICIT)" ]; then \
+		echo "error: pass a tag explicitly, e.g. make deploy-home IMAGE_TAG=v0.1.0" >&2; exit 1; fi
+	ssh -t $(HOME_HOST) 'cd /opt/health \
+		&& sudo sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$(IMAGE_TAG)/" .env \
+		&& sudo docker compose pull gymlog && sudo docker compose up -d gymlog'
+
+# The one-off move off Azure: the log, the chat and the cached Garmin session,
+# renamed to the side-file names store.py uses locally. Only the log is
+# required; the other two may never have been written. The app is stopped
+# around the copy so it cannot save over the incoming file.
+migrate-home: ## Copy the log, chat and Garmin session from the blob to the home PC (HOME_HOST required)
+	@if [ -z "$(HOME_HOST)" ]; then echo "error: pass HOME_HOST=<ssh host>" >&2; exit 1; fi
+	@set -e; dir="$$(mktemp -d)"; trap 'rm -rf "$$dir"' EXIT; \
+	url="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)"; \
+	az storage blob download --auth-mode login --only-show-errors \
+		--blob-url "$$url/gymlog.json" --file "$$dir/gymlog.json" >/dev/null; \
+	python3 -m json.tool "$$dir/gymlog.json" >/dev/null; \
+	for pair in chat.json:gymlog.chat.json garmin-session.json:gymlog.garmin-session.json; do \
+		az storage blob download --auth-mode login --only-show-errors \
+			--blob-url "$$url/$${pair%%:*}" --file "$$dir/$${pair##*:}" >/dev/null 2>&1 \
+			|| echo "skipped $${pair%%:*} (not in the container)"; \
+	done; \
+	ssh $(HOME_HOST) 'rm -rf /tmp/health-migrate && mkdir -m 700 /tmp/health-migrate'; \
+	scp -q "$$dir"/*.json $(HOME_HOST):/tmp/health-migrate/; \
+	ssh -t $(HOME_HOST) 'cd /opt/health && sudo docker compose stop gymlog \
+		&& sudo install -o 10001 -g 10001 -m 0600 /tmp/health-migrate/*.json /srv/health/data/ \
+		&& sudo docker compose start gymlog; rm -rf /tmp/health-migrate'; \
+	echo "migrated: $$(ls "$$dir")"
 
 init: ## terraform init, without configuring the state backend
 	terraform -chdir=$(TF_DIR) init -backend=false

@@ -1,0 +1,38 @@
+# Health on the home PC. Installed to /opt/health beside a root-only .env —
+# see README.md in this directory.
+#
+# No Azure: STATE_CONTAINER_URL and KEY_VAULT_URI are unset, so store.py writes
+# to LOCAL_STATE_PATH and settings.secret() reads every secret from .env.
+
+services:
+  gymlog:
+    image: ghcr.io/jay-withers/gym-log/gymlog:${IMAGE_TAG:?set IMAGE_TAG in .env}
+    command: ["serve"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ENVIRONMENT: home
+      LOCAL_STATE_PATH: /data/gymlog.json
+    volumes:
+      # Must be owned by uid 10001, the image's USER, or every save fails
+      # with permission denied.
+      - /srv/health/data:/data
+    ports:
+      # Loopback only, for `curl localhost:8000/readyz` on the box itself. The
+      # way in from outside is the tunnel below, over the compose network.
+      - "127.0.0.1:8000:8000"
+
+  # Cloudflare Tunnel: an outbound-only connection to Cloudflare, which serves
+  # health.jaywithers.uk through it. No router ports are opened, and Cloudflare
+  # terminates the HTTPS the Secure session cookie needs. The tunnel's public
+  # hostname points at http://gymlog:8000, the service above by name.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
+    command: ["tunnel", "--no-autoupdate", "run"]
+    restart: unless-stopped
+    # Only the token, deliberately not `env_file: .env`: this container has
+    # no business holding the passcode, the DeepSeek key or the Garmin login.
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+    depends_on:
+      - gymlog

@@ -1,0 +1,10 @@
+[Unit]
+Description=Health: daily Garmin sync, 05:00 UTC
+
+[Timer]
+# The schedule the Azure job ran on (`0 5 * * *`, UTC).
+OnCalendar=*-*-* 05:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
