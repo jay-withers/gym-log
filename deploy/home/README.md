@@ -11,8 +11,12 @@ to it beyond being x86-64, which is what the published image is built for.
 /mnt/backup/health/     the external drive: one directory per snapshot
 ```
 
-The phone reaches it over [Tailscale](https://tailscale.com), privately. No
-router ports are opened and there's no public URL.
+It's reachable from anywhere at `https://health.jaywithers.uk` through a
+[Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/):
+an outbound connection from the PC to Cloudflare, so no router ports are
+opened and your home IP isn't exposed. **Cloudflare Access** sits in front, so
+nobody reaches even the login page without first proving they're you by
+email code.
 
 ## 1. The machine
 
@@ -24,8 +28,6 @@ router ports are opened and there's no public URL.
     and ~20W at idle.
 - Install Docker Engine and the compose plugin
   ([docs.docker.com/engine/install/ubuntu](https://docs.docker.com/engine/install/ubuntu/)).
-- Install Tailscale (`curl -fsSL https://tailscale.com/install.sh | sh`), then
-  `sudo tailscale up`.
 
 ## 2. The backup drive
 
@@ -41,7 +43,21 @@ sudo mount -a && mountpoint /mnt/backup
 ext4 is best if the drive is only for this. exFAT or NTFS work too, if it also
 needs to plug into a Windows or Mac machine.
 
-## 3. Install
+## 3. Create the tunnel
+
+`jaywithers.uk` must use Cloudflare's nameservers. If it doesn't yet: add the
+site on Cloudflare's free plan, check the imported DNS records match the
+current ones (including the Azure CNAME and `asuid` TXT for `health`, so
+nothing breaks before the cut-over), then change the nameservers at your
+registrar.
+
+Then, in the Cloudflare dashboard, go to **Zero Trust → Networks → Tunnels →
+Create a tunnel**. Choose the **Cloudflared** type and name it `health`. From
+the install command it shows, copy only the token (the long value after
+`--token`); compose runs `cloudflared` itself. Skip the public hostname for
+now; that's step 5.
+
+## 4. Install
 
 From a checkout, on your own machine (`HOME_HOST` is an ssh destination: an
 alias in `~/.ssh/config` or `user@host`):
@@ -60,29 +76,43 @@ Fill in the secrets, then start it:
 
 ```bash
 ssh optiplex
-sudo nano /opt/health/.env              # IMAGE_TAG, APP_PASSCODE, DEEPSEEK_API_KEY, GARMIN_*
+sudo nano /opt/health/.env              # IMAGE_TAG, TUNNEL_TOKEN, APP_PASSCODE, DEEPSEEK_API_KEY, GARMIN_*
 cd /opt/health && sudo docker compose up -d
 curl -s localhost:8000/readyz           # {"status":"ok","storage":true}
+sudo docker compose logs cloudflared    # "Registered tunnel connection" x4
 ```
 
-## 4. Reach it from the phone
+The tunnel should now show as **Healthy** in the dashboard.
 
-The session cookie is `Secure`, so the app **must** be served over HTTPS. Over
-plain `http://<tailscale-ip>:8000` the login appears to work, then every page
-sends you back to it, because the browser never returns the cookie over http.
+## 5. Put Access in front, then add a hostname
 
-In the Tailscale admin console, under **DNS**, turn on MagicDNS and HTTPS
-certificates. Then, on the PC:
+Do Access **first**, so there's never a moment where the app is public with
+only the passcode in front of it. The login has no rate limiting.
 
-```bash
-sudo tailscale serve --bg http://127.0.0.1:8000
-tailscale serve status                  # prints https://<pc-name>.<tailnet>.ts.net
-```
+**Access:** Zero Trust → Access → Applications → **Add an application →
+Self-hosted**.
+- Domain: `health-home.jaywithers.uk` and `health.jaywithers.uk` (add both).
+- Session duration: 1 month, so the email code isn't asked for between sets.
+- Policy: **Allow**, include **Emails** → your address.
 
-The setting persists across reboots. Install Tailscale on the phone, sign in,
-open that URL, and add it to the home screen.
+Under Settings → Authentication, the default "One-time PIN" login method is
+enough.
 
-## 5. Move the log off Azure (once)
+**Hostname, for testing:** Networks → Tunnels → `health` → **Public Hostname
+→ Add**.
+- Subdomain `health-home`, domain `jaywithers.uk`.
+- Service type **HTTP**, URL **`gymlog:8000`**. That's the compose service by
+  name, not `localhost`: `localhost` inside the tunnel container is the tunnel
+  container itself.
+
+Open `https://health-home.jaywithers.uk` on the phone, on mobile data. You
+should get Cloudflare's email-code page, then the app's passcode page, then
+the app. Log in, then reload: you should stay logged in.
+
+`health.jaywithers.uk` itself is switched over in step 6, once the log is
+moved, because adding it is the moment the phone stops talking to Azure.
+
+## 6. Move the log off Azure and switch the domain (once)
 
 Stop logging on the Azure app first, so nothing is written there after the
 copy. Then, from a checkout with `az login` done and `terraform` initialised:
@@ -99,7 +129,17 @@ PC, installs them owned by uid 10001, and starts it again. Then:
 ssh optiplex 'sudo systemctl start health-backup && ls /mnt/backup/health'
 ```
 
-and check the history in the app matches what Azure showed.
+and check the history at `https://health-home.jaywithers.uk` matches what
+Azure showed.
+
+Then switch the real domain. In DNS, delete the `health` CNAME (pointing at
+`*.azurecontainerapps.io`) and the `asuid.health` TXT record. Then add a
+second public hostname on the tunnel: subdomain `health`, service
+`http://gymlog:8000`. Cloudflare creates the new DNS record itself. Once it
+works, remove the `health-home` hostname and its DNS record.
+
+The Azure app keeps running, unreachable at that name, until it's retired.
+Its managed certificate will fail to renew, which is harmless until then.
 
 ## Updating
 
@@ -160,7 +200,15 @@ Rehearse this once, before you need it.
 - **Saves fail with a 500, and the logs say permission denied:**
   `/srv/health/data` isn't owned by 10001. Re-run `make install-home`, or
   `sudo chown -R 10001:10001 /srv/health/data`.
-- **Logged in, but every page goes back to the login:** you're on http, not
-  the `https://….ts.net` URL. See step 4.
+- **Logged in, but every page goes back to the login:** the request isn't
+  arriving over HTTPS. Use the `https://` URL, and check the hostname's
+  service type is HTTP (Cloudflare does the HTTPS).
+- **"Bad gateway" (502) from Cloudflare:** the hostname's URL isn't
+  `gymlog:8000`, or the app container is down (`sudo docker compose ps`).
+- **Home-screen icon opens with browser bars:** add it to the home screen
+  *after* logging in through Access, so the manifest fetch is authenticated.
+- **Admin from outside the house:** the tunnel only carries the app. For ssh
+  from elsewhere, add the PC as a Cloudflare Access SSH application, or
+  install Tailscale just for that.
 - **The insight or Garmin timer fails immediately:** a secret is missing from
   `.env`. `journalctl -u health-insight` names it.

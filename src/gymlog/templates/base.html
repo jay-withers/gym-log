@@ -7,7 +7,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#101014">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="manifest" href="/manifest.json">
+<!-- use-credentials: browsers fetch the manifest without cookies by default,
+     and with Cloudflare Access in front (deploy/home) that request is
+     bounced to Access's login, so "Add to home screen" loses the name and
+     `display: standalone`. -->
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
 <title>{% block title %}Health{% endblock %}</title>
 <style>
   /* Dark by default rather than by preference: this is read under gym lighting,

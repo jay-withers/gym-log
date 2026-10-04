@@ -18,6 +18,21 @@ services:
       # with permission denied.
       - /srv/health/data:/data
     ports:
-      # Loopback only. Tailscale serve is the one way in from outside, and it
-      # is what supplies the HTTPS the Secure session cookie needs.
+      # Loopback only, for `curl localhost:8000/readyz` on the box itself. The
+      # way in from outside is the tunnel below, over the compose network.
       - "127.0.0.1:8000:8000"
+
+  # Cloudflare Tunnel: an outbound-only connection to Cloudflare, which serves
+  # health.jaywithers.uk through it. No router ports are opened, and Cloudflare
+  # terminates the HTTPS the Secure session cookie needs. The tunnel's public
+  # hostname points at http://gymlog:8000, the service above by name.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
+    command: ["tunnel", "--no-autoupdate", "run"]
+    restart: unless-stopped
+    # Only the token, deliberately not `env_file: .env`: this container has
+    # no business holding the passcode, the DeepSeek key or the Garmin login.
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+    depends_on:
+      - gymlog

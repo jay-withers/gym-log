@@ -136,6 +136,11 @@ def test_the_manifest_is_not_gated(client):
     assert response.json()["display"] == "standalone"
 
 
+def test_the_manifest_is_requested_with_credentials(client):
+    """Behind Cloudflare Access, a cookieless manifest fetch is bounced to its login."""
+    assert 'href="/manifest.json" crossorigin="use-credentials"' in client.get("/login").text
+
+
 def test_the_manifest_starts_at_strength_not_the_home_menu(client):
     """The phone icon exists for the twice-a-week fast path of logging a set."""
     assert client.get("/manifest.json").json()["start_url"] == "/strength"

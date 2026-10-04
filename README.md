@@ -224,7 +224,9 @@ image runs it, with no `STATE_CONTAINER_URL` or `KEY_VAULT_URI`, so the log
 lives on local disk and secrets come from a root-only `.env`. That's the same
 fallback `make run` uses, so the app itself needed no change. systemd timers
 replace the two Container App Jobs, and an hourly `backup.sh` snapshots the
-log to an external drive. The phone reaches it privately over Tailscale.
+log to an external drive. It stays at `https://health.jaywithers.uk`, now
+served through a Cloudflare Tunnel (no router ports open) with Cloudflare
+Access in front, so an email code is needed before even the passcode page.
 
 | | Azure (below) | Home PC |
 | --- | --- | --- |

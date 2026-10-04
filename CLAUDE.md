@@ -175,9 +175,19 @@ on. The traps:
   Root-owned, the app starts and `/readyz` passes, and then the first *save*
   fails. `install.sh` creates it correctly, and `migrate-home` and the restore
   steps install files with `-o 10001`.
-- **It must be served over HTTPS** (`tailscale serve`), for the same reason as
-  the `TestClient` note under Testing: the cookie is `Secure`, and over http
-  every gated page bounces back to `/login`.
+- **It is served through a Cloudflare Tunnel, with Cloudflare Access in
+  front.** Access matters because the passcode login has no rate limiting.
+  The tunnel's hostname points at `http://gymlog:8000`, the compose service
+  by name; `localhost` there is the cloudflared container itself. Cloudflare
+  terminates the HTTPS the `Secure` cookie needs (the same trap as the
+  `TestClient` note under Testing).
+- **`crossorigin="use-credentials"` on the manifest link in base.html is
+  for Access.** Without it the browser fetches `/manifest.json` without
+  cookies, Access bounces that to its login, and an installed home-screen app
+  loses its name and `display: standalone`. The app's own gate doesn't need it
+  (`/manifest.json` is public); don't remove it as redundant.
+- **The cloudflared container gets `TUNNEL_TOKEN` only**, not the `.env` file.
+  Keep it that way: it has no need for the app's secrets.
 - **`backup.sh` refuses to run unless `/mnt/backup` is a mountpoint.** With
   the drive unplugged, that path is an empty directory on the internal disk,
   and a "successful" backup there protects nothing. Keep that check, and the
