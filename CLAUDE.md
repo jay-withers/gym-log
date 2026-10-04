@@ -164,6 +164,35 @@ Two things the fixtures exist to guarantee:
 - **New GHCR packages default to private** regardless of repository visibility,
   and there is no pull secret. Flip it once after the first push.
 
+## The home deployment (`deploy/home`)
+
+The app is moving to a PC at home; Azure is retired once that has proved
+itself. Same image, with no `STATE_CONTAINER_URL` or `KEY_VAULT_URI`, so
+storage and secrets take the local fallbacks that `make run` already relies
+on. The traps:
+
+- **`/srv/health/data` must be owned by uid 10001**, the image's `USER`.
+  Root-owned, the app starts and `/readyz` passes, and then the first *save*
+  fails. `install.sh` creates it correctly, and `migrate-home` and the restore
+  steps install files with `-o 10001`.
+- **It must be served over HTTPS** (`tailscale serve`), for the same reason as
+  the `TestClient` note under Testing: the cookie is `Secure`, and over http
+  every gated page bounces back to `/login`.
+- **`backup.sh` refuses to run unless `/mnt/backup` is a mountpoint.** With
+  the drive unplugged, that path is an empty directory on the internal disk,
+  and a "successful" backup there protects nothing. Keep that check, and the
+  unit's `RequiresMountsFor`, if the script is ever simplified.
+  `tests/test_backup.py` runs it for real, with `BACKUP_MOUNT=/` standing in
+  for the drive.
+- **The local side files are named after the log:** `gymlog.chat.json` and
+  `gymlog.garmin-session.json` (`local_path().with_suffix(...)` in store.py),
+  not the blob names `chat.json` and `garmin-session.json`. `migrate-home`
+  renames them; a hand copy must too.
+- **Emulated runs here print nothing.** `docker run --platform linux/amd64`
+  on the arm64 dev host swallows stdout as well as logging, so `gymlog show`
+  looks empty while exiting 0. Redirect to a file to check, or trust the
+  native amd64 PC.
+
 ## Commit messages
 
 Conventional Commits, enforced by commitlint at commit-msg time. The

@@ -1,0 +1,10 @@
+[Unit]
+Description=Health: generate the weekly AI insight
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/health
+ExecStart=/usr/bin/docker compose run --rm gymlog insight

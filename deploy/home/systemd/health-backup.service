@@ -1,0 +1,10 @@
+[Unit]
+Description=Health: snapshot the training log to the backup drive
+# Fails the unit outright when the drive is absent, so a missed backup shows
+# in `systemctl --failed` instead of passing quietly. backup.sh checks again
+# itself, in case it is ever run by hand.
+RequiresMountsFor=/mnt/backup
+
+[Service]
+Type=oneshot
+ExecStart=/opt/health/backup.sh

@@ -1,0 +1,10 @@
+[Unit]
+Description=Health: sync the last week from Garmin Connect
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/health
+ExecStart=/usr/bin/docker compose run --rm gymlog garmin-sync

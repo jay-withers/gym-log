@@ -216,6 +216,27 @@ recorded weight as a seed so the first suggestion is not blind. It deliberately
 does not turn the achieved-reps cells into a logged session: they carry no date,
 and inventing one would put a lie at the head of the history.
 
+## Hosting at home
+
+The app is moving off Azure onto a PC at home, a Dell OptiPlex 5060 that was
+already there: [deploy/home/README.md](deploy/home/README.md). The same
+image runs it, with no `STATE_CONTAINER_URL` or `KEY_VAULT_URI`, so the log
+lives on local disk and secrets come from a root-only `.env`. That's the same
+fallback `make run` uses, so the app itself needed no change. systemd timers
+replace the two Container App Jobs, and an hourly `backup.sh` snapshots the
+log to an external drive. The phone reaches it privately over Tailscale.
+
+| | Azure (below) | Home PC |
+| --- | --- | --- |
+| Cold start | a few seconds after 10 idle minutes | none |
+| Running cost | £0 idle, ~£3–11/month to keep warm | electricity, ~6–12p/day |
+| Up when | always | when home power and broadband are |
+| The log's backup | blob storage, `prevent_destroy` | hourly snapshots to an external drive |
+
+Azure stays up until the home PC has proved itself, then is retired in a
+separate change. Until then, **only one of them should be in use**: they hold
+separate copies of the log once `make migrate-home` has run.
+
 ## Deploying
 
 ```bash

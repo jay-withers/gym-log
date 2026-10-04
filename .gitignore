@@ -62,3 +62,5 @@ apps/dashboard/dist/
 .gymlog.json
 # The cached Garmin login session that goes with it locally — see store.py.
 .gymlog.garmin-session.json
+# ...and the AI chat conversation — see store.py and chat.py.
+.gymlog.chat.json
