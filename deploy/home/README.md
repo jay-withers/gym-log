@@ -59,11 +59,23 @@ now; that's step 5.
 
 ## 4. Install
 
-From a checkout, on your own machine (`HOME_HOST` is an ssh destination: an
-alias in `~/.ssh/config` or `user@host`):
+The `make *-home` targets reach the PC over ssh as `health-home`. On your
+own machine, tell ssh where that is, once, in `~/.ssh/config`:
+
+```
+Host health-home
+  HostName 192.168.1.50        # the PC's LAN address or hostname
+  User <your user on the PC>
+```
+
+Check it with `ssh health-home`. Use a key (`ssh-copy-id health-home`), not a
+password. To aim at a different machine for one command, add
+`HOME_HOST=user@host`.
+
+Then, from a checkout:
 
 ```bash
-make install-home HOME_HOST=optiplex
+make install-home
 ```
 
 This copies `deploy/home` across and runs `install.sh` there as root. That
@@ -75,7 +87,7 @@ changing any file in this directory. The first time, it also creates
 Fill in the secrets, then start it:
 
 ```bash
-ssh optiplex
+ssh health-home
 sudo nano /opt/health/.env              # IMAGE_TAG, TUNNEL_TOKEN, APP_PASSCODE, DEEPSEEK_API_KEY, GARMIN_*
 cd /opt/health && sudo docker compose up -d
 curl -s localhost:8000/readyz           # {"status":"ok","storage":true}
@@ -118,7 +130,7 @@ Stop logging on the Azure app first, so nothing is written there after the
 copy. Then, from a checkout with `az login` done and `terraform` initialised:
 
 ```bash
-make migrate-home HOME_HOST=optiplex
+make migrate-home
 ```
 
 This downloads `gymlog.json`, plus `chat.json` and `garmin-session.json` if they
@@ -126,7 +138,7 @@ exist, renames them to the names the app uses locally, stops the app on the
 PC, installs them owned by uid 10001, and starts it again. Then:
 
 ```bash
-ssh optiplex 'sudo systemctl start health-backup && ls /mnt/backup/health'
+ssh health-home 'sudo systemctl start health-backup && ls /mnt/backup/health'
 ```
 
 and check the history at `https://health-home.jaywithers.uk` matches what
@@ -144,7 +156,7 @@ Its managed certificate will fail to renew, which is harmless until then.
 ## Updating
 
 ```bash
-make deploy-home HOME_HOST=optiplex IMAGE_TAG=v0.19.0
+make deploy-home IMAGE_TAG=v0.19.0
 ```
 
 This rewrites `IMAGE_TAG` in `/opt/health/.env`, pulls, and recreates the
