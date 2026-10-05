@@ -203,6 +203,15 @@ on. The traps:
   looks empty while exiting 0. Redirect to a file to check, or trust the
   native amd64 PC.
 
+## Heart rate zones are Garmin's, not the app's
+
+The HR zone page and the insight prompt label zones as **heart rate reserve
+(HRR)**, but nothing here computes a zone. Every figure is Garmin's
+`secsInZone`/`zoneLowBoundary`, so the label is true only while Garmin Connect
+is set to "Based on %HRR". Don't add Karvonen maths on top: the app has no
+per-second heart rate to bucket, and its numbers would disagree with the
+watch. If the setting ever changes, change the labels with it.
+
 ## Commit messages
 
 Conventional Commits, enforced by commitlint at commit-msg time. The

@@ -160,7 +160,9 @@ def _garmin_lines(log: Log, cutoff: str) -> list[str]:
     if not log.garmin_activities and not log.garmin_days:
         return []
 
-    lines = ["\nGarmin activity in the last 7 days:"]
+    # Zones are Garmin's own, set to heart rate reserve in Garmin Connect.
+    # Said so the model doesn't read "Z4" as a share of max heart rate.
+    lines = ["\nGarmin activity in the last 7 days (heart rate zones are % of heart rate reserve):"]
     if activities:
         for a in activities:
             detail = f"{a.duration_seconds // 60} min"

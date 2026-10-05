@@ -176,6 +176,7 @@ def test_prompt_includes_recent_garmin_activity_with_its_zone_breakdown():
     prompt = _prompt(log, date(2026, 9, 15))
     assert "2026-09-14 running: 30 min, avg 140 bpm, max 165 bpm" in prompt
     assert "Z2 5m" in prompt
+    assert "heart rate zones are % of heart rate reserve" in prompt
     assert "2026-08-01" not in prompt  # outside the 7-day window
 
 
