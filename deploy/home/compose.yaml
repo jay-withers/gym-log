@@ -27,7 +27,7 @@ services:
   # terminates the HTTPS the Secure session cookie needs. The tunnel's public
   # hostname points at http://gymlog:8000, the service above by name.
   cloudflared:
-    image: cloudflare/cloudflared:2026.9.3
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
     command: ["tunnel", "--no-autoupdate", "run"]
     restart: unless-stopped
     # Only the token, deliberately not `env_file: .env`: this container has
