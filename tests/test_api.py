@@ -1334,6 +1334,11 @@ def test_hr_zone_insights_page_shows_minutes_and_percentages(client, seeded):
     assert "Garmin last synced 24 Sep 2026, 06:00 UTC" in page
 
 
+def test_hr_zone_insights_page_says_the_zones_are_hrr(client, seeded):
+    login(client)
+    assert "Heart rate reserve (HRR) zones" in client.get("/insights/hr-zones").text
+
+
 def test_hr_zone_insights_page_is_empty_before_any_sync(client, seeded):
     login(client)
     page = client.get("/insights/hr-zones").text

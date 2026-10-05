@@ -4,7 +4,11 @@
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
 
-<p class="last">Zone 1 is left out — it's mostly rest between sets or warm-up drift, not training effort.</p>
+<!-- The app does not calculate zones: every figure here is Garmin's own
+     time-in-zone, so "HRR" is true only while Garmin Connect's heart rate
+     zones are set to "Based on %HRR". The bpm range under each zone comes
+     from Garmin too, which is what shows if that setting ever changes. -->
+<p class="last">Heart rate reserve (HRR) zones, as set in Garmin Connect. Zone 1 is left out — it's mostly rest between sets or warm-up drift, not training effort.</p>
 
 {% if zones and (zones | sum(attribute="month_minutes")) > 0 %}
 <style>
