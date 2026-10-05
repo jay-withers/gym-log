@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
 # Container Apps runs linux/amd64 only, and the dev host here is arm64 (Docker
 # Desktop on Apple Silicon). A native build produces an image that crash-loops
@@ -14,7 +14,7 @@
 # "non-major" bump moved the runtime from 3.12 to 3.14 and left the builder on
 # 3.12; the resulting image had no site-packages on sys.path at all and died
 # with a bare "No module named". One FROM line means they cannot drift again.
-FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS base
+FROM python:3.14-slim-bookworm@sha256:c8137f4c460908c8763f281c8f22c431eb5c538514ba9553fc3a89c06b7cfb88 AS base
 
 
 FROM base AS builder
