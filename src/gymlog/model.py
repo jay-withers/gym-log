@@ -89,6 +89,20 @@ class Exercise:
     seed_weight: float | None = None
 
     @property
+    def rest_label(self) -> str:
+        """`90s` under two minutes, `2:30` or `3 min` from there. Empty if none set.
+
+        Seconds below two minutes because that is how rest is counted between
+        sets; minutes above, where "150s" makes you do the sum.
+        """
+        if self.rest_seconds <= 0:
+            return ""
+        if self.rest_seconds < 120:
+            return f"{self.rest_seconds}s"
+        minutes, seconds = divmod(self.rest_seconds, 60)
+        return f"{minutes} min" if not seconds else f"{minutes}:{seconds:02d}"
+
+    @property
     def rep_range_label(self) -> str:
         """`8-10`, or a bare `10` when the range has no width. Empty if untracked."""
         if not self.rep_high:
