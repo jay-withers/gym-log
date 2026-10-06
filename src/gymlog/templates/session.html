@@ -49,6 +49,11 @@
       </div>
       {% endfor %}
     </div>
+    {# Prefilled with the current note, so saving the card re-posts it as-is,
+       and editing or clearing it replaces it - it lasts until overwritten. #}
+    <label class="slot" for="note_{{ card.index }}" style="display:block;margin-top:10px">Note for next time</label>
+    <input type="text" id="note_{{ card.index }}" name="note_{{ card.index }}"
+           value="{{ card.note }}" placeholder="seat height, grip, how it felt" autocomplete="off">
 
     <div class="actions">
       <button type="submit" class="small">{% if rec %}Update{% else %}Save{% endif %}</button>
@@ -68,6 +73,11 @@
       <input type="checkbox" name="done_{{ card.index }}" value="1"
              {% if rec %}checked{% endif %}> Done
     </label>
+    {# Prefilled with the current note, so saving the card re-posts it as-is,
+       and editing or clearing it replaces it - it lasts until overwritten. #}
+    <label class="slot" for="note_{{ card.index }}" style="display:block;margin-top:10px">Note for next time</label>
+    <input type="text" id="note_{{ card.index }}" name="note_{{ card.index }}"
+           value="{{ card.note }}" placeholder="seat height, grip, how it felt" autocomplete="off">
     <div class="actions">
       <button type="submit" class="small">{% if rec %}Update{% else %}Save{% endif %}</button>
     </div>

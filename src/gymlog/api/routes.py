@@ -197,6 +197,7 @@ def session_form(request: Request, day: str) -> Any:
                 # card shows back as values rather than placeholders so that
                 # re-saving it is an edit rather than a fresh guess.
                 "recorded": _recorded(started, exercise.name),
+                "note": log.exercise_notes.get(exercise.name, ""),
             }
         )
 
@@ -307,20 +308,37 @@ async def log_exercise(request: Request, day: str, index: int) -> Any:
     form = await request.form()
     when = str(form.get("date") or _today().isoformat())
     entry = _entry(exercise, index, form)
+    # The card always posts its note box, prefilled with the current note, so
+    # whatever arrives is the new note — including blank, which clears it.
+    # Absent only from an older page still open on the phone; leave it alone.
+    note = form.get(f"note_{index}")
+    note_changed = note is not None and str(note).strip() != log.exercise_notes.get(
+        exercise.name, ""
+    )
 
-    if entry is None:
+    if entry is None and not note_changed:
         # Nothing filled in. Recording it would put a zero-rep entry into the
         # history and drag every later suggestion down.
         return _back(day, index, "empty")
 
+    def apply(current: Log) -> Log:
+        if entry is not None:
+            current = current.with_entry(when, block.id, day, entry)
+        if note is not None:
+            current = current.with_exercise_note(exercise.name, str(note))
+        return current
+
     try:
-        store.update(lambda current: current.with_entry(when, block.id, day, entry))
+        store.update(apply)
     except store.ConflictError as exc:
         raise ConflictResponse(
             f"the log was changed elsewhere while {exercise.name} was being saved; "
             "it was not recorded"
         ) from exc
 
+    if entry is None:
+        # Only the note changed: a reminder written before the sets, say.
+        return _back(day, index, "noted")
     logger.info("recorded %s on %s day %s", exercise.name, when, day)
     return _back(day, index, "saved")
 

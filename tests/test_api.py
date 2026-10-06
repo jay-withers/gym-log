@@ -208,6 +208,53 @@ def test_an_exercise_with_nothing_in_it_is_not_recorded(client, seeded):
     assert store.load()[0].sessions == ()
 
 
+def test_a_note_saved_with_the_sets_shows_on_the_card_next_time(client, seeded):
+    login(client)
+    client.post(
+        "/session/A/0",
+        data={"reps_0_0": "12", "weight_0_0": "7.5", "note_0": "seat on 4"},
+    )
+
+    assert store.load()[0].exercise_notes == {"Cable Flyes": "seat on 4"}
+    card = _card(client.get("/session/A").text, "Cable Flyes")
+    assert re.search(r'name="note_0"\s+value="seat on 4"', card)
+
+
+def test_the_next_note_overwrites_the_last_and_blank_clears_it(client, seeded):
+    login(client)
+    client.post("/session/A/0", data={"reps_0_0": "12", "weight_0_0": "7.5", "note_0": "seat on 4"})
+    client.post("/session/A/0", data={"reps_0_0": "12", "weight_0_0": "10", "note_0": "seat on 5"})
+    assert store.load()[0].exercise_notes == {"Cable Flyes": "seat on 5"}
+
+    client.post("/session/A/0", data={"reps_0_0": "12", "weight_0_0": "10", "note_0": ""})
+    assert store.load()[0].exercise_notes == {}
+
+
+def test_a_note_can_be_saved_before_any_sets(client, seeded):
+    """A reminder written first must not start a session that has nothing in it."""
+    login(client)
+    response = client.post("/session/A/0", data={"note_0": "try the blue handle"})
+
+    assert "noted=0" in response.headers["location"]
+    log, _ = store.load()
+    assert log.exercise_notes == {"Cable Flyes": "try the blue handle"}
+    assert log.sessions == ()
+
+
+def test_saving_from_a_page_without_the_note_box_keeps_the_note(client, seeded):
+    """A page loaded before this feature, still open on the phone, posts no note field."""
+    login(client)
+    client.post("/session/A/0", data={"note_0": "seat on 4"})
+    client.post("/session/A/0", data={"reps_0_0": "12", "weight_0_0": "7.5"})
+    assert store.load()[0].exercise_notes == {"Cable Flyes": "seat on 4"}
+
+
+def test_the_finisher_takes_a_note_too(client, seeded):
+    login(client)
+    client.post("/session/A/1", data={"done_1": "1", "note_1": "heavier sled"})
+    assert store.load()[0].exercise_notes == {"Sled Push": "heavier sled"}
+
+
 def test_the_suggestion_moves_after_a_session(client, seeded):
     login(client)
     client.post(
