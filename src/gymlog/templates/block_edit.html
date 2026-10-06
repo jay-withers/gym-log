@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Edit block · Health{% endblock %}
+{% block subtitle %}Edit {{ block.name }}{% endblock %}
+{% block back %}<a class="back" href="/block"><span class="arrow">&larr;</span> Block</a>{% endblock %}
+{% block body %}
+
+<style>
+  /* Two by two rather than four across: four number boxes in one row fall
+     under a usable width on a phone. */
+  .prescription { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .prescription label { color: var(--dim); font-size: 12px; display: block; margin-bottom: 4px; }
+</style>
+
+<form method="post" action="/block/edit">
+  <div class="card">
+    <label class="slot" for="name">Block name</label>
+    <input type="text" id="name" name="name" value="{{ block.name }}">
+    <div class="prescription">
+      <div>
+        <label for="started">Started</label>
+        <input type="date" id="started" name="started" value="{{ block.started }}">
+      </div>
+      <div>
+        <label for="weeks">Weeks</label>
+        <input type="number" id="weeks" name="weeks" value="{{ block.weeks }}"
+               inputmode="numeric" min="1" max="52">
+      </div>
+    </div>
+  </div>
+
+  <p class="last">
+    Logged sessions are not changed. Renaming a movement restarts its weight
+    suggestions, the same as swapping it in a new block; the starting weight is
+    what it suggests until the first session under the new name.
+  </p>
+
+  {% for key, day in block.days | dictsort %}
+  <div class="card">
+    <div class="slot">{{ day.label or key }}</div>
+    {% for e in day.exercises %}
+      {% set index = loop.index0 %}
+      <label class="slot" style="display:block;margin-top:14px">{{ e.slot }}</label>
+      <input type="text" name="name_{{ key }}_{{ index }}" value="{{ e.name }}"
+             aria-label="{{ e.slot }} exercise">
+      {% if e.tracked %}
+      <div class="range">
+        <span>Target reps</span>
+        <input type="number" name="rep_low_{{ key }}_{{ index }}" value="{{ e.rep_low }}"
+               inputmode="numeric" min="1" max="99" aria-label="{{ e.slot }} lowest target reps">
+        <span>&ndash;</span>
+        <input type="number" name="rep_high_{{ key }}_{{ index }}" value="{{ e.rep_high }}"
+               inputmode="numeric" min="1" max="99" aria-label="{{ e.slot }} highest target reps">
+      </div>
+      <div class="prescription">
+        <div>
+          <label for="sets_{{ key }}_{{ index }}">Sets</label>
+          <input type="number" id="sets_{{ key }}_{{ index }}" name="sets_{{ key }}_{{ index }}"
+                 value="{{ e.sets }}" inputmode="numeric" min="1" max="20">
+        </div>
+        <div>
+          <label for="rest_{{ key }}_{{ index }}">Rest (s)</label>
+          <input type="number" id="rest_{{ key }}_{{ index }}" name="rest_{{ key }}_{{ index }}"
+                 value="{{ e.rest_seconds }}" inputmode="numeric" min="0" step="5">
+        </div>
+        <div>
+          <label for="increment_{{ key }}_{{ index }}">Increment (kg)</label>
+          <input type="number" id="increment_{{ key }}_{{ index }}" name="increment_{{ key }}_{{ index }}"
+                 value="{{ '%g' | format(e.increment) }}" inputmode="decimal" min="0.25" step="0.25">
+        </div>
+        <div>
+          <label for="seed_{{ key }}_{{ index }}">Starting weight (kg)</label>
+          <input type="number" id="seed_{{ key }}_{{ index }}" name="seed_{{ key }}_{{ index }}"
+                 value="{{ '%g' | format(e.seed_weight) if e.seed_weight is not none else '' }}"
+                 inputmode="decimal" min="0" step="0.25" placeholder="none">
+        </div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <button type="submit">Save block</button>
+  <a class="btn ghost" href="/block">Cancel</a>
+</form>
+{% endblock %}
