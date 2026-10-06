@@ -30,6 +30,7 @@
       {% if e.rep_targets and e.rep_targets | unique | list | length > 1 %}
         <span class="per-set">· per set {{ e.rep_targets | join("/") }}</span>
       {% endif %}
+      {% if e.rest_label %}<span class="per-set">· {{ e.rest_label }} rest</span>{% endif %}
     </div>
     {% endif %}
 

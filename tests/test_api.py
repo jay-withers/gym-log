@@ -255,6 +255,18 @@ def test_the_finisher_takes_a_note_too(client, seeded):
     assert store.load()[0].exercise_notes == {"Sled Push": "heavier sled"}
 
 
+def test_the_card_shows_the_rest_between_sets(client):
+    store.save(Log(blocks=(block("2026-09-01", exercise(rest_seconds=90)),)))
+    login(client)
+    assert "90s rest" in _card(client.get("/session/A").text, "Cable Flyes")
+
+
+def test_no_rest_set_shows_no_rest(client):
+    store.save(Log(blocks=(block("2026-09-01", exercise(rest_seconds=0)),)))
+    login(client)
+    assert " rest<" not in _card(client.get("/session/A").text, "Cable Flyes")
+
+
 def test_the_suggestion_moves_after_a_session(client, seeded):
     login(client)
     client.post(

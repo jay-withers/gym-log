@@ -478,3 +478,19 @@ def test_exercise_notes_round_trip_and_default_to_none():
     assert Log.from_json(log.to_json()).exercise_notes == {"Cable Flyes": "blue handle"}
     # A document written before notes existed has none, rather than failing.
     assert Log.from_json('{"schema": 1}').exercise_notes == {}
+
+
+@pytest.mark.parametrize(
+    ("seconds", "label"),
+    [
+        (0, ""),
+        (60, "60s"),
+        (90, "90s"),
+        (119, "119s"),
+        (120, "2 min"),
+        (150, "2:30"),
+        (185, "3:05"),
+    ],
+)
+def test_rest_reads_in_seconds_then_minutes(seconds, label):
+    assert exercise(rest_seconds=seconds).rest_label == label
