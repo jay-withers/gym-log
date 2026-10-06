@@ -457,3 +457,24 @@ def test_week_of_survives_an_unparseable_start_date():
 )
 def test_the_rep_range_label(low, high, label):
     assert exercise(rep_low=low, rep_high=high).rep_range_label == label
+
+
+# --- exercise notes: the one overwritten thing ---------------------------------
+
+
+def test_an_exercise_note_replaces_the_previous_one():
+    log = Log().with_exercise_note("Cable Flyes", "seat on 4")
+    log = log.with_exercise_note("Cable Flyes", " seat on 5 ")
+    assert log.exercise_notes == {"Cable Flyes": "seat on 5"}
+
+
+def test_a_blank_exercise_note_removes_it():
+    log = Log().with_exercise_note("Cable Flyes", "seat on 4").with_exercise_note("Cable Flyes", "")
+    assert log.exercise_notes == {}
+
+
+def test_exercise_notes_round_trip_and_default_to_none():
+    log = Log().with_exercise_note("Cable Flyes", "blue handle")
+    assert Log.from_json(log.to_json()).exercise_notes == {"Cable Flyes": "blue handle"}
+    # A document written before notes existed has none, rather than failing.
+    assert Log.from_json('{"schema": 1}').exercise_notes == {}

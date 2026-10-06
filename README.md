@@ -61,6 +61,14 @@ weight suggestions, the same as swapping it in a new block, because
 suggestions follow the exercise name. Adding or removing exercises or days is
 not supported; that is still a new block.
 
+Each session card also has a **note for next time**: "seat on 4", "blue
+handle". It shows on that exercise's card every session until a save replaces
+it, and clearing the box removes it. It's the one deliberately overwritten
+thing in an otherwise append-only log (`Log.exercise_notes`), because it's a
+reminder, not a record of what happened. It's keyed by exercise name, like
+weight suggestions, so a renamed exercise starts without one. A note can be
+saved on its own, before any sets, without starting a session.
+
 ## Beyond the lift log
 
 The lift log itself — block/day, session logging, history, block rotation —

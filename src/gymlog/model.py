@@ -608,6 +608,12 @@ class Log:
     garmin_days: tuple[GarminDay, ...] = ()
     garmin_fitness: tuple[GarminFitness, ...] = ()
     garmin_synced_at: str = ""
+    # One note per exercise name — "seat on 4", "blue handle" — shown on that
+    # exercise's session card until the next save replaces it. The one
+    # deliberately overwritten thing in an append-only document: it is a
+    # reminder for next time, not a record of what happened. Keyed by name,
+    # the same key weight suggestions follow.
+    exercise_notes: dict[str, str] = field(default_factory=dict)
 
     @property
     def current_block(self) -> Block | None:
@@ -732,6 +738,13 @@ class Log:
 
     def without_goal(self, goal_id: str) -> Log:
         return replace(self, goals=tuple(g for g in self.goals if g.id != goal_id))
+
+    def with_exercise_note(self, exercise: str, note: str) -> Log:
+        """Set `exercise`'s note, replacing any previous one; blank removes it."""
+        notes = {k: v for k, v in self.exercise_notes.items() if k != exercise}
+        if note.strip():
+            notes[exercise] = note.strip()
+        return replace(self, exercise_notes=notes)
 
     def with_insight(self, insight: Insight) -> Log:
         """Append an insight."""
@@ -913,6 +926,7 @@ class Log:
                     f.to_json() for f in sorted(self.garmin_fitness, key=lambda f: f.date)
                 ],
                 "garmin_synced_at": self.garmin_synced_at,
+                "exercise_notes": dict(sorted(self.exercise_notes.items())),
             },
             indent=2,
         )
@@ -975,4 +989,9 @@ class Log:
                 if isinstance(f, dict)
             ),
             garmin_synced_at=str(payload.get("garmin_synced_at", "") or ""),
+            exercise_notes={
+                str(k): str(v)
+                for k, v in (payload.get("exercise_notes") or {}).items()
+                if str(v).strip()
+            },
         )
