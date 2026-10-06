@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 
 import pytest
@@ -287,6 +288,126 @@ def test_rotating_takes_the_rep_range_from_the_form(client):
     assert (chest.rep_low, chest.rep_high) == (8, 10)
     # Per-set targets belonged to the old range and did not follow it.
     assert chest.rep_targets == ()
+
+
+def test_the_edit_form_offers_every_field_of_the_current_block(client, seeded):
+    login(client)
+    page = client.get("/block/edit").text
+    assert 'name="name" value="Test block"' in page
+    assert 'name="weeks" value="8"' in page
+    assert re.search(r'name="sets_A_0"\s+value="3"', page)
+    assert re.search(r'name="seed_A_0"\s+value="7.5"', page)
+    # The finisher is offered its name and nothing else.
+    assert 'name="name_A_1" value="Sled Push"' in page
+    assert "sets_A_1" not in page
+
+
+def test_the_strength_page_links_to_the_edit_form(client, seeded):
+    login(client)
+    assert 'href="/block/edit"' in client.get("/strength").text
+
+
+def test_editing_a_block_changes_it_in_place(client, seeded):
+    login(client)
+    client.post("/session/A/0", data={"reps_0_0": "12", "weight_0_0": "7.5"})
+
+    response = client.post(
+        "/block/edit",
+        data={
+            "name": "Block 3, fixed",
+            "started": "2026-09-02",
+            "weeks": "10",
+            "name_A_0": "Incline Cable Flyes",
+            "sets_A_0": "4",
+            "rep_low_A_0": "8",
+            "rep_high_A_0": "10",
+            "rest_A_0": "90",
+            "increment_A_0": "1.25",
+            "seed_A_0": "10",
+            "name_A_1": "Farmer Carry",
+        },
+    )
+
+    assert response.status_code == 303
+    log, _ = store.load()
+    assert len(log.blocks) == 1
+    edited = log.current_block
+    assert edited is not None
+    # Same id, so the session logged against it still points at it.
+    assert edited.id == "2026-09-01"
+    assert (edited.name, edited.started, edited.weeks) == ("Block 3, fixed", "2026-09-02", 10)
+    chest, finisher = edited.days["A"].exercises
+    assert chest.name == "Incline Cable Flyes"
+    assert (chest.sets, chest.rep_low, chest.rep_high) == (4, 8, 10)
+    assert (chest.rest_seconds, chest.increment, chest.seed_weight) == (90, 1.25, 10.0)
+    assert finisher.name == "Farmer Carry"
+    assert not finisher.tracked
+    # What was lifted is untouched.
+    assert [r[1] for r in log.history("chest")] == ["Cable Flyes"]
+    assert log.sessions[0].block == "2026-09-01"
+
+
+def test_blank_or_nonsense_edit_fields_keep_the_current_values(client, seeded):
+    login(client)
+    client.post(
+        "/block/edit",
+        data={
+            "name": "",
+            "started": "not a date",
+            "weeks": "0",
+            "name_A_0": " ",
+            "sets_A_0": "lots",
+            "rest_A_0": "-5",
+            "increment_A_0": "0",
+            "seed_A_0": "7.5",
+        },
+    )
+
+    log, _ = store.load()
+    edited = log.current_block
+    assert edited is not None
+    assert (edited.name, edited.started, edited.weeks) == ("Test block", "2026-09-01", 8)
+    chest = edited.days["A"].exercises[0]
+    assert (chest.name, chest.sets, chest.rest_seconds, chest.increment) == (
+        "Cable Flyes",
+        3,
+        60,
+        2.5,
+    )
+
+
+def test_emptying_the_starting_weight_clears_it(client, seeded):
+    login(client)
+    client.post("/block/edit", data={"seed_A_0": ""})
+    log, _ = store.load()
+    assert log.current_block is not None
+    assert log.current_block.days["A"].exercises[0].seed_weight is None
+
+
+def test_a_start_date_before_the_previous_block_is_not_taken(client):
+    """Otherwise the edited block would stop being the current one."""
+    store.save(
+        Log(
+            blocks=(
+                block("2026-07-01", name="Old block"),
+                block("2026-09-01", name="Current block"),
+            )
+        )
+    )
+    login(client)
+    client.post("/block/edit", data={"started": "2026-06-01", "name": "Renamed"})
+
+    log, _ = store.load()
+    assert log.current_block is not None
+    assert log.current_block.name == "Renamed"
+    assert log.current_block.started == "2026-09-01"
+    assert log.block("2026-07-01").name == "Old block"
+
+
+def test_editing_with_no_block_shows_the_empty_page(client):
+    login(client)
+    assert client.get("/block/edit").status_code == 200
+    assert client.post("/block/edit", data={"name": "x"}).status_code == 303
 
 
 def test_a_write_that_loses_its_race_is_reported_not_swallowed(client, seeded, monkeypatch):

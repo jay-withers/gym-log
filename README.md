@@ -53,6 +53,14 @@ logged entry carries its slot, so `/history/chest` spans the rotation:
 That is the one thing the spreadsheet could not do, and the reason the model is
 shaped the way it is.
 
+The current block can be edited in place at `/block/edit`: its name, start
+date and length, and each exercise's name, sets, rep range, rest, increment
+and starting weight. It keeps its id, which is what logged sessions reference,
+so editing never touches what was lifted. Renaming a movement restarts its
+weight suggestions, the same as swapping it in a new block, because
+suggestions follow the exercise name. Adding or removing exercises or days is
+not supported; that is still a new block.
+
 ## Beyond the lift log
 
 The lift log itself — block/day, session logging, history, block rotation —

@@ -480,6 +480,110 @@ async def rotate(request: Request) -> Any:
     return RedirectResponse("/strength", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@router.get("/block/edit", response_class=HTMLResponse, include_in_schema=False)
+def edit_block_form(request: Request) -> Any:
+    log, _etag = store.load()
+    block = log.current_block
+    if block is None:
+        return templates.TemplateResponse(request, "empty.html", {})
+    return templates.TemplateResponse(request, "block_edit.html", {"block": block})
+
+
+@router.post("/block/edit", include_in_schema=False)
+async def edit_block(request: Request) -> Any:
+    """Change the current block in place: same id, same days, same exercises in order.
+
+    The id is the original start date and stays put even when `started` moves,
+    because every session logged against this block references it by that id.
+
+    Like the rotation form, nothing here has an error path: a blank or
+    nonsensical field keeps the block's current value, per field. A start date
+    on or before another block's would make this block stop being the current
+    one, so that is kept as it was too.
+
+    History is untouched. Sessions carry their own exercise names, so renaming
+    a movement here relabels the prescription, not what was lifted — though its
+    weight suggestions restart, since those follow the name.
+    """
+    form = await request.form()
+
+    def apply_edit(current: Log) -> Log:
+        block = current.current_block
+        if block is None:
+            return current
+
+        started = block.started
+        typed_start = str(form.get("started") or "").strip()
+        try:
+            date.fromisoformat(typed_start)
+        except ValueError:
+            typed_start = ""
+        if typed_start and all(
+            typed_start > other.started for other in current.blocks if other.id != block.id
+        ):
+            started = typed_start
+
+        weeks = _int(form.get("weeks"))
+        days = {
+            key: Day(
+                label=day.label,
+                exercises=tuple(
+                    _edited_exercise(form, key, index, exercise)
+                    for index, exercise in enumerate(day.exercises)
+                ),
+            )
+            for key, day in block.days.items()
+        }
+        return current.with_block(
+            replace(
+                block,
+                name=str(form.get("name") or "").strip() or block.name,
+                started=started,
+                weeks=weeks if weeks is not None and 0 < weeks <= 52 else block.weeks,
+                days=days,
+            )
+        )
+
+    try:
+        store.update(apply_edit)
+    except store.ConflictError as exc:
+        raise ConflictResponse("the log was changed elsewhere; the block was not saved") from exc
+    return RedirectResponse("/strength", status_code=status.HTTP_303_SEE_OTHER)
+
+
+def _edited_exercise(form: Any, key: str, index: int, exercise: Exercise) -> Exercise:
+    """One exercise as typed into the edit form, falling back per field."""
+    name = str(form.get(f"name_{key}_{index}") or "").strip() or exercise.name
+    if not exercise.tracked:
+        # The finisher is offered nothing but its name: it takes no load.
+        return replace(exercise, name=name)
+
+    rep_low, rep_high = _chosen_range(form, key, index, exercise)
+    sets = _int(form.get(f"sets_{key}_{index}"))
+    rest = _int(form.get(f"rest_{key}_{index}"))
+    increment = _float(form.get(f"increment_{key}_{index}"))
+    # Blank clears the starting weight rather than keeping it: the box is
+    # rendered holding the current value, so emptying it is deliberate.
+    typed_seed = str(form.get(f"seed_{key}_{index}") or "").strip()
+    seed = _float(typed_seed) if typed_seed else None
+    return replace(
+        exercise,
+        name=name,
+        sets=sets if sets is not None and 0 < sets <= 20 else exercise.sets,
+        rep_low=rep_low,
+        rep_high=rep_high,
+        # Same rule as rotating: per-set targets were written for one range.
+        rep_targets=(
+            exercise.rep_targets
+            if (rep_low, rep_high) == (exercise.rep_low, exercise.rep_high)
+            else ()
+        ),
+        rest_seconds=rest if rest is not None and rest >= 0 else exercise.rest_seconds,
+        increment=increment if increment is not None and increment > 0 else exercise.increment,
+        seed_weight=seed if seed is None or seed >= 0 else exercise.seed_weight,
+    )
+
+
 # --- achievements --------------------------------------------------------------
 
 
