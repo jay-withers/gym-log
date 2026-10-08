@@ -672,6 +672,20 @@ class Log:
                     out.append((session.date, entry.exercise, heaviest))
         return tuple(out)
 
+    def untracked_history(self, slot: str) -> tuple[tuple[str, Entry], ...]:
+        """Every set-less entry for a slot as (date, entry), oldest first.
+
+        The finisher records a tick and maybe a time, never a set, so `history`
+        — which is about the heaviest set — has nothing to say about it. Kept
+        apart rather than folded in because `history`'s callers all want a load.
+        """
+        return tuple(
+            (session.date, entry)
+            for session in sorted(self.sessions, key=lambda s: s.date)
+            for entry in session.entries
+            if entry.slot == slot and not entry.sets
+        )
+
     def with_session(self, session: Session) -> Log:
         """Append a whole session."""
         return replace(self, sessions=(*self.sessions, session))

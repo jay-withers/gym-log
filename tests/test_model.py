@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from gymlog.model import DEFAULT_SLOTS, Log, SetLog
+from gymlog.model import DEFAULT_SLOTS, Entry, Log, SetLog
 
 from .factories import (
     achievement,
@@ -110,6 +110,24 @@ def test_history_reports_the_heaviest_set():
         sessions=(session("2026-09-15", "b", "A", entry("x", "chest", (12, 20.0), (8, 25.0))),)
     )
     assert log.history("chest")[0][2] == SetLog(reps=8, weight=25.0)
+
+
+def test_untracked_history_keeps_what_history_drops():
+    """A set-less entry is invisible to `history` and is all `untracked_history` sees."""
+    log = Log(
+        sessions=(
+            session(
+                "2026-09-15",
+                "b",
+                "A",
+                Entry(slot="finisher", exercise="Sled Push", note="done", seconds=90),
+            ),
+        )
+    )
+    assert log.history("finisher") == ()
+    [(date, done)] = log.untracked_history("finisher")
+    assert date == "2026-09-15"
+    assert done.time_label == "1:30"
 
 
 def test_with_session_appends_and_never_replaces():

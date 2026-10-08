@@ -943,6 +943,21 @@ def test_history_spans_the_rotation_and_marks_the_best_set(client, seeded):
     assert page.count("▲") == 1
 
 
+def test_finisher_history_shows_the_time_or_that_it_was_done(client, seeded):
+    """The finisher has no sets, so a set-only history showed it as never done."""
+    login(client)
+    client.post("/session/A/1", data={"date": "2026-09-15", "seconds_1": "1:30"})
+    client.post("/session/A/1", data={"date": "2026-09-18", "done_1": "1"})
+    page = client.get("/history/finisher").text
+
+    assert "Nothing logged for this slot yet" not in page
+    assert "Sled Push" in page
+    assert "1:30" in page
+    assert "done" in page
+    # Newest first, like the loaded slots.
+    assert page.index("2026-09-18") < page.index("2026-09-15")
+
+
 def test_a_slot_with_nothing_in_it_says_so(client, seeded):
     login(client)
     assert "Nothing logged for this slot yet" in client.get("/history/legs").text

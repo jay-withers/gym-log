@@ -24,7 +24,23 @@
   </tr>
   {% endfor %}
 </table>
-{% else %}
+{% endif %}
+
+{% if untracked %}
+{# The finisher: done, and timed when someone remembered the clock. #}
+<table>
+  <tr><th>Date</th><th>Exercise</th><th>Time</th></tr>
+  {% for date, entry in untracked %}
+  <tr>
+    <td>{{ date }}</td>
+    <td>{{ entry.exercise }}</td>
+    <td>{{ entry.time_label or "done" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if not rows and not untracked %}
 <p class="last">Nothing logged for this slot yet.</p>
 {% endif %}
 {% endblock %}

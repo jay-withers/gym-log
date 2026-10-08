@@ -406,6 +406,7 @@ def history(request: Request, slot: str) -> Any:
             # that is the order a chart wants.
             "rows": tuple(reversed(rows)),
             "peak": max((r[2].weight for r in rows), default=0.0),
+            "untracked": tuple(reversed(log.untracked_history(slot))),
         },
     )
 
