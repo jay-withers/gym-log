@@ -245,8 +245,12 @@ def _garmin_activities(now: date) -> tuple[GarminActivity, ...]:
             duration_seconds=1800,
             avg_hr=142,
             max_hr=168,
+            # Max 203 and resting 55, as `_garmin_days`. The same run lands
+            # higher under % of max, whose boundaries sit lower.
             zone_seconds=(120, 480, 720, 420, 60),
-            zone_low_bpm=(97, 116, 135, 152, 163),
+            zone_low_bpm=(129, 144, 159, 173, 188),
+            max_zone_seconds=(0, 240, 600, 840, 120),
+            max_zone_low_bpm=(102, 122, 142, 162, 183),
         ),
     )
 

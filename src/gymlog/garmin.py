@@ -11,7 +11,8 @@ of friction (MFA challenges, rate limiting) an unofficial API punishes.
 Field names below (`activityId`, `startTimeLocal`, `activityType.typeKey`,
 `averageHR`/`maxHR`, `distance`, `totalSteps`, `restingHeartRate`,
 `dailySleepDTO.sleepTimeSeconds`/`.sleepScores.overall.value`,
-`zoneNumber`/`secsInZone`/`zoneLowBoundary`, `hrvSummary.lastNightAvg`/
+`metricDescriptors[].key`/`activityDetailMetrics[].metrics` (`directTimestamp`,
+`directHeartRate`), `maxHeartRateUsed`, `hrvSummary.lastNightAvg`/
 `.status`, `generic.vo2MaxPreciseValue`/`.vo2MaxValue`,
 `speed_and_heart_rate.speed`/`.heartRate`, `overallStressLevel`) are
 Garmin's own, confirmed against community-documented response shapes
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, date, datetime, timedelta
+from itertools import pairwise
 from typing import Any
 
 from .model import GARMIN_ZONE_COUNT, GarminActivity, GarminDay, GarminFitness
@@ -51,6 +53,18 @@ GARMIN_SYNC_DAYS = 7
 # retaining 7.
 GARMIN_RETENTION_DAYS = 90
 
+# Where zones 1-5 start: a fraction of heart rate reserve for the HRR zones,
+# of max heart rate for the plain HR ones. The same usual five-zone split.
+ZONE_FLOORS = (0.50, 0.60, 0.70, 0.80, 0.90)
+
+# Heart rate samples asked for per activity: a ceiling, not a target, so
+# Garmin sends every sample it has (about one a second). Asked for fewer, it
+# thins them out, and each sample is weighted by the time to the next anyway.
+HR_SAMPLES = 100_000
+
+# A gap between samples longer than this is a pause, not time in a zone.
+HR_SAMPLE_MAX_GAP_SECONDS = 30
+
 
 def sync_garmin(
     today: date | None = None, days: int | None = None
@@ -72,6 +86,9 @@ def sync_garmin(
     because the merge is keyed by activity id and simply replaces the stale
     record.
 
+    Heart rate zones are counted here, not taken from Garmin (see `_zones`),
+    and take one extra call per sync for the max heart rate they are built on.
+
     The fitness snapshot (see `_fitness`) is fetched once for `today` only,
     never per day in the window — unlike everything else here, its source
     endpoints don't actually answer for a requested date.
@@ -82,12 +99,18 @@ def sync_garmin(
 
     client = _client()
 
-    raw_activities = client.get_activities_by_date(start.isoformat(), today.isoformat())
-    activities = [_activity(a, client) for a in raw_activities if isinstance(a, dict)]
-
     days_out: list[GarminDay] = []
     for offset in range(span_days + 1):
         days_out.append(_day(client, (start + timedelta(days=offset)).isoformat()))
+
+    # Days first: each activity's zones need that day's resting heart rate.
+    resting_by_date = {d.date: d.resting_hr for d in days_out if d.resting_hr}
+    max_hr = _max_hr(client)
+
+    raw_activities = client.get_activities_by_date(start.isoformat(), today.isoformat())
+    activities = [
+        _activity(a, client, max_hr, resting_by_date) for a in raw_activities if isinstance(a, dict)
+    ]
 
     fitness_today = _fitness(client, today.isoformat())
     fitness = [fitness_today] if fitness_today else []
@@ -117,59 +140,149 @@ def _client() -> Any:
     return client
 
 
-def _activity(payload: dict[str, Any], client: Any) -> GarminActivity:
+def _activity(
+    payload: dict[str, Any], client: Any, max_hr: int, resting_by_date: dict[str, int]
+) -> GarminActivity:
     activity_id = str(payload.get("activityId", ""))
     activity_type = payload.get("activityType") or {}
+    activity_date = str(payload.get("startTimeLocal", ""))[:10]
+    hrr = hrr_boundaries(max_hr, _resting(activity_date, resting_by_date))
     return GarminActivity(
         id=activity_id,
-        date=str(payload.get("startTimeLocal", ""))[:10],
+        date=activity_date,
         activity_type=str(activity_type.get("typeKey", "")),
         duration_seconds=int(payload.get("duration") or 0),
         avg_hr=int(payload.get("averageHR") or 0),
         max_hr=int(payload.get("maxHR") or 0),
         distance_meters=int(payload.get("distance") or 0),
-        **_zones(activity_id, client),
+        **_zones(activity_id, client, hrr, max_boundaries(max_hr)),
     )
 
 
-def _zones(activity_id: str, client: Any) -> dict[str, tuple[int, ...]]:
-    """Time in, and the bpm each of the 5 zones starts at, or `()` for both
-    if the detail call failed.
+def _max_hr(client: Any) -> int:
+    """Max heart rate from Garmin Connect's default zone settings, or 0.
 
-    Wrapped per-activity rather than once for the whole sync: one activity
-    with no zone detail (an indoor strength session Garmin doesn't compute
-    zones for, say) should not cost the rest of the sync. Returned together
-    since both come off the same response and either fails or succeeds as a
-    pair — no scenario needs one without the other.
+    0 leaves this sync's activities without zones rather than failing the
+    sync; the next one inside the window fills them in.
     """
-    if not activity_id:
-        return {"zone_seconds": (), "zone_low_bpm": ()}
     try:
-        raw_zones = client.get_activity_hr_in_timezones(activity_id)
+        zone_settings = client.get_heart_rate_zones()
     except Exception:
-        logger.warning(
-            "could not fetch heart rate zones for activity %s", activity_id, exc_info=True
-        )
-        return {"zone_seconds": (), "zone_low_bpm": ()}
+        logger.warning("could not fetch heart rate zone settings", exc_info=True)
+        return 0
+    for entry in zone_settings if isinstance(zone_settings, list) else ():
+        if isinstance(entry, dict) and entry.get("sport") == "DEFAULT":
+            return int(entry.get("maxHeartRateUsed") or 0)
+    return 0
 
-    seconds_by_zone = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
-    low_bpm_by_zone = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
-    for entry in raw_zones if isinstance(raw_zones, list) else ():
-        if not isinstance(entry, dict):
-            continue
-        zone_number = int(entry.get("zoneNumber") or 0)
-        if 1 <= zone_number <= GARMIN_ZONE_COUNT:
-            seconds_by_zone[zone_number - 1] = int(entry.get("secsInZone") or 0)
-            low_bpm_by_zone[zone_number - 1] = int(entry.get("zoneLowBoundary") or 0)
 
-    if not any(seconds_by_zone.values()):
-        return {"zone_seconds": (), "zone_low_bpm": ()}
-    return {
-        "zone_seconds": tuple(seconds_by_zone[zone] for zone in range(GARMIN_ZONE_COUNT)),
-        "zone_low_bpm": tuple(low_bpm_by_zone[zone] for zone in range(GARMIN_ZONE_COUNT))
-        if all(low_bpm_by_zone.values())
-        else (),
+def _resting(activity_date: str, resting_by_date: dict[str, int]) -> int:
+    """That day's resting heart rate, else the window's average, else 0.
+
+    Today's is often missing: Garmin settles it later in the day.
+    """
+    if resting_by_date.get(activity_date):
+        return resting_by_date[activity_date]
+    if not resting_by_date:
+        return 0
+    return round(sum(resting_by_date.values()) / len(resting_by_date))
+
+
+def hrr_boundaries(max_hr: int, resting_hr: int) -> tuple[int, ...]:
+    """The bpm each zone starts at by heart rate reserve (Karvonen), or `()`.
+
+    resting + floor x (max - resting), rounded half up: 128.5 is 129.
+    """
+    if not max_hr or not resting_hr or max_hr <= resting_hr:
+        return ()
+    return tuple(int(resting_hr + f * (max_hr - resting_hr) + 0.5) for f in ZONE_FLOORS)
+
+
+def max_boundaries(max_hr: int) -> tuple[int, ...]:
+    """The bpm each zone starts at as a share of max heart rate, or `()`."""
+    if not max_hr:
+        return ()
+    return tuple(int(f * max_hr + 0.5) for f in ZONE_FLOORS)
+
+
+def _zones(
+    activity_id: str, client: Any, hrr: tuple[int, ...], of_max: tuple[int, ...]
+) -> dict[str, tuple[int, ...]]:
+    """Time in each zone, counted here from the activity's heart rate samples,
+    twice: against the HRR boundaries and against the % of max ones.
+
+    Not Garmin's `secsInZone`: that is bucketed on the watch against whatever
+    zones it had when it recorded, and the watch and Garmin Connect have
+    disagreed about those. Counting the samples here makes each set what it
+    says whatever the watch was set to. Checked against Garmin's own figures
+    using Garmin's own boundaries: within seconds.
+
+    A set is `()` (both its fields) without boundaries; everything is `()`
+    when the fetch fails or there is no heart rate — per activity, so one bad
+    one doesn't cost the rest of the sync.
+    """
+    empty: dict[str, tuple[int, ...]] = {
+        "zone_seconds": (),
+        "zone_low_bpm": (),
+        "max_zone_seconds": (),
+        "max_zone_low_bpm": (),
     }
+    if not activity_id or not (hrr or of_max):
+        return empty
+    try:
+        details = client.get_activity_details(activity_id, maxchart=HR_SAMPLES, maxpoly=0)
+    except Exception:
+        logger.warning("could not fetch heart rate for activity %s", activity_id, exc_info=True)
+        return empty
+
+    samples = _heart_rate(details)
+    hrr_seconds = _count(samples, hrr)
+    max_seconds = _count(samples, of_max)
+    return {
+        "zone_seconds": hrr_seconds,
+        "zone_low_bpm": hrr if hrr_seconds else (),
+        "max_zone_seconds": max_seconds,
+        "max_zone_low_bpm": of_max if max_seconds else (),
+    }
+
+
+def _heart_rate(details: Any) -> list[tuple[float, Any]]:
+    """(timestamp in ms, bpm or None) per sample of an activity details response."""
+    details = details if isinstance(details, dict) else {}
+    index = {
+        m.get("key"): m.get("metricsIndex")
+        for m in details.get("metricDescriptors") or ()
+        if isinstance(m, dict)
+    }
+    at, hr = index.get("directTimestamp"), index.get("directHeartRate")
+    if not isinstance(at, int) or not isinstance(hr, int):
+        return []
+    return [
+        (metrics[at], metrics[hr])
+        for row in details.get("activityDetailMetrics") or ()
+        if isinstance(row, dict)
+        and isinstance(metrics := row.get("metrics"), list)
+        and len(metrics) > max(at, hr)
+        and metrics[at] is not None
+    ]
+
+
+def _count(samples: list[tuple[float, Any]], boundaries: tuple[int, ...]) -> tuple[int, ...]:
+    """Seconds in each zone, each sample weighted by the gap to the next, or `()`.
+
+    Time below zone 1 counts nowhere, as on the watch.
+    """
+    if len(boundaries) != GARMIN_ZONE_COUNT:
+        return ()
+    seconds = [0.0] * GARMIN_ZONE_COUNT
+    for (when, bpm), (after, _bpm) in pairwise(samples):
+        gap = (after - when) / 1000
+        if not bpm or not 0 < gap <= HR_SAMPLE_MAX_GAP_SECONDS:
+            continue
+        zone = sum(1 for low in boundaries if bpm >= low) - 1
+        if zone >= 0:
+            seconds[zone] += gap
+    return tuple(round(s) for s in seconds) if any(seconds) else ()
 
 
 def _day(client: Any, cdate: str) -> GarminDay:

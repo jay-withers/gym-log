@@ -4,11 +4,10 @@
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
 
-<!-- The app does not calculate zones: every figure here is Garmin's own
-     time-in-zone, so "HRR" is true only while Garmin Connect's heart rate
-     zones are set to "Based on %HRR". The bpm range under each zone comes
-     from Garmin too, which is what shows if that setting ever changes. -->
-<p class="last">Heart rate reserve (HRR) zones, as set in Garmin Connect. Zone 1 is left out — it's mostly rest between sets or warm-up drift, not training effort.</p>
+<!-- Both sets are counted by the app at sync from each activity's heart
+     rate samples — not Garmin's own time-in-zone, so the watch's zone
+     setting doesn't matter. See garmin._zones. -->
+<p class="last">Each zone two ways: <strong>HR</strong> is % of max heart rate, <strong>HRR</strong> is % of heart rate reserve (max minus resting). Both from Garmin's max and resting heart rate. Zone 1 is left out — it's mostly rest between sets or warm-up drift, not training effort.</p>
 
 {% if zones and (zones | sum(attribute="month_minutes")) > 0 %}
 <style>
@@ -38,27 +37,28 @@
 </style>
 
 <div class="card hrz">
-  <div class="slot">This week</div>
+  {% for period, heading in (("week", "This week"), ("month", "Last 30 days")) %}
+  {% for method in ("HR", "HRR") %}
+  <div class="slot"{% if not loop.first or period == "month" %} style="margin-top:14px"{% endif %}>{{ heading }} · {{ method }}</div>
+  {% if zones | selectattr("method", "equalto", method) | sum(attribute=period ~ "_minutes") == 0 %}
+  {# An activity synced before this set was counted has none; a recount fills it. #}
+  <p class="last">Nothing counted for this period yet.</p>
+  {% else %}
   <div class="zonebar">
-    {% for z in zones if z.week_pct > 0 %}
-    <div class="segment" tabindex="0" style="--pct: {{ z.week_pct }}; background: var(--zone-{{ z.zone }})"
-         title="Zone {{ z.zone }}{% if z.bpm_label %} ({{ z.bpm_label }}){% endif %}: {{ z.week_minutes }}m ({{ z.week_pct }}%)"></div>
+    {% for z in zones if z.method == method and z[period ~ "_pct"] > 0 %}
+    <div class="segment" tabindex="0" style="--pct: {{ z[period ~ "_pct"] }}; background: var(--zone-{{ z.zone }})"
+         title="Zone {{ z.zone }} {{ method }}{% if z.bpm_label %} ({{ z.bpm_label }}){% endif %}: {{ z[period ~ "_minutes"] }}m ({{ z[period ~ "_pct"] }}%)"></div>
     {% endfor %}
   </div>
-
-  <div class="slot" style="margin-top:14px">Last 30 days</div>
-  <div class="zonebar">
-    {% for z in zones if z.month_pct > 0 %}
-    <div class="segment" tabindex="0" style="--pct: {{ z.month_pct }}; background: var(--zone-{{ z.zone }})"
-         title="Zone {{ z.zone }}{% if z.bpm_label %} ({{ z.bpm_label }}){% endif %}: {{ z.month_minutes }}m ({{ z.month_pct }}%)"></div>
-    {% endfor %}
-  </div>
+  {% endif %}
+  {% endfor %}
+  {% endfor %}
 
   <table class="zone-legend" style="margin-top:10px">
     <tr><th></th><th>This week</th><th>Last 30 days</th></tr>
     {% for z in zones %}
     <tr>
-      <td><span class="zone-swatch" style="background: var(--zone-{{ z.zone }})"></span>Zone {{ z.zone }}{% if z.bpm_label %}<br><span class="bpm-range">{{ z.bpm_label }}</span>{% endif %}</td>
+      <td><span class="zone-swatch" style="background: var(--zone-{{ z.zone }})"></span>Zone {{ z.zone }} {{ z.method }}{% if z.bpm_label %}<br><span class="bpm-range">{{ z.bpm_label }}</span>{% endif %}</td>
       <td>{{ z.week_minutes }}m · {{ z.week_pct }}%</td>
       <td>{{ z.month_minutes }}m · {{ z.month_pct }}%</td>
     </tr>

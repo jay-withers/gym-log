@@ -203,14 +203,29 @@ on. The traps:
   looks empty while exiting 0. Redirect to a file to check, or trust the
   native amd64 PC.
 
-## Heart rate zones are Garmin's, not the app's
+## Heart rate zones are counted here, not taken from Garmin
 
 The HR zone page and the insight prompt label zones as **heart rate reserve
-(HRR)**, but nothing here computes a zone. Every figure is Garmin's
-`secsInZone`/`zoneLowBoundary`, so the label is true only while Garmin Connect
-is set to "Based on %HRR". Don't add Karvonen maths on top: the app has no
-per-second heart rate to bucket, and its numbers would disagree with the
-watch. If the setting ever changes, change the labels with it.
+(HRR)**, and the app makes that true itself: `garmin._zones` buckets each
+activity's heart rate samples (`get_activity_details`, about one a second)
+against Karvonen boundaries from Garmin Connect's DEFAULT `maxHeartRateUsed`
+and that day's resting heart rate. Garmin's own `secsInZone` is not used: it is
+bucketed on the watch against whatever zones the watch had, and the watch and
+Garmin Connect disagreed about those (HRR on the watch, %max in Connect and in
+every activity it recorded).
+
+- Checked against Garmin's figures using Garmin's own boundaries: within
+  seconds. Re-check that way before believing a change to the counting.
+- **Ask for every sample** (`HR_SAMPLES` is a ceiling). Asked for fewer,
+  Garmin thins them out rather than truncating; weighting by the gap to the
+  next sample keeps that honest, but there is no reason to approximate.
+- A gap over `HR_SAMPLE_MAX_GAP_SECONDS` is a pause and counts nowhere.
+- The page shows every zone twice, **HR** (% of max) then **HRR**, both
+  counted from the same samples and the same max. The HR set is
+  `max_zone_seconds`/`max_zone_low_bpm`; `zone_seconds` stays HRR because the
+  insight prompt reads it as HRR.
+- Stored activities keep the zones they were counted with. Changing the
+  maths or the max needs `gymlog garmin-sync --days 90` to recount them.
 
 ## Commit messages
 

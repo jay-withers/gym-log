@@ -420,15 +420,18 @@ class Insight:
 class GarminActivity:
     """One Garmin-logged activity, synced by `gymlog.garmin.sync_garmin`.
 
-    `zone_seconds` is Garmin's own per-activity time-in-zone breakdown
-    (`hrTimeInZones`) — there is no whole-day equivalent, so heart rate zones
-    are always scoped to a workout. Empty rather than missing when that one
-    detail call failed, so a partial sync still keeps the activity itself.
+    `zone_seconds` is time in each heart rate reserve zone, counted by
+    `gymlog.garmin._zones` from the activity's heart rate samples — there is
+    no whole-day equivalent, so heart rate zones are always scoped to a
+    workout. Empty rather than missing when that failed, so a partial sync
+    still keeps the activity itself.
 
-    `zone_low_bpm` is that same response's `zoneLowBoundary` per zone — the
-    bpm a zone starts at, per Garmin's own threshold settings at the time of
-    the activity. Kept alongside rather than looked up separately, since
-    there is no other endpoint this app calls that exposes it.
+    `zone_low_bpm` is the bpm each of those zones started at for this
+    activity: from Garmin's max heart rate and that day's resting heart rate,
+    so it moves a beat or two with resting heart rate.
+
+    `max_zone_seconds`/`max_zone_low_bpm` are the same, counted against zones
+    as a share of max heart rate instead (the "HR" zones beside the HRR ones).
     """
 
     id: str
@@ -440,6 +443,8 @@ class GarminActivity:
     distance_meters: int = 0
     zone_seconds: tuple[int, ...] = ()
     zone_low_bpm: tuple[int, ...] = ()
+    max_zone_seconds: tuple[int, ...] = ()
+    max_zone_low_bpm: tuple[int, ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -455,6 +460,10 @@ class GarminActivity:
             payload["zone_seconds"] = list(self.zone_seconds)
         if self.zone_low_bpm:
             payload["zone_low_bpm"] = list(self.zone_low_bpm)
+        if self.max_zone_seconds:
+            payload["max_zone_seconds"] = list(self.max_zone_seconds)
+        if self.max_zone_low_bpm:
+            payload["max_zone_low_bpm"] = list(self.max_zone_low_bpm)
         return payload
 
     @classmethod
@@ -469,6 +478,8 @@ class GarminActivity:
             distance_meters=int(payload.get("distance_meters", 0) or 0),
             zone_seconds=tuple(int(z) for z in payload.get("zone_seconds", []) or ()),
             zone_low_bpm=tuple(int(z) for z in payload.get("zone_low_bpm", []) or ()),
+            max_zone_seconds=tuple(int(z) for z in payload.get("max_zone_seconds", []) or ()),
+            max_zone_low_bpm=tuple(int(z) for z in payload.get("max_zone_low_bpm", []) or ()),
         )
 
 
@@ -833,8 +844,10 @@ class Log:
             garmin_synced_at=synced_at or self.garmin_synced_at,
         )
 
-    def garmin_zone_seconds_since(self, cutoff: str) -> tuple[int, ...]:
+    def garmin_zone_seconds_since(self, cutoff: str, of_max: bool = False) -> tuple[int, ...]:
         """Total time in each heart rate zone across activities on/after `cutoff`.
+
+        HRR zones, or with `of_max` the zones as a share of max heart rate.
 
         Zone 1 is excluded (always 0) regardless of activity: it's dominated by
         the rest between sets in a strength session and by warm-up/cool-down
@@ -845,9 +858,10 @@ class Log:
         """
         totals = [0] * GARMIN_ZONE_COUNT
         for activity in self.garmin_activities:
-            if activity.date < cutoff or len(activity.zone_seconds) != GARMIN_ZONE_COUNT:
+            zone_seconds = activity.max_zone_seconds if of_max else activity.zone_seconds
+            if activity.date < cutoff or len(zone_seconds) != GARMIN_ZONE_COUNT:
                 continue
-            for zone, seconds in enumerate(activity.zone_seconds):
+            for zone, seconds in enumerate(zone_seconds):
                 if zone == 0:
                     continue
                 totals[zone] += seconds
@@ -883,18 +897,19 @@ class Log:
         ]
         return sum(a.distance_meters for a in runs), len(runs)
 
-    def latest_garmin_zone_boundaries(self) -> tuple[int, ...]:
+    def latest_garmin_zone_boundaries(self, of_max: bool = False) -> tuple[int, ...]:
         """The bpm each zone starts at, from the most recent activity that has them.
 
-        Boundaries come from Garmin's own threshold settings, which barely
-        move day to day, so the latest activity's figures stand in for
-        "current" rather than needing to be recomputed per activity.
-        `garmin_activities` is sorted ascending by date, so the last match is
-        the most recent.
+        HRR zones, or with `of_max` the zones as a share of max heart rate.
+        Boundaries barely move day to day, so the latest activity's figures
+        stand in for "current" rather than needing to be recomputed per
+        activity. `garmin_activities` is sorted ascending by date, so the last
+        match is the most recent.
         """
         for activity in reversed(self.garmin_activities):
-            if len(activity.zone_low_bpm) == GARMIN_ZONE_COUNT:
-                return activity.zone_low_bpm
+            low_bpm = activity.max_zone_low_bpm if of_max else activity.zone_low_bpm
+            if len(low_bpm) == GARMIN_ZONE_COUNT:
+                return low_bpm
         return ()
 
     @property

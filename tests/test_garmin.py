@@ -32,7 +32,8 @@ class _FakeGarmin:
         self.client = _FakeInnerClient()
         self.logged_in_with: str | None = "unset"
         self.activities: list[dict[str, Any]] = []
-        self.zones_by_activity: dict[str, Any] = {}
+        self.details_by_activity: dict[str, Any] = {}
+        self.zone_settings: Any = [{"sport": "DEFAULT", "maxHeartRateUsed": 200}]
         self.summaries: dict[str, dict[str, Any]] = {}
         self.sleep: dict[str, dict[str, Any]] = {}
         self.hrv: dict[str, dict[str, Any]] = {}
@@ -49,12 +50,18 @@ class _FakeGarmin:
         self.calls.append(f"activities:{start}:{end}")
         return self.activities
 
-    def get_activity_hr_in_timezones(self, activity_id: str) -> Any:
-        self.calls.append(f"zones:{activity_id}")
-        result = self.zones_by_activity.get(activity_id, [])
+    def get_activity_details(self, activity_id: str, maxchart: int, maxpoly: int) -> Any:
+        self.calls.append(f"details:{activity_id}")
+        result = self.details_by_activity.get(activity_id, {})
         if isinstance(result, Exception):
             raise result
         return result
+
+    def get_heart_rate_zones(self) -> Any:
+        self.calls.append("heart_rate_zones")
+        if isinstance(self.zone_settings, Exception):
+            raise self.zone_settings
+        return self.zone_settings
 
     def get_user_summary(self, cdate: str) -> dict[str, Any]:
         self.calls.append(f"summary:{cdate}")
@@ -91,13 +98,33 @@ ACTIVITY_PAYLOAD = {
     "distance": 5023.7,
 }
 
-ZONE_PAYLOAD = [
-    {"zoneNumber": 1, "secsInZone": 60, "zoneLowBoundary": 96},
-    {"zoneNumber": 2, "secsInZone": 300, "zoneLowBoundary": 114},
-    {"zoneNumber": 3, "secsInZone": 900, "zoneLowBoundary": 132},
-    {"zoneNumber": 4, "secsInZone": 480, "zoneLowBoundary": 150},
-    {"zoneNumber": 5, "secsInZone": 60, "zoneLowBoundary": 161},
-]
+
+def details(*segments: tuple[int, int | None], every: int = 5) -> dict[str, Any]:
+    """An activity details response: a sample every `every` seconds through
+    each (seconds, bpm) segment, then one closing sample."""
+    samples: list[tuple[int, int | None]] = []
+    clock = 0
+    for seconds, bpm in segments:
+        for _ in range(seconds // every):
+            samples.append((clock, bpm))
+            clock += every
+    samples.append((clock, None))
+    return {
+        "metricDescriptors": [
+            {"metricsIndex": 0, "key": "directSpeed"},
+            {"metricsIndex": 1, "key": "directTimestamp"},
+            {"metricsIndex": 2, "key": "directHeartRate"},
+        ],
+        "activityDetailMetrics": [
+            {"metrics": [2.5, 1_789_000_000_000 + at * 1000, bpm]} for at, bpm in samples
+        ],
+    }
+
+
+# With max 200 and resting 50, zones start at 125, 140, 155, 170 and 185 bpm.
+# A minute below zone 1, then 5, 15, 8, 1 and 1 minutes in zones 1-5.
+DETAILS_PAYLOAD = details((60, 110), (300, 130), (900, 145), (480, 160), (60, 175), (60, 190))
+DAY_PAYLOAD = {"restingHeartRate": 50}
 
 
 def test_sync_fetches_the_trailing_sync_window_not_the_full_retention(
@@ -154,22 +181,33 @@ def test_sync_days_can_be_widened_for_a_one_off_backfill(
     assert activities == []
 
 
+def _with_activities(*payloads: dict[str, Any], **overrides: Any) -> type[_FakeGarmin]:
+    class _WithActivities(_FakeGarmin):
+        def __init__(self, email: str, password: str) -> None:
+            super().__init__(email, password)
+            self.summaries = {"2026-09-15": DAY_PAYLOAD}
+            self.details_by_activity = {"123": DETAILS_PAYLOAD, "456": DETAILS_PAYLOAD}
+            for name, value in overrides.items():
+                setattr(self, name, value)
+
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return list(payloads)
+
+    return _WithActivities
+
+
+def _sync(monkeypatch: pytest.MonkeyPatch, client: type[_FakeGarmin]) -> list[Any]:
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    monkeypatch.setattr("garminconnect.Garmin", client)
+    activities, _days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15))
+    return activities
+
+
 def test_an_activity_is_mapped_with_its_heart_rate_zones(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class _WithOneActivity(_FakeGarmin):
-        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
-            return [ACTIVITY_PAYLOAD]
-
-        def get_activity_hr_in_timezones(self, activity_id: str) -> Any:
-            assert activity_id == "123"
-            return ZONE_PAYLOAD
-
-    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
-    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
-    monkeypatch.setattr("garminconnect.Garmin", _WithOneActivity)
-
-    activities, _days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15))
+    activities = _sync(monkeypatch, _with_activities(ACTIVITY_PAYLOAD))
 
     assert len(activities) == 1
     activity = activities[0]
@@ -180,34 +218,104 @@ def test_an_activity_is_mapped_with_its_heart_rate_zones(
     assert activity.avg_hr == 140
     assert activity.max_hr == 165
     assert activity.distance_meters == 5023
-    assert activity.zone_seconds == (60, 300, 900, 480, 60)
-    assert activity.zone_low_bpm == (96, 114, 132, 150, 161)
+    # Counted from the samples against HRR zones, not taken from Garmin: the
+    # minute below zone 1 counts nowhere.
+    assert activity.zone_low_bpm == (125, 140, 155, 170, 185)
+    assert activity.zone_seconds == (300, 900, 480, 60, 60)
+    # The same samples against % of max: zones start at 100, 120, ... 180, so
+    # the minute at 110 counts this time, and 160 and 175 share zone 4.
+    assert activity.max_zone_low_bpm == (100, 120, 140, 160, 180)
+    assert activity.max_zone_seconds == (60, 300, 900, 540, 60)
 
 
-def test_a_failed_zone_fetch_degrades_to_empty_without_aborting_the_sync(
+def test_hrr_boundaries_are_karvonen():
+    """resting + floor x (max - resting): 41 + 0.5 x 162 = 122."""
+    assert garmin.hrr_boundaries(203, 41) == (122, 138, 154, 171, 187)
+    assert garmin.hrr_boundaries(202, 55) == (129, 143, 158, 173, 187)  # 128.5 rounds up
+    assert garmin.hrr_boundaries(0, 41) == ()
+    assert garmin.hrr_boundaries(203, 0) == ()
+
+
+def test_max_boundaries_are_a_share_of_max():
+    assert garmin.max_boundaries(203) == (102, 122, 142, 162, 183)  # Garmin's own, for 203
+    assert garmin.max_boundaries(0) == ()
+
+
+def test_no_resting_heart_rate_still_counts_the_hr_zones(monkeypatch: pytest.MonkeyPatch) -> None:
+    """% of max needs no resting heart rate, so it shouldn't wait for one."""
+    activities = _sync(monkeypatch, _with_activities(ACTIVITY_PAYLOAD, summaries={}))
+    assert activities[0].zone_seconds == ()
+    assert activities[0].max_zone_seconds == (60, 300, 900, 540, 60)
+
+
+def test_a_pause_between_samples_is_not_time_in_a_zone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ten minutes stopped at a crossing is not ten minutes in zone 1."""
+    paused = details((120, 130))
+    for row in paused["activityDetailMetrics"][12:]:  # from 60s on, ten minutes later
+        row["metrics"][1] += 600_000
+    activities = _sync(
+        monkeypatch, _with_activities(ACTIVITY_PAYLOAD, details_by_activity={"123": paused})
+    )
+    # 120s moving; the ten minutes stopped, and the 5s of the sample before
+    # it, are dropped.
+    assert activities[0].zone_seconds == (115, 0, 0, 0, 0)
+
+
+def test_an_activity_on_a_day_with_no_resting_heart_rate_takes_the_window_average(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class _ZonesFail(_FakeGarmin):
-        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
-            return [ACTIVITY_PAYLOAD, {**ACTIVITY_PAYLOAD, "activityId": 456}]
+    """Today's resting heart rate is often not settled yet when the sync runs."""
+    activities = _sync(
+        monkeypatch,
+        _with_activities(
+            ACTIVITY_PAYLOAD,
+            summaries={
+                "2026-09-13": {"restingHeartRate": 48},
+                "2026-09-14": DAY_PAYLOAD | {"restingHeartRate": 52},
+            },
+        ),
+    )
+    assert activities[0].zone_low_bpm == (125, 140, 155, 170, 185)
 
-        def get_activity_hr_in_timezones(self, activity_id: str) -> Any:
-            if activity_id == "123":
-                raise RuntimeError("Garmin said no")
-            return ZONE_PAYLOAD
 
-    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
-    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
-    monkeypatch.setattr("garminconnect.Garmin", _ZonesFail)
+def test_no_max_heart_rate_leaves_zones_empty_without_aborting_the_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    activities = _sync(
+        monkeypatch,
+        _with_activities(ACTIVITY_PAYLOAD, zone_settings=RuntimeError("Garmin said no")),
+    )
+    assert len(activities) == 1
+    assert activities[0].zone_seconds == ()
+    assert activities[0].zone_low_bpm == ()
+    assert activities[0].max_zone_seconds == ()
 
-    activities, _days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15))
+
+def test_a_failed_heart_rate_fetch_degrades_to_empty_without_aborting_the_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    activities = _sync(
+        monkeypatch,
+        _with_activities(
+            ACTIVITY_PAYLOAD,
+            {**ACTIVITY_PAYLOAD, "activityId": 456},
+            details_by_activity={"123": RuntimeError("Garmin said no"), "456": DETAILS_PAYLOAD},
+        ),
+    )
 
     assert len(activities) == 2
     failed, ok = activities
     assert failed.zone_seconds == ()
     assert failed.zone_low_bpm == ()
-    assert ok.zone_seconds == (60, 300, 900, 480, 60)
-    assert ok.zone_low_bpm == (96, 114, 132, 150, 161)
+    assert ok.zone_seconds == (300, 900, 480, 60, 60)
+
+
+def test_an_activity_with_no_heart_rate_has_no_zones(monkeypatch: pytest.MonkeyPatch) -> None:
+    no_hr = details((120, None))
+    activities = _sync(
+        monkeypatch, _with_activities(ACTIVITY_PAYLOAD, details_by_activity={"123": no_hr})
+    )
+    assert activities[0].zone_seconds == ()
 
 
 def test_a_day_summary_tolerates_a_missing_field(monkeypatch: pytest.MonkeyPatch) -> None:

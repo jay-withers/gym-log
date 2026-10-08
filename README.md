@@ -111,12 +111,15 @@ Six sections that are not derived from sets and reps:
   in zone" figure. Zones are colored with a single-hue ordinal ramp (light =
   zone 1, dark = zone 5) rather than categorical colors, since the zones are
   an ordered tier, not independent identities. The zones are **heart rate
-  reserve (HRR)** zones, but the app does not calculate them: every figure is
-  Garmin's own time-in-zone, so they are HRR only because Garmin Connect's
-  heart rate zones (default and running) are set to "Based on %HRR". Garmin
-  computes them from full-resolution data the app never sees, and the watch,
-  this page and the AI insight then agree. Activities recorded before that
-  setting changed keep their old zones, and age out of the 30-day window.
+  reserve (HRR)** zones, counted by the app at sync rather than taken from
+  Garmin: each activity's per-second heart rate is bucketed against
+  resting + 50/60/70/80/90% × (max − resting), with max from Garmin Connect's
+  default zone settings and resting from Garmin's figure for that day. So the
+  watch's own zone setting doesn't matter, and the figures can differ from
+  Garmin's. A change to the max in Garmin Connect applies to activities
+  synced after it; `gymlog garmin-sync --days 90` recounts the rest. Each
+  zone is shown twice, **HR** (50/60/70/80/90% of max) then **HRR**, counted
+  from the same samples.
   **Running Insights** (`/insights/running`) is the distance-focused
   counterpart — total km and run count this week and over the last 30 days,
   plus a 4-bar week-over-week chart (`Log.garmin_running_distance_between`).

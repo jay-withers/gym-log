@@ -128,6 +128,8 @@ def garmin_activity(
     distance_meters: int = 5000,
     zone_seconds: tuple[int, ...] = (60, 300, 900, 480, 60),
     zone_low_bpm: tuple[int, ...] = (96, 114, 132, 150, 161),
+    max_zone_seconds: tuple[int, ...] = (),
+    max_zone_low_bpm: tuple[int, ...] = (),
 ) -> GarminActivity:
     return GarminActivity(
         id=id,
@@ -139,6 +141,8 @@ def garmin_activity(
         distance_meters=distance_meters,
         zone_seconds=zone_seconds,
         zone_low_bpm=zone_low_bpm,
+        max_zone_seconds=max_zone_seconds,
+        max_zone_low_bpm=max_zone_low_bpm,
     )
 
 
