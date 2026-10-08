@@ -1529,9 +1529,49 @@ def test_hr_zone_insights_page_shows_minutes_and_percentages(client, seeded):
     assert "Garmin last synced 24 Sep 2026, 06:00 UTC" in page
 
 
-def test_hr_zone_insights_page_says_the_zones_are_hrr(client, seeded):
+def test_hr_zone_insights_page_shows_each_zone_as_hr_then_hrr(client, seeded):
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[
+                garmin_activity(
+                    date=date.today().isoformat(),
+                    zone_seconds=(0, 120, 60, 0, 0),
+                    zone_low_bpm=(122, 138, 154, 171, 187),
+                    max_zone_seconds=(0, 60, 180, 0, 0),
+                    max_zone_low_bpm=(102, 122, 142, 162, 183),
+                )
+            ],
+            days=[],
+            keep_since="2020-01-01",
+        )
+    )
     login(client)
-    assert "Heart rate reserve (HRR) zones" in client.get("/insights/hr-zones").text
+    page = client.get("/insights/hr-zones").text
+
+    order = [f"Zone {z} {m}<br>" for z in (2, 3, 4, 5) for m in ("HR", "HRR")]
+    positions = [page.index(label) for label in order]
+    assert positions == sorted(positions)
+    assert "122-141 bpm" in page  # zone 2 HR
+    assert "138-153 bpm" in page  # zone 2 HRR
+    assert "This week · HR" in page and "This week · HRR" in page
+    assert "Last 30 days · HR" in page and "Last 30 days · HRR" in page
+    assert "1m · 25%" in page  # zone 2 HR: 60s of 240s
+    assert "2m · 67%" in page  # zone 2 HRR: 120s of 180s
+
+
+def test_a_zone_set_with_nothing_counted_says_so_rather_than_drawing_an_empty_bar(client, seeded):
+    """An activity synced before the HR set existed has only the HRR one."""
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[garmin_activity(date=date.today().isoformat())],
+            days=[],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/hr-zones").text
+    assert page.count("Nothing counted for this period yet") == 2  # HR, this week and 30 days
+    assert page.count('class="zonebar"') == 2  # HRR's two bars
 
 
 def test_hr_zone_insights_page_is_empty_before_any_sync(client, seeded):

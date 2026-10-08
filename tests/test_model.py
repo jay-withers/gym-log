@@ -130,6 +130,14 @@ def test_untracked_history_keeps_what_history_drops():
     assert done.time_label == "1:30"
 
 
+def test_garmin_activity_round_trips_both_zone_sets():
+    activity = garmin_activity(
+        max_zone_seconds=(1, 2, 3, 4, 5), max_zone_low_bpm=(10, 20, 30, 40, 50)
+    )
+    again = type(activity).from_json(activity.to_json())
+    assert again == activity
+
+
 def test_with_session_appends_and_never_replaces():
     """Append-only is the one property the spreadsheet did not have."""
     log = Log(sessions=(session("2026-09-15"),))

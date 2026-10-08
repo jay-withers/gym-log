@@ -20,7 +20,19 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from .. import store
-from ..model import Achievement, Block, Condition, Day, Entry, Exercise, Goal, Log, Session, SetLog
+from ..model import (
+    GARMIN_ZONE_COUNT,
+    Achievement,
+    Block,
+    Condition,
+    Day,
+    Entry,
+    Exercise,
+    Goal,
+    Log,
+    Session,
+    SetLog,
+)
 from ..progression import suggest
 from ..settings import settings
 from . import deps
@@ -1031,42 +1043,59 @@ def hr_zone_insights(request: Request) -> Any:
     )
 
 
-def _zone_summary(log: Any) -> list[dict[str, int]]:
+def _zone_summary(log: Any) -> list[dict[str, Any]]:
     """Time in each heart rate zone, in minutes and as a share of the period.
+
+    Two rows per zone, HR (% of max heart rate) then HRR (% of heart rate
+    reserve), so the same zone under each method sits side by side. Both are
+    counted from the same samples at sync; see `garmin._zones`.
 
     Zone 1 is left out of the result entirely, not just zeroed: `Log.
     garmin_zone_seconds_since` never accumulates it, so a "Zone 1" row would
     only ever read 0m/0% and add nothing but noise.
 
-    The percentage is of time *tracked in zones 2-5*, not of the whole period
-    — there is no untracked/rest bucket to make it sum against, since this
-    only ever covers workout time. `or 1` on each total sidesteps a division
-    by zero when nothing has synced yet; the numerators are then all 0 too,
-    so the result is a correct 0% rather than a crash.
+    The percentage is of time *tracked in zones 2-5* by that method, not of
+    the whole period — there is no untracked/rest bucket to make it sum
+    against, since this only ever covers workout time. `or 1` on each total
+    sidesteps a division by zero when nothing has synced yet; the numerators
+    are then all 0 too, so the result is a correct 0% rather than a crash.
 
-    `bpm_label` comes from the most recent activity's own thresholds
-    (`Log.latest_garmin_zone_boundaries`), not this period's — a zone's bpm
-    range doesn't change week to week, so there is no "this week's zone 3"
-    boundary distinct from "the current one". Empty when no activity has
-    yielded boundaries yet. Built here rather than in the template so the
-    "top zone is open-ended" rule lives in one place.
+    `bpm_label` comes from the most recent activity's boundaries (`Log.
+    latest_garmin_zone_boundaries`), not this period's — they move by a beat
+    or two at most, not enough for "this week's zone 3" to mean anything
+    distinct from "the current one". Empty when no activity has yielded
+    boundaries yet. Built here rather than in the template so the "top zone
+    is open-ended" rule lives in one place.
     """
     today = _today()
-    week_seconds = log.garmin_zone_seconds_since((today - timedelta(days=7)).isoformat())
-    month_seconds = log.garmin_zone_seconds_since((today - timedelta(days=30)).isoformat())
-    week_total = sum(week_seconds) or 1
-    month_total = sum(month_seconds) or 1
-    boundaries = log.latest_garmin_zone_boundaries()
+    week = (today - timedelta(days=7)).isoformat()
+    month = (today - timedelta(days=30)).isoformat()
+    methods = []
+    for method, of_max in (("HR", True), ("HRR", False)):
+        week_seconds = log.garmin_zone_seconds_since(week, of_max=of_max)
+        month_seconds = log.garmin_zone_seconds_since(month, of_max=of_max)
+        methods.append(
+            (
+                method,
+                week_seconds,
+                sum(week_seconds) or 1,
+                month_seconds,
+                sum(month_seconds) or 1,
+                log.latest_garmin_zone_boundaries(of_max=of_max),
+            )
+        )
     return [
         {
             "zone": zone + 1,
+            "method": method,
             "week_minutes": week_seconds[zone] // 60,
             "week_pct": round(100 * week_seconds[zone] / week_total),
             "month_minutes": month_seconds[zone] // 60,
             "month_pct": round(100 * month_seconds[zone] / month_total),
             "bpm_label": _bpm_label(boundaries, zone),
         }
-        for zone in range(1, len(week_seconds))
+        for zone in range(1, GARMIN_ZONE_COUNT)
+        for method, week_seconds, week_total, month_seconds, month_total, boundaries in methods
     ]
 
 
