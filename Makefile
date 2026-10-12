@@ -106,7 +106,9 @@ deploy: ## Roll an image tag onto the app and both jobs (IMAGE_TAG required)
 		--resource-group "$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
 		--image $(IMAGE_REGISTRY)/gymlog:$(IMAGE_TAG) \
 		--set-env-vars IMAGE_TAG=$(IMAGE_TAG) \
-		STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)"
+		STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)" \
+		INSIGHT_EMAIL_FROM="$$(terraform -chdir=$(TF_DIR) output -raw insight_email_from)" \
+		PUBLIC_URL="$$(terraform -chdir=$(TF_DIR) output -raw public_url)"
 	az containerapp job update \
 		--name "$$(terraform -chdir=$(TF_DIR) output -raw container_app_job_garmin_name)" \
 		--resource-group "$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
@@ -128,6 +130,8 @@ secrets: ## Print the az commands that populate this project's Key Vault
 	@echo "az keyvault secret set --vault-name $$(terraform -chdir=$(TF_DIR) output -raw key_vault_name) --name DEEPSEEK-API-KEY --value <api-key>"
 	@echo "az keyvault secret set --vault-name $$(terraform -chdir=$(TF_DIR) output -raw key_vault_name) --name GARMIN-EMAIL --value <email>"
 	@echo "az keyvault secret set --vault-name $$(terraform -chdir=$(TF_DIR) output -raw key_vault_name) --name GARMIN-PASSWORD --value <password>"
+	@echo "az keyvault secret set --vault-name $$(terraform -chdir=$(TF_DIR) output -raw key_vault_name) --name RESEND-API-KEY --value <api-key>"
+	@echo "az keyvault secret set --vault-name $$(terraform -chdir=$(TF_DIR) output -raw key_vault_name) --name INSIGHT-EMAIL-TO --value <email>"
 
 insight: ## Generate a weekly insight against the real blob (needs DEEPSEEK-API-KEY in Key Vault)
 	STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)" \

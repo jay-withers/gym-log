@@ -63,11 +63,11 @@ resource "azurerm_container_app_job" "insight" {
       memory = local.container_memory
 
       # Same image, different subcommand — see the app's own comment on why
-      # `command` is never set.
-      args = ["insight"]
+      # `command` is never set. `--email` sends it through Resend once saved.
+      args = ["insight", "--email"]
 
       dynamic "env" {
-        for_each = local.common_env
+        for_each = local.insight_env
         content {
           name  = env.key
           value = env.value

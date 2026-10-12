@@ -101,6 +101,44 @@ def test_insight_records_what_generate_insight_returns(monkeypatch):
     assert log.insights == (generated,)
 
 
+def test_insight_does_not_email_unless_asked(monkeypatch):
+    sent = []
+    monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: insight())
+    monkeypatch.setattr("gymlog.mailer.send_insight", sent.append)
+
+    assert main(["insight"]) == 0
+
+    assert sent == []
+
+
+def test_insight_email_sends_what_was_recorded(monkeypatch):
+    generated = insight(id="i1")
+    sent = []
+    monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: generated)
+    monkeypatch.setattr("gymlog.mailer.send_insight", sent.append)
+
+    assert main(["insight", "--email"]) == 0
+
+    assert sent == [generated]
+
+
+def test_insight_is_kept_when_the_email_fails(monkeypatch):
+    """The log is the product; a failed send fails the run but loses nothing."""
+    generated = insight(id="i1")
+    monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: generated)
+
+    def _fail(_insight):
+        raise RuntimeError("resend is down")
+
+    monkeypatch.setattr("gymlog.mailer.send_insight", _fail)
+
+    with pytest.raises(RuntimeError, match="resend is down"):
+        main(["insight", "--email"])
+
+    log, _etag = store.load()
+    assert log.insights == (generated,)
+
+
 def test_garmin_sync_records_what_sync_garmin_returns(monkeypatch):
     activity = garmin_activity(id="a1")
     day = garmin_day(date="2026-09-15")

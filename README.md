@@ -303,7 +303,8 @@ Ordering-sensitive:
    repository variables, or the plan legs stay skipped.
 3. `make apply`.
 4. `make secrets` and run what it prints to set `APP-PASSCODE`,
-   `DEEPSEEK-API-KEY`, `GARMIN-EMAIL` and `GARMIN-PASSWORD`. The insight and
+   `DEEPSEEK-API-KEY`, `GARMIN-EMAIL`, `GARMIN-PASSWORD`, `RESEND-API-KEY`
+   and `INSIGHT-EMAIL-TO`. The insight and
    Garmin sync jobs fail at their next scheduled run, rather than at apply
    time, if any of these are skipped — they resolve secrets the same way
    `APP-PASSCODE` is resolved, lazily and at runtime.

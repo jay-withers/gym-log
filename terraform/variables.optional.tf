@@ -91,3 +91,11 @@ variable "custom_domain_name" {
     error_message = "custom_domain_name must be a subdomain, not an apex domain: validation is by CNAME, which an apex record cannot hold."
   }
 }
+
+# --- the weekly insight email -------------------------------------------------
+
+variable "insight_email_from" {
+  description = "Sender of the weekly insight email, e.g. `Gym log <insights@jaywithers.uk>`. Must be on a domain verified in Resend. The recipient is the Key Vault secret `INSIGHT-EMAIL-TO`, not a variable, so the address stays out of the repository and the state."
+  type        = string
+  default     = ""
+}
