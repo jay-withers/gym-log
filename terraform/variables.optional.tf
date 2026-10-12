@@ -95,7 +95,7 @@ variable "custom_domain_name" {
 # --- the weekly insight email -------------------------------------------------
 
 variable "insight_email_from" {
-  description = "Sender of the weekly insight email, e.g. `Gym log <insights@health.jaywithers.uk>`. Must be on a domain verified in Resend. The recipient is the Key Vault secret `INSIGHT-EMAIL-TO`, not a variable, so the address stays out of the repository and the state."
+  description = "Sender of the weekly insight email, e.g. `Gym log <insights@jaywithers.uk>`. Must be on a domain verified in Resend. The recipient is the Key Vault secret `INSIGHT-EMAIL-TO`, not a variable, so the address stays out of the repository and the state."
   type        = string
   default     = ""
 }
