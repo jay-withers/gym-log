@@ -28,4 +28,13 @@ locals {
     # reaching it still needs the managed identity's RBAC grant.
     STATE_CONTAINER_URL = "${azurerm_storage_account.log.primary_blob_endpoint}${azurerm_storage_container.log.name}"
   }
+
+  # The custom domain when one is bound, since that is the URL actually used.
+  public_url = var.custom_domain_name != "" ? "https://${var.custom_domain_name}" : "https://${azurerm_container_app.this.ingress[0].fqdn}"
+
+  # Only the insight job emails, so only it gets the sender and the link.
+  insight_env = merge(local.common_env, {
+    INSIGHT_EMAIL_FROM = var.insight_email_from
+    PUBLIC_URL         = local.public_url
+  })
 }

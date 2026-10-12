@@ -43,6 +43,18 @@ output "state_container_url" {
   value       = "${azurerm_storage_account.log.primary_blob_endpoint}${azurerm_storage_container.log.name}"
 }
 
+# The insight job's two additions to `common_env`, pushed by `make deploy` for
+# the same reason as state_container_url.
+output "insight_email_from" {
+  description = "Sender of the weekly insight email, for `make deploy`."
+  value       = var.insight_email_from
+}
+
+output "public_url" {
+  description = "The URL the insight email links back to, for `make deploy`."
+  value       = local.public_url
+}
+
 # --- the custom domain --------------------------------------------------------
 #
 # Both are empty when var.custom_domain_name is unset. Neither is consumed by

@@ -1,7 +1,7 @@
 """Email the weekly insight, through Resend.
 
-Only the scheduled run sends (`gymlog insight --email`, from the home
-insight timer). The web app's "generate now" button doesn't: whoever pressed
+Only the scheduled run sends (`gymlog insight --email`, from the Azure insight
+job). The web app's "generate now" button doesn't: whoever pressed
 it is already looking at the result.
 
 A plain `urllib.request` call, for the reason insights.py gives for DeepSeek:
@@ -20,10 +20,10 @@ RESEND_URL = "https://api.resend.com/emails"
 
 
 def send_insight(insight: Insight) -> None:
-    """Email `insight` to INSIGHT_EMAIL_TO. Raises if it can't be sent."""
+    """Email `insight` to INSIGHT-EMAIL-TO. Raises if it can't be sent."""
     cfg = settings()
-    if not cfg.insight_email_to or not cfg.insight_email_from:
-        raise RuntimeError("--email needs INSIGHT_EMAIL_TO and INSIGHT_EMAIL_FROM set")
+    if not cfg.insight_email_from:
+        raise RuntimeError("--email needs INSIGHT_EMAIL_FROM set")
 
     text = insight.summary
     if cfg.public_url:
@@ -32,7 +32,9 @@ def send_insight(insight: Insight) -> None:
     body = json.dumps(
         {
             "from": cfg.insight_email_from,
-            "to": [cfg.insight_email_to],
+            # A secret rather than a setting: a personal address has no
+            # business in a public repository or in Terraform state.
+            "to": [secret("INSIGHT-EMAIL-TO")],
             "subject": f"Training insight, week of {insight.week_of}",
             "text": text,
         }

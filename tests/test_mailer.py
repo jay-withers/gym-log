@@ -78,6 +78,6 @@ def test_links_back_to_the_insights_page_when_public_url_is_set(sent, monkeypatc
 def test_refuses_to_send_without_an_address(sent, monkeypatch, missing):
     monkeypatch.delenv(missing)
 
-    with pytest.raises(RuntimeError, match=missing):
+    with pytest.raises(RuntimeError, match=missing.replace("_", "[-_]")):
         send_insight(insight())
     assert sent == []

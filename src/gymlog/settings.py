@@ -81,9 +81,9 @@ class Settings(BaseSettings):
     cookie_max_age_seconds: int = 60 * 60 * 24 * 30
 
     # The weekly insight email (`gymlog insight --email`, see mailer.py). FROM
-    # must be on a domain verified in Resend. PUBLIC_URL, when set, adds a
-    # link back to the insights page.
-    insight_email_to: str = ""
+    # must be on a domain verified in Resend; the recipient is the secret
+    # INSIGHT-EMAIL-TO. PUBLIC_URL, when set, adds a link back to the
+    # insights page.
     insight_email_from: str = ""
     public_url: str = ""
 
