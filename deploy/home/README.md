@@ -88,7 +88,7 @@ Fill in the secrets, then start it:
 
 ```bash
 ssh health-home
-sudo nano /opt/health/.env              # IMAGE_TAG, TUNNEL_TOKEN, APP_PASSCODE, DEEPSEEK_API_KEY, GARMIN_*
+sudo nano /opt/health/.env              # IMAGE_TAG, TUNNEL_TOKEN, APP_PASSCODE, DEEPSEEK_API_KEY, RESEND_API_KEY, INSIGHT_EMAIL_*, GARMIN_*
 cd /opt/health && sudo docker compose up -d
 curl -s localhost:8000/readyz           # {"status":"ok","storage":true}
 sudo docker compose logs cloudflared    # "Registered tunnel connection" x4
@@ -224,3 +224,7 @@ Rehearse this once, before you need it.
   install Tailscale just for that.
 - **The insight or Garmin timer fails immediately:** a secret is missing from
   `.env`. `journalctl -u health-insight` names it.
+- **The insight timer fails after "recorded insight":** the email didn't
+  send. The insight is saved and on the insights page; only the email is
+  missing. A 403 from Resend means `INSIGHT_EMAIL_FROM` isn't on a domain
+  verified there.

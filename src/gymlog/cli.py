@@ -92,7 +92,12 @@ def main(argv: list[str] | None = None) -> int:
         help="overwrite an existing local log",
     )
 
-    sub.add_parser("insight", help="generate an AI training insight")
+    insight = sub.add_parser("insight", help="generate an AI training insight")
+    insight.add_argument(
+        "--email",
+        action="store_true",
+        help="also email it to INSIGHT_EMAIL_TO, after it is saved",
+    )
 
     garmin_sync = sub.add_parser(
         "garmin-sync", help="sync recent activities and daily summaries from Garmin"
@@ -127,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "seed":
             return _seed(args)
         if args.command == "insight":
-            return _insight()
+            return _insight(email=args.email)
         if args.command == "garmin-sync":
             return _garmin_sync(args.days)
     finally:
@@ -212,7 +217,7 @@ def _show() -> int:
     return 0
 
 
-def _insight() -> int:
+def _insight(email: bool = False) -> int:
     from . import store
     from .insights import generate_insight
 
@@ -220,6 +225,14 @@ def _insight() -> int:
     insight = generate_insight(log)
     store.update(lambda current: current.with_insight(insight))
     logging.getLogger("gymlog").info("recorded insight for week of %s", insight.week_of)
+
+    # Saved first: a failed send must not lose the insight, but it still fails
+    # the run, so the timer's unit shows it rather than the week going quiet.
+    if email:
+        from .mailer import send_insight
+
+        send_insight(insight)
+        logging.getLogger("gymlog").info("emailed insight for week of %s", insight.week_of)
     return 0
 
 
