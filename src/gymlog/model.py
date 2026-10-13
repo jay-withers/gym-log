@@ -679,7 +679,9 @@ class Log:
         for session in sorted(self.sessions, key=lambda s: s.date):
             for entry in session.entries:
                 if entry.slot == slot and entry.sets:
-                    heaviest = max(entry.sets, key=lambda s: s.weight)
+                    # Reps break a tie, or a 12 at the same weight as an
+                    # earlier 10 would never show: `max` keeps the first.
+                    heaviest = max(entry.sets, key=lambda s: (s.weight, s.reps))
                     out.append((session.date, entry.exercise, heaviest))
         return tuple(out)
 

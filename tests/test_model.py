@@ -112,6 +112,13 @@ def test_history_reports_the_heaviest_set():
     assert log.history("chest")[0][2] == SetLog(reps=8, weight=25.0)
 
 
+def test_history_breaks_a_weight_tie_on_reps():
+    log = Log(
+        sessions=(session("2026-09-15", "b", "A", entry("x", "chest", (10, 20.0), (12, 20.0))),)
+    )
+    assert log.history("chest")[0][2] == SetLog(reps=12, weight=20.0)
+
+
 def test_untracked_history_keeps_what_history_drops():
     """A set-less entry is invisible to `history` and is all `untracked_history` sees."""
     log = Log(
