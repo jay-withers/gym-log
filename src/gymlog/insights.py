@@ -224,6 +224,8 @@ def complete(messages: list[dict[str, str]]) -> str:
             "Authorization": f"Bearer {secret('DEEPSEEK-API-KEY')}",
         },
     )
-    with urllib.request.urlopen(request, timeout=60) as response:
+    # S310: fixed https:// URL, not caller-supplied, so no file:// or custom scheme can reach
+    # urlopen.
+    with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310
         payload = json.loads(response.read().decode("utf-8"))
     return str(payload["choices"][0]["message"]["content"]).strip()
