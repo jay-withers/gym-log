@@ -1,0 +1,38 @@
+name: ci-codeql
+
+# CodeQL code scanning, via the shared workflow: static analysis that traces
+# untrusted input through the code to where it is used — the injection and
+# path-traversal bugs a linter cannot see because they span functions.
+#
+# It reads every code path, including everything behind the login, which the
+# DAST scanner in jay-withers/security-testing cannot reach from outside.
+# Results land in Security → Code scanning and as pull request annotations;
+# the job is green whatever it finds.
+on:
+  pull_request:
+    branches: [main]
+  # main too: code scanning compares a pull request against the default
+  # branch's results, so without a baseline every alert looks new and fixed
+  # ones are never closed.
+  push:
+    branches: [main]
+  # Weekly, so unchanged code is re-checked against CodeQL's growing queries.
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  # security-events: write uploads the results; the shared workflow declares no
+  # permissions of its own, so this grant is the whole token.
+  codeql:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    # TODO: re-pin to the released tag's SHA once jay-withers/workflows has cut
+    # a release containing codeql.yml.
+    uses: jay-withers/workflows/.github/workflows/codeql.yml@4c213dcf39820bedad6400ad661b678fb8ef0a05 # feat/codeql
+    with:
+      languages: '["python", "actions"]'
