@@ -55,5 +55,7 @@ def send_insight(insight: Insight) -> None:
             "Idempotency-Key": f"insight-{insight.id}",
         },
     )
-    with urllib.request.urlopen(request, timeout=30):
+    # S310: fixed https:// URL, not caller-supplied, so no file:// or custom scheme can reach
+    # urlopen.
+    with urllib.request.urlopen(request, timeout=30):  # noqa: S310
         pass

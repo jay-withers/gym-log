@@ -70,7 +70,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     serve = sub.add_parser("serve", help="run the web application")
-    serve.add_argument("--host", default="0.0.0.0")
+    # S104: binds all interfaces on purpose: Container Apps ingress reaches the container over the
+    # pod network, and 127.0.0.1 would be unreachable.
+    serve.add_argument("--host", default="0.0.0.0")  # noqa: S104
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--reload", action="store_true", help="reload on edit, for local work")
 

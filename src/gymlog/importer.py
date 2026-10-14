@@ -177,14 +177,20 @@ def read_workbook(path: str) -> dict[str, list[list[str]]]:
 def _shared_strings(archive: zipfile.ZipFile) -> list[str]:
     if "xl/sharedStrings.xml" not in archive.namelist():
         return []
-    root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+    # S314: CLI-only import of the user's own export, never a web upload; stdlib expat also refuses
+    # external entities and caps entity expansion.
+    root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))  # noqa: S314
     return ["".join(t.text or "" for t in si.iter(f"{NS}t")) for si in root.findall(f"{NS}si")]
 
 
 def _sheet_targets(archive: zipfile.ZipFile) -> dict[str, str]:
     """Worksheet name -> path inside the archive, in the workbook's own order."""
-    workbook = ElementTree.fromstring(archive.read("xl/workbook.xml"))
-    rels = ElementTree.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+    # S314: CLI-only import of the user's own export, never a web upload; stdlib expat also refuses
+    # external entities and caps entity expansion.
+    workbook = ElementTree.fromstring(archive.read("xl/workbook.xml"))  # noqa: S314
+    # S314: CLI-only import of the user's own export, never a web upload; stdlib expat also refuses
+    # external entities and caps entity expansion.
+    rels = ElementTree.fromstring(archive.read("xl/_rels/workbook.xml.rels"))  # noqa: S314
     targets = {rel.get("Id"): rel.get("Target", "") for rel in rels}
 
     out: dict[str, str] = {}
@@ -199,7 +205,9 @@ def _sheet_targets(archive: zipfile.ZipFile) -> dict[str, str]:
 
 
 def _rows(blob: bytes, shared: list[str]) -> list[list[str]]:
-    root = ElementTree.fromstring(blob)
+    # S314: CLI-only import of the user's own export, never a web upload; stdlib expat also refuses
+    # external entities and caps entity expansion.
+    root = ElementTree.fromstring(blob)  # noqa: S314
     rows: list[list[str]] = []
     for row in root.iter(f"{NS}row"):
         cells: dict[int, str] = {}
