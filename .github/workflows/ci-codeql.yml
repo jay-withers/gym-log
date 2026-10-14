@@ -31,8 +31,6 @@ jobs:
       contents: read
       actions: read
       security-events: write
-    # TODO: re-pin to the released tag's SHA once jay-withers/workflows has cut
-    # a release containing codeql.yml.
-    uses: jay-withers/workflows/.github/workflows/codeql.yml@4c213dcf39820bedad6400ad661b678fb8ef0a05 # feat/codeql
+    uses: jay-withers/workflows/.github/workflows/codeql.yml@255feb3a1a11cd2436bf44eaf7b058ea43a117c1 # v1.5.0
     with:
       languages: '["python", "actions"]'
