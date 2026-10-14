@@ -39,6 +39,16 @@ from . import deps
 
 logger = logging.getLogger(__name__)
 
+
+def _loggable(value: object) -> str:
+    """A request-supplied value with line breaks removed, safe to log.
+
+    Form fields and path segments are whatever the client sent: a line break in
+    an exercise name would otherwise start a new, forged-looking log line.
+    """
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 PACKAGE_DIR = pathlib.Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = PACKAGE_DIR / "templates"
 STATIC_DIR = PACKAGE_DIR / "static"
@@ -291,7 +301,9 @@ async def log_extra_exercise(request: Request, day: str) -> Any:
             f"the log was changed elsewhere while {name} was being saved; it was not recorded"
         ) from exc
 
-    logger.info("recorded extra exercise %s on %s day %s", name, when, day)
+    logger.info(
+        "recorded extra exercise %s on %s day %s", _loggable(name), _loggable(when), _loggable(day)
+    )
     return RedirectResponse(f"/session/{day}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -351,7 +363,7 @@ async def log_exercise(request: Request, day: str, index: int) -> Any:
     if entry is None:
         # Only the note changed: a reminder written before the sets, say.
         return _back(day, index, "noted")
-    logger.info("recorded %s on %s day %s", exercise.name, when, day)
+    logger.info("recorded %s on %s day %s", exercise.name, _loggable(when), _loggable(day))
     return _back(day, index, "saved")
 
 
