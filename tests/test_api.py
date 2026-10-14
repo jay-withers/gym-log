@@ -1867,3 +1867,15 @@ def test_sync_garmin_now_reports_a_friendly_error_when_garmin_is_unreachable(
     # Nothing was recorded, so an unrelated read is unaffected.
     log, _etag = store.load()
     assert log.garmin_synced_at == ""
+
+
+def test_request_values_cannot_forge_log_lines():
+    """A line break in a form field must not start a new log line.
+
+    Without it an exercise named "Squat\\nINFO recorded Deadlift" would write a
+    second, forged-looking entry into the logs.
+    """
+    from gymlog.api.routes import _loggable
+
+    assert _loggable("Squat\r\nINFO forged") == "SquatINFO forged"
+    assert _loggable("2026-10-14") == "2026-10-14"
