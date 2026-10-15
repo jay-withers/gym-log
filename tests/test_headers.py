@@ -49,7 +49,7 @@ def test_every_inline_script_carries_this_responses_nonce(client):
     response = client.get("/")
     nonce = _nonce(response)
 
-    scripts = re.findall(r"<script\b[^>]*>", response.text)
+    scripts = re.findall(r"<script\b[^>]*>", response.text, re.IGNORECASE)
     assert scripts == [s for s in scripts if f'nonce="{nonce}"' in s]
 
 
@@ -120,6 +120,6 @@ def test_no_template_has_an_inline_event_handler(template):
 
 @pytest.mark.parametrize("template", TEMPLATES, ids=lambda p: p.name)
 def test_every_template_script_carries_the_nonce(template):
-    for tag in re.findall(r"<script\b[^>]*>", template.read_text()):
-        if "src=" not in tag:
+    for tag in re.findall(r"<script\b[^>]*>", template.read_text(), re.IGNORECASE):
+        if "src=" not in tag.lower():
             assert 'nonce="{{ request.state.csp_nonce }}"' in tag, tag
