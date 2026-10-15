@@ -42,7 +42,7 @@
 <p class="last" style="margin-top:8px">A live call to DeepSeek — not medical advice.</p>
 
 {% if messages %}
-<form method="post" action="/chat/clear" onsubmit="return confirm('Clear the whole conversation?')">
+<form method="post" action="/chat/clear" data-confirm="Clear the whole conversation?">
   <button type="submit" class="btn ghost small">Clear conversation</button>
 </form>
 {% endif %}

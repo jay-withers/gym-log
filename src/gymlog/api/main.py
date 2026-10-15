@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..settings import secret, settings
-from . import deps, routes
+from . import deps, headers, routes
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,8 @@ def create_app() -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
+
+    headers.install(app)
 
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict[str, str]:

@@ -135,7 +135,7 @@
 
 <a class="btn ghost small" href="/strength" style="margin-top:20px">Finish</a>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 // Keep what has been typed on the phone until the session is actually saved.
 //
 // **The risk this covers is the phone, not the platform.** A container scaled to
