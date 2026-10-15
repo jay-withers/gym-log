@@ -110,6 +110,11 @@ Self-hosted**.
 Under Settings → Authentication, the default "One-time PIN" login method is
 enough.
 
+Put the team domain (`https://<team>.cloudflareaccess.com`) in `.env` as
+`CSP_FORM_ACTION`. Without it, a form submitted after the Access session has
+expired redirects to Access, the app's CSP blocks that redirect, and the save
+fails with nothing on screen.
+
 **Hostname, for testing:** Networks → Tunnels → `health` → **Public Hostname
 → Add**.
 - Subdomain `health-home`, domain `jaywithers.uk`.

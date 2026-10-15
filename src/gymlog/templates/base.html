@@ -158,7 +158,16 @@
 </header>
 {% block back %}{% endblock %}
 {% block body %}{% endblock %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
+// `data-confirm="Delete this goal?"` asks before a destructive form submits.
+// A listener rather than an inline `onsubmit`, because the CSP (api/headers.py)
+// blocks inline event handlers. Registered first so the listener below sees
+// a cancelled submission as `defaultPrevented`.
+document.addEventListener('submit', function (event) {
+  var message = event.target.dataset.confirm;
+  if (message && !window.confirm(message)) event.preventDefault();
+});
+
 // Greys out a form's submit button the instant it is pressed, with an
 // indeterminate progress bar underneath, so a slow request (a live DeepSeek
 // or Garmin call, both measured in seconds rather than milliseconds) reads as
@@ -169,8 +178,8 @@
 // A form can override the label with `data-loading-label="Syncing…"`;
 // without one this falls back to the button's own text with an ellipsis.
 document.addEventListener('submit', function (event) {
-  // `defaultPrevented` is already true here if a form's own onsubmit (the
-  // achievement/goal/condition delete confirmations) returned false — this
+  // `defaultPrevented` is already true here if a `data-confirm` prompt (the
+  // achievement/goal/condition delete confirmations) was declined — this
   // must not grey out a button whose submission was just cancelled.
   if (event.defaultPrevented) return;
 

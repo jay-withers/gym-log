@@ -19,7 +19,7 @@
 
 {% if condition %}
 <form method="post" action="/conditions/{{ condition.id }}/delete"
-      onsubmit="return confirm('Delete this condition?')">
+      data-confirm="Delete this condition?">
   <button type="submit" class="btn ghost small">Delete</button>
 </form>
 {% endif %}
