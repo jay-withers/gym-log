@@ -64,7 +64,7 @@ repos:
   # config, including the rule selection, lives in pyproject.toml — ruff walks
   # up from each file to find it, so nothing needs pointing at it from here.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 44b5042edab9382aba712eed4f9c7bab7a3d6a3e # frozen: v0.17.0
+    rev: 38bfb07c0c64c304f47eb52090f8288150c77730 # frozen: v0.17.1
     hooks:
       - id: ruff-check
         args: [--fix]
