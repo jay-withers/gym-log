@@ -7,9 +7,8 @@
 {% if glance or hrv.nights %}
 <style>
   .fit-sub { color: var(--dim); font-size: 13px; }
-  /* Same bar-and-label shape as Running Insights' weekly bars, reused here
-     for two different series (VO2max, HRV) rather than a new chart idiom
-     for each — the reader has already learned what this shape means. */
+  /* Same bar-and-label shape as Running Insights' weekly bars, so the HRV
+     nights read the way the reader has already learned. */
   .fitbars { display: flex; gap: 10px; margin-top: 6px; }
   .fitbar-col { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
   .fitbar-val { font-size: 12px; font-weight: 600; white-space: nowrap; }
@@ -25,6 +24,15 @@
      denser layout than two do. */
   .glance-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .glance-val { font-size: 20px; font-weight: 600; }
+  .weekly { display: block; width: 100%; height: auto; margin-top: 8px; overflow: visible; }
+  .weekly .grid { stroke: var(--line); stroke-width: 1; }
+  .weekly .axis { fill: var(--dim); font-size: 10px; }
+  .weekly .trace { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  /* The ring in the card's colour keeps each dot distinct where it sits on the line. */
+  .weekly .dot { fill: var(--accent); stroke: var(--card); stroke-width: 2; }
+  .weekly .hit { fill: transparent; }
+  .weekly .point:focus { outline: none; }
+  .weekly .point:focus-visible .dot, .weekly .point:hover .dot { stroke: var(--text); }
 </style>
 
 {% if glance %}
@@ -62,22 +70,36 @@
 </div>
 {% endif %}
 
-{% if vo2max_trend %}
+{# One measure per chart, never two on one axis: steps and hours share no
+   scale. Every point is a focusable target with a native tooltip; the latest
+   week is the one value written out, in the subtitle rather than beside the
+   line, where there is no room for it at phone width. #}
+{% macro weekly_line(title, unit, chart) %}
 <div class="card">
-  <div class="slot">VO2 max trend</div>
-  <div class="fitbars">
-    {% for v in vo2max_trend %}
-    <div class="fitbar-col">
-      <div class="fitbar-val">{{ v.value }}</div>
-      <div class="fitbar-track">
-        <div class="fitbar" tabindex="0" style="height: {{ v.pct }}%" title="{{ v.date }}: {{ v.value }}"></div>
-      </div>
-      <div class="fitbar-label">{{ v.date }}</div>
-    </div>
+  <div class="slot">{{ title }}</div>
+  <div class="fit-sub">{{ chart.latest.label }} {{ unit }} · week of {{ chart.latest.week }}</div>
+  <svg class="weekly" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img"
+       aria-label="{{ title }}: {% for p in chart.points %}week of {{ p.week }} {{ p.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
+    {% for g in chart.grid %}
+    <line class="grid" x1="{{ chart.left }}" x2="{{ chart.right }}" y1="{{ g.y }}" y2="{{ g.y }}"/>
+    <text class="axis" x="{{ chart.left - 6 }}" y="{{ g.y }}" text-anchor="end" dominant-baseline="middle">{{ g.label }}</text>
     {% endfor %}
-  </div>
+    <path class="trace" d="{{ chart.path }}"/>
+    {% for p in chart.points %}
+    <g class="point" tabindex="0">
+      <title>Week of {{ p.week }}: {{ p.label }} {{ unit }}</title>
+      <circle class="hit" cx="{{ p.x }}" cy="{{ p.y }}" r="14"/>
+      <circle class="dot" cx="{{ p.x }}" cy="{{ p.y }}" r="4"/>
+    </g>
+    {% endfor %}
+    <text class="axis" x="{{ chart.left }}" y="{{ chart.height - 4 }}">{{ chart.first_week }}</text>
+    <text class="axis" x="{{ chart.right }}" y="{{ chart.height - 4 }}" text-anchor="end">This week</text>
+  </svg>
 </div>
-{% endif %}
+{% endmacro %}
+
+{% if steps_chart %}{{ weekly_line("Steps", "a day", steps_chart) }}{% endif %}
+{% if sleep_chart %}{{ weekly_line("Sleep", "a night", sleep_chart) }}{% endif %}
 
 {% if hrv.nights %}
 <div class="card">

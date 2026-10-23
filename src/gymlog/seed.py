@@ -259,20 +259,24 @@ def _garmin_activities(now: date) -> tuple[GarminActivity, ...]:
 
 def _garmin_days(now: date) -> tuple[GarminDay, ...]:
     # Oldest first, matching how `Log.to_json` sorts these by date — same
-    # reasoning as `_garmin_activities` above.
-    return tuple(
-        GarminDay(
+    # reasoning as `_garmin_activities` above. Eight weeks, so the weekly steps
+    # and sleep charts have a line to draw: a week's pattern repeated, nudged
+    # by how many weeks back it is so the weekly averages actually move.
+    def day(offset: int) -> GarminDay:
+        weekday, weeks_ago = offset % 7, offset // 7
+        drift = [0, 600, -400, 900, -800, 300, 1200, -200][weeks_ago]
+        return GarminDay(
             date=(now - timedelta(days=offset)).isoformat(),
-            steps=[9200, 4100, 11300, 7600, 6200, 10500, 5300][offset],
+            steps=[9200, 4100, 11300, 7600, 6200, 10500, 5300][weekday] + drift,
             resting_hr=55,
-            sleep_seconds=[27000, 24600, 29400, 25200, 26100, 28200, 23400][offset],
-            sleep_score=[82, 71, 88, 74, 77, 85, 66][offset],
-            stress_avg=[28, 41, 24, 35, 31, 26, 44][offset],
-            hrv_ms=[61, 54, 66, 58, 57, 63, 52][offset],
+            sleep_seconds=[27000, 24600, 29400, 25200, 26100, 28200, 23400][weekday] + drift * 2,
+            sleep_score=[82, 71, 88, 74, 77, 85, 66][weekday],
+            stress_avg=[28, 41, 24, 35, 31, 26, 44][weekday],
+            hrv_ms=[61, 54, 66, 58, 57, 63, 52][weekday],
             hrv_status="BALANCED",
         )
-        for offset in range(6, -1, -1)
-    )
+
+    return tuple(day(offset) for offset in range(55, -1, -1))
 
 
 def _garmin_fitness(now: date) -> tuple[GarminFitness, ...]:

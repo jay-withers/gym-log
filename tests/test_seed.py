@@ -118,9 +118,10 @@ def test_it_has_garmin_activities_and_days_including_a_failed_zone_fetch(log):
 
 
 def test_it_has_what_every_fitness_card_needs(log):
-    """VO2max trend, lactate threshold and overnight HRV each hide without data."""
-    assert len([f for f in log.garmin_fitness if f.vo2max]) >= 2
+    """VO2max, lactate threshold, the weekly charts and HRV each hide without data."""
+    assert log.latest_garmin_fitness.vo2max
     assert log.latest_garmin_fitness.lactate_threshold_bpm
+    assert len(log.garmin_days) >= 7 * 8
     assert any(d.hrv_ms for d in log.garmin_days)
 
 

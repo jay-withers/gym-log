@@ -8,9 +8,11 @@ append-only log would mean a duplicate session rather than a harmless no-op.
 from __future__ import annotations
 
 import logging
+import math
 import pathlib
 import re
 import uuid
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -1219,7 +1221,17 @@ def fitness_insights(request: Request) -> Any:
         "insights_fitness.html",
         {
             "glance": _at_a_glance(log, _today()),
-            "vo2max_trend": _vo2max_trend(log),
+            "steps_chart": _weekly_chart(
+                log, _today(), lambda d: d.steps, _steps_label, _steps_tick, from_zero=True
+            ),
+            "sleep_chart": _weekly_chart(
+                log,
+                _today(),
+                lambda d: d.sleep_seconds / 3600,
+                _hours_label,
+                _hours_tick,
+                min_step=1,
+            ),
             "hrv": _hrv_summary(log),
             "synced_at": _format_synced_at(log.garmin_synced_at),
         },
@@ -1262,29 +1274,123 @@ def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
     }
 
 
-def _vo2max_trend(log: Any, limit: int = 8) -> list[dict[str, Any]]:
-    """Up to the last `limit` VO2max readings this app has itself recorded, oldest first.
+# The weekly line charts' drawing area, in SVG user units. The left margin
+# holds the y-axis tick labels, the bottom one the first and last week's.
+CHART_WIDTH, CHART_HEIGHT = 320, 132
+CHART_LEFT, CHART_RIGHT, CHART_TOP, CHART_BOTTOM = 36, 304, 12, 108
 
-    Bar height is scaled between the visible readings' own min and max,
-    not from zero: VO2max moves in a narrow band — a point or two over
-    months — and a zero-based bar chart would flatten every reading to
-    nearly the same height. `max(8, ...)` keeps the lowest reading's bar
-    tall enough to still read as present rather than as a missing week.
+
+def _weekly_chart(
+    log: Any,
+    today: date,
+    value: Callable[[Any], float],
+    label: Callable[[float], str],
+    tick: Callable[[float], str],
+    weeks: int = 8,
+    from_zero: bool = False,
+    min_step: float = 0,
+) -> dict[str, Any]:
+    """A daily Garmin value averaged per calendar week, laid out as a line chart.
+
+    Mon-Sun weeks, as `_weekly_running_series`, over finished days only, as
+    `_at_a_glance`: today's half-counted steps would drag this week's average
+    down every morning. A day with no reading (zero) is left out of its week's
+    average rather than counted as nothing, and a week with no readings is a
+    break in the line rather than a drop to zero.
+
+    The geometry is worked out here rather than in the template so a wrong
+    scale shows up in a test. Steps sit on a zero baseline; sleep doesn't,
+    because a week's average moves within an hour or so and a zero-based axis
+    would flatten that to a straight line.
     """
-    readings = [f for f in log.garmin_fitness if f.vo2max > 0][-limit:]
-    if len(readings) < 2:
-        return []
-    values = [r.vo2max for r in readings]
-    lo, hi = min(values), max(values)
-    span = hi - lo
-    return [
-        {
-            "value": r.vo2max,
-            "date": _short_date(r.date),
-            "pct": 100 if span == 0 else max(8, round(100 * (r.vo2max - lo) / span)),
-        }
-        for r in readings
-    ]
+    this_monday = _week_start(today)
+    finished = [d for d in log.garmin_days if d.date < today.isoformat()]
+    points: list[dict[str, Any]] = []
+    for weeks_ago in range(weeks - 1, -1, -1):
+        start = this_monday - timedelta(weeks=weeks_ago)
+        end = min(start + timedelta(days=6), today - timedelta(days=1))
+        values = [value(d) for d in finished if start.isoformat() <= d.date <= end.isoformat()]
+        values = [v for v in values if v > 0]
+        points.append(
+            {
+                "week": start.strftime("%d %b"),
+                "value": sum(values) / len(values) if values else None,
+            }
+        )
+    known = [p["value"] for p in points if p["value"] is not None]
+    if len(known) < 2:
+        return {}
+
+    low, high, step = _ticks(0 if from_zero else min(known), max(known), min_step)
+
+    def y(v: float) -> float:
+        return round(CHART_BOTTOM - (v - low) / (high - low) * (CHART_BOTTOM - CHART_TOP), 1)
+
+    gap = (CHART_RIGHT - CHART_LEFT) / (weeks - 1)
+    path, pen_down = [], False
+    for index, point in enumerate(points):
+        point["x"] = round(CHART_LEFT + index * gap, 1)
+        if point["value"] is None:
+            pen_down = False
+            continue
+        point["y"] = y(point["value"])
+        point["label"] = label(point["value"])
+        path.append(f"{'L' if pen_down else 'M'}{point['x']},{point['y']}")
+        pen_down = True
+
+    grid = []
+    at = low
+    while at <= high + step / 2:
+        grid.append({"y": y(at), "label": tick(at)})
+        at += step
+    plotted = [p for p in points if p["value"] is not None]
+    return {
+        "width": CHART_WIDTH,
+        "height": CHART_HEIGHT,
+        "left": CHART_LEFT,
+        "right": CHART_RIGHT,
+        "path": " ".join(path),
+        "points": plotted,
+        "latest": plotted[-1],
+        "grid": grid,
+        "first_week": points[0]["week"],
+    }
+
+
+def _ticks(low: float, high: float, min_step: float = 0) -> tuple[float, float, float]:
+    """A clean axis around `low`..`high`: (bottom, top, step), about three steps.
+
+    The step is 1, 2, 2.5 or 5 times a power of ten, and the ends are rounded
+    out to it, so the gridlines land on numbers worth reading (0/5K/10K).
+    `min_step` stops a narrow range splitting into steps that read badly in its
+    unit: a week's sleep moving within an hour would otherwise tick 7.25h.
+    """
+    span = (high - low) or abs(high) or 1
+    magnitude = 10 ** math.floor(math.log10(span / 3))
+    step = next(m * magnitude for m in (1, 2, 2.5, 5, 10) if span / (m * magnitude) <= 3)
+    step = max(step, min_step)
+    bottom = math.floor(low / step) * step
+    top = math.ceil(high / step) * step
+    if top == bottom:
+        top += step
+    return bottom, top, step
+
+
+def _steps_label(steps: float) -> str:
+    return f"{round(steps):,}"
+
+
+def _steps_tick(steps: float) -> str:
+    return f"{steps / 1000:g}K" if steps else "0"
+
+
+def _hours_label(hours: float) -> str:
+    minutes = round(hours * 60)
+    return f"{minutes // 60}h {minutes % 60}m"
+
+
+def _hours_tick(hours: float) -> str:
+    return f"{hours:g}h"
 
 
 def _hrv_summary(log: Any, nights: int = 7) -> dict[str, Any]:
