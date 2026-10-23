@@ -739,6 +739,10 @@ class Log:
             sessions=tuple(s for s in self.sessions if not (s.date == when and s.day == day)),
         )
 
+    def within_block(self, block_id: str) -> Log:
+        """This log with only the sessions recorded in one block."""
+        return replace(self, sessions=tuple(s for s in self.sessions if s.block == block_id))
+
     def with_block(self, block: Block) -> Log:
         """Add or replace a block by id."""
         others = tuple(b for b in self.blocks if b.id != block.id)

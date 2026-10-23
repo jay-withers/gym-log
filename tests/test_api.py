@@ -281,10 +281,12 @@ def test_the_suggestion_moves_after_a_session(client, seeded):
             "weight_0_2": "7.5",
         },
     )
-    # Every set at the top of 10-12, so the weight goes up. The reps placeholder
-    # is what was done last time, per set, not the progression target.
+    # Every set at the top of 10-12, so the suggestion goes up, but both
+    # placeholders are what was done last time, per set. A raised weight beside
+    # last time's reps read as a record of having lifted it.
     card = _card(client.get("/session/A").text, "Cable Flyes")
-    assert 'placeholder="10 kg"' in card
+    assert 'placeholder="7.5 kg"' in card
+    assert 'placeholder="10 kg"' not in card
     assert 'placeholder="12 reps"' in card
     assert 'placeholder="10 reps"' not in card
 
@@ -570,8 +572,8 @@ def _card(page: str, name: str) -> str:
 def test_the_card_is_name_target_and_inputs_only(client, seeded):
     """No suggestion prose above the boxes.
 
-    The suggestion still drives both placeholders, so what to reach for is in
-    the field being typed into rather than on a line restating it.
+    The placeholders carry the numbers instead: last time's per set, or the
+    suggestion when there is no last time.
     """
     login(client)
     card = _card(client.get("/session/A").text, "Cable Flyes")
@@ -720,11 +722,11 @@ def test_a_saved_exercise_comes_back_as_values_not_placeholders(client, seeded):
     assert ">Update<" in card
 
 
-def test_a_suggestion_does_not_chase_the_set_just_typed_into_it(client, seeded):
-    """Today's own entries are excluded from what the suggestion is built on.
+def test_today_is_not_its_own_previous_week(client, seeded):
+    """Today's own entries are excluded from what the placeholders show.
 
-    Without that, saving 12 at the top of the range would immediately re-suggest
-    against it, and the card would climb itself every time it was saved.
+    Without that, a saved set would hint at itself, and an unsaved set beside it
+    would hint at today rather than the week before.
     """
     login(client)
     when = date.today().isoformat()
@@ -742,9 +744,31 @@ def test_a_suggestion_does_not_chase_the_set_just_typed_into_it(client, seeded):
             },
         )
 
-    # Still the first outing's seed weight: nothing before today to go on.
+    # Nothing before today to go on, so no hints - not even the seed weight.
     card = _card(client.get("/session/A").text, "Cable Flyes")
-    assert 'placeholder="7.5 kg"' in card
+    assert 'placeholder=""' in card
+    assert 'placeholder="7.5 kg"' not in card
+    assert 'placeholder="12 reps"' not in card
+
+
+def test_a_new_block_starts_with_empty_boxes(client):
+    """Last week's numbers are this block's only, never a previous programme's."""
+    store.save(
+        Log(
+            blocks=(
+                block("2026-08-01", exercise(seed_weight=7.5)),
+                block("2026-09-01", exercise(seed_weight=7.5)),
+            ),
+            sessions=(
+                session("2026-08-20", "2026-08-01", "A", entry("Cable Flyes", "chest", (12, 20.0))),
+            ),
+        )
+    )
+    login(client)
+    card = _card(client.get("/session/A").text, "Cable Flyes")
+    assert 'placeholder="20 kg"' not in card
+    assert 'placeholder="12 reps"' not in card
+    assert 'placeholder="7.5 kg"' not in card
 
 
 def test_a_conflict_on_one_exercise_names_it(client, seeded, monkeypatch):
