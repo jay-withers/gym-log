@@ -4,9 +4,8 @@
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
 
-{% if glance or current or hrv.nights %}
+{% if glance or hrv.nights %}
 <style>
-  .fit-val { font-size: 24px; font-weight: 600; }
   .fit-sub { color: var(--dim); font-size: 13px; }
   /* Same bar-and-label shape as Running Insights' weekly bars, reused here
      for two different series (VO2max, HRV) rather than a new chart idiom
@@ -22,7 +21,7 @@
   .fitbar:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
   .fitbar-label { color: var(--dim); font-size: 11px; margin-top: 6px; text-align: center; }
   /* A 2-up grid of small tiles rather than the wider This-week/Last-30-days
-     `.row` cards below: five values side by side at phone width need a
+     `.row` cards below: six values side by side at phone width need a
      denser layout than two do. */
   .glance-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .glance-val { font-size: 20px; font-weight: 600; }
@@ -54,15 +53,12 @@
       <div class="slot">VO2 max</div>
       <div class="glance-val">{{ glance.vo2max or "—" }}</div>
     </div>
+    <div>
+      <div class="slot">Lactate threshold</div>
+      <div class="glance-val">{{ glance.lactate_threshold_pace or "—" }}</div>
+      {% if glance.lactate_threshold_bpm %}<div class="fit-sub">{{ glance.lactate_threshold_bpm }} bpm</div>{% endif %}
+    </div>
   </div>
-</div>
-{% endif %}
-
-{% if current %}
-<div class="card">
-  <div class="slot">Lactate threshold</div>
-  <div class="fit-val">{{ current.lactate_threshold_pace or "—" }}</div>
-  <div class="fit-sub">{% if current.lactate_threshold_bpm %}{{ current.lactate_threshold_bpm }} bpm · {% endif %}as of {{ current.as_of }}</div>
 </div>
 {% endif %}
 

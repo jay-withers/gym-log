@@ -1219,7 +1219,6 @@ def fitness_insights(request: Request) -> Any:
         "insights_fitness.html",
         {
             "glance": _at_a_glance(log, _today()),
-            "current": _current_fitness(log),
             "vo2max_trend": _vo2max_trend(log),
             "hrv": _hrv_summary(log),
             "synced_at": _format_synced_at(log.garmin_synced_at),
@@ -1228,14 +1227,14 @@ def fitness_insights(request: Request) -> Any:
 
 
 def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
-    """Steps/resting-HR/sleep/stress from the latest day before today, plus the latest VO2max.
+    """Steps/resting-HR/sleep/stress from the latest day before today, plus VO2max and LT.
 
     Not today: a sync mid-morning has today's resting HR and little else, so
     the latest synced day was a snapshot of mostly dashes. The last finished
     day is yesterday, or the most recent before it if yesterday never synced.
 
-    One combined snapshot rather than reusing `_current_fitness` and a
-    day-lookup separately in the template. Built from whichever of
+    The lactate threshold rides along with VO2max: both come from the latest
+    `GarminFitness`, so they share its staleness. Built from whichever of
     `garmin_days`/`garmin_fitness` exists, and each independently — not
     "both or neither" — since VO2max only ever gets a value on the day the
     sync ran (see `GarminFitness`), so it can legitimately be a day or more
@@ -1255,24 +1254,11 @@ def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
         "sleep_score": day.sleep_score if day else 0,
         "stress_avg": day.stress_avg if day else 0,
         "vo2max": fitness.vo2max if fitness else 0,
+        "lactate_threshold_bpm": fitness.lactate_threshold_bpm if fitness else 0,
+        "lactate_threshold_pace": (
+            _pace_label(fitness.lactate_threshold_pace_seconds_per_km) if fitness else ""
+        ),
         "as_of": _short_date(day.date if day else fitness.date),
-    }
-
-
-def _current_fitness(log: Any) -> dict[str, Any]:
-    """The latest known lactate threshold, formatted for display.
-
-    VO2max isn't repeated here — `_at_a_glance` already shows it alongside
-    steps/HR/sleep/stress, and a second card for the same number a few lines
-    down would just be noise.
-    """
-    latest = log.latest_garmin_fitness
-    if latest is None:
-        return {}
-    return {
-        "lactate_threshold_bpm": latest.lactate_threshold_bpm,
-        "lactate_threshold_pace": _pace_label(latest.lactate_threshold_pace_seconds_per_km),
-        "as_of": _short_date(latest.date),
     }
 
 

@@ -1689,6 +1689,9 @@ def test_fitness_insights_page_shows_current_vo2max_and_lactate_threshold(client
     assert "52.3" in page
     assert "165 bpm" in page
     assert "4:18 /km" in page  # 258s/km formatted
+    # A tile in the at-a-glance card, not a card of its own.
+    assert page.count("Lactate threshold") == 1
+    assert page.index("At a glance") < page.index("Lactate threshold")
     assert "as of 24 Sep" in page
     assert "Garmin last synced 24 Sep 2026, 06:00 UTC" in page
 
