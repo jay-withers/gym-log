@@ -272,7 +272,7 @@ def _garmin_days(now: date) -> tuple[GarminDay, ...]:
             sleep_seconds=[27000, 24600, 29400, 25200, 26100, 28200, 23400][weekday] + drift * 2,
             sleep_score=[82, 71, 88, 74, 77, 85, 66][weekday],
             stress_avg=[28, 41, 24, 35, 31, 26, 44][weekday],
-            hrv_ms=[61, 54, 66, 58, 57, 63, 52][weekday],
+            hrv_ms=[61, 54, 66, 58, 57, 63, 52][weekday] + drift // 150,
             hrv_status="BALANCED",
         )
 

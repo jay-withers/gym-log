@@ -4,21 +4,9 @@
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
 
-{% if glance or hrv.nights %}
+{% if glance or steps_chart or sleep_chart or hrv_chart %}
 <style>
   .fit-sub { color: var(--dim); font-size: 13px; }
-  /* Same bar-and-label shape as Running Insights' weekly bars, so the HRV
-     nights read the way the reader has already learned. */
-  .fitbars { display: flex; gap: 10px; margin-top: 6px; }
-  .fitbar-col { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
-  .fitbar-val { font-size: 12px; font-weight: 600; white-space: nowrap; }
-  .fitbar-track { height: 56px; width: 100%; display: flex; align-items: flex-end; justify-content: center; margin-top: 4px; }
-  .fitbar {
-    width: 24px; min-height: 2px;
-    background: var(--accent); border-radius: 4px 4px 0 0;
-  }
-  .fitbar:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
-  .fitbar-label { color: var(--dim); font-size: 11px; margin-top: 6px; text-align: center; }
   /* A 2-up grid of small tiles rather than the wider This-week/Last-30-days
      `.row` cards below: six values side by side at phone width need a
      denser layout than two do. */
@@ -74,10 +62,10 @@
    scale. Every point is a focusable target with a native tooltip; the latest
    week is the one value written out, in the subtitle rather than beside the
    line, where there is no room for it at phone width. #}
-{% macro weekly_line(title, unit, chart) %}
+{% macro weekly_line(title, unit, chart, note="") %}
 <div class="card">
   <div class="slot">{{ title }}</div>
-  <div class="fit-sub">{{ chart.latest.label }} {{ unit }} · week of {{ chart.latest.week }}</div>
+  <div class="fit-sub">{{ chart.latest.label }} {{ unit }} · week of {{ chart.latest.week }}{% if note %} · {{ note }}{% endif %}</div>
   <svg class="weekly" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img"
        aria-label="{{ title }}: {% for p in chart.points %}week of {{ p.week }} {{ p.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
     {% for g in chart.grid %}
@@ -100,24 +88,7 @@
 
 {% if steps_chart %}{{ weekly_line("Steps", "a day", steps_chart) }}{% endif %}
 {% if sleep_chart %}{{ weekly_line("Sleep", "a night", sleep_chart) }}{% endif %}
-
-{% if hrv.nights %}
-<div class="card">
-  <div class="slot">Overnight HRV</div>
-  <div class="fit-sub" style="margin-bottom: 4px">{{ hrv.avg_ms }}ms avg{% if hrv.latest_status %} · last night {{ hrv.latest_status }}{% endif %}</div>
-  <div class="fitbars">
-    {% for n in hrv.nights %}
-    <div class="fitbar-col">
-      <div class="fitbar-val">{{ n.ms }}</div>
-      <div class="fitbar-track">
-        <div class="fitbar" tabindex="0" style="height: {{ n.pct }}%" title="{{ n.label }}: {{ n.ms }}ms"></div>
-      </div>
-      <div class="fitbar-label">{{ n.label }}</div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
+{% if hrv_chart %}{{ weekly_line("Overnight HRV", "a night", hrv_chart, "last night " ~ hrv_status if hrv_status else "") }}{% endif %}
 
 <p class="last">{% if synced_at %}Garmin last synced {{ synced_at }}{% else %}Never synced yet{% endif %} — <a href="/garmin">sync</a></p>
 {% else %}

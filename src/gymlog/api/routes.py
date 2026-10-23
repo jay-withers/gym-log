@@ -1231,8 +1231,18 @@ def fitness_insights(request: Request) -> Any:
                 _hours_label,
                 _hours_tick,
                 min_step=1,
+                overnight=True,
             ),
-            "hrv": _hrv_summary(log),
+            "hrv_chart": _weekly_chart(
+                log,
+                _today(),
+                lambda d: d.hrv_ms,
+                _ms_label,
+                _ms_label,
+                min_step=5,
+                overnight=True,
+            ),
+            "hrv_status": _hrv_status(log),
             "synced_at": _format_synced_at(log.garmin_synced_at),
         },
     )
@@ -1289,12 +1299,15 @@ def _weekly_chart(
     weeks: int = 8,
     from_zero: bool = False,
     min_step: float = 0,
+    overnight: bool = False,
 ) -> dict[str, Any]:
     """A daily Garmin value averaged per calendar week, laid out as a line chart.
 
     Mon-Sun weeks, as `_weekly_running_series`, over finished days only, as
     `_at_a_glance`: today's half-counted steps would drag this week's average
-    down every morning. A day with no reading (zero) is left out of its week's
+    down every morning. `overnight` values are the exception: Garmin dates
+    sleep and HRV by the morning they end, so today's is last night's and
+    already complete. A day with no reading (zero) is left out of its week's
     average rather than counted as nothing, and a week with no readings is a
     break in the line rather than a drop to zero.
 
@@ -1304,11 +1317,12 @@ def _weekly_chart(
     would flatten that to a straight line.
     """
     this_monday = _week_start(today)
-    finished = [d for d in log.garmin_days if d.date < today.isoformat()]
+    last_day = today if overnight else today - timedelta(days=1)
+    finished = [d for d in log.garmin_days if d.date <= last_day.isoformat()]
     points: list[dict[str, Any]] = []
     for weeks_ago in range(weeks - 1, -1, -1):
         start = this_monday - timedelta(weeks=weeks_ago)
-        end = min(start + timedelta(days=6), today - timedelta(days=1))
+        end = min(start + timedelta(days=6), last_day)
         values = [value(d) for d in finished if start.isoformat() <= d.date <= end.isoformat()]
         values = [v for v in values if v > 0]
         points.append(
@@ -1393,26 +1407,14 @@ def _hours_tick(hours: float) -> str:
     return f"{hours:g}h"
 
 
-def _hrv_summary(log: Any, nights: int = 7) -> dict[str, Any]:
-    """The last `nights` nights of overnight HRV, oldest first, plus the latest status/average.
+def _ms_label(ms: float) -> str:
+    return f"{round(ms)}ms"
 
-    The cutoff looks back twice `nights` calendar days, not exactly `nights`:
-    `garmin_hrv_since` only returns nights with a real reading, so a missed
-    or unworn night should be skipped over rather than shortening the chart.
-    """
-    cutoff = (_today() - timedelta(days=nights * 2)).isoformat()
-    recent = log.garmin_hrv_since(cutoff)[-nights:]
-    if not recent:
-        return {"nights": []}
-    peak = max(d.hrv_ms for d in recent) or 1
-    return {
-        "nights": [
-            {"ms": d.hrv_ms, "pct": round(100 * d.hrv_ms / peak), "label": _short_date(d.date)}
-            for d in recent
-        ],
-        "latest_status": recent[-1].hrv_status.replace("_", " ").title(),
-        "avg_ms": round(sum(d.hrv_ms for d in recent) / len(recent)),
-    }
+
+def _hrv_status(log: Any) -> str:
+    """Garmin's verdict on the latest night with an HRV reading, e.g. "Balanced"."""
+    nights = [d for d in log.garmin_days if d.hrv_ms]
+    return nights[-1].hrv_status.replace("_", " ").title() if nights else ""
 
 
 def _short_date(iso_date: str) -> str:

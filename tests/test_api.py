@@ -1764,24 +1764,42 @@ def test_weekly_chart_needs_two_weeks_to_draw_a_line():
     )
 
 
-def test_fitness_insights_page_shows_overnight_hrv(client, seeded):
-    yesterday = (date.today() - timedelta(days=1)).isoformat()
-    today = date.today().isoformat()
+def test_fitness_insights_page_shows_weekly_overnight_hrv(client, seeded):
+    today = date.today()
     store.update(
         lambda current: current.with_garmin_sync(
             activities=[],
             days=[
-                garmin_day(date=yesterday, hrv_ms=58, hrv_status="BALANCED"),
-                garmin_day(date=today, hrv_ms=62, hrv_status="BALANCED"),
-            ],
+                garmin_day(date=(today - timedelta(days=offset)).isoformat(), hrv_ms=60)
+                for offset in range(14, 0, -1)
+            ]
+            # Last night's reading, dated today: complete, so counted.
+            + [garmin_day(date=today.isoformat(), hrv_ms=60, hrv_status="UNBALANCED")],
             keep_since="2020-01-01",
         )
     )
     login(client)
     page = client.get("/insights/fitness").text
-    assert "62ms avg" not in page  # avg of 58 and 62 is 60, not 62
-    assert "60ms avg" in page
-    assert "Balanced" in page
+    assert "Overnight HRV" in page
+    assert "60ms a night" in page
+    assert "last night Unbalanced" in page
+    assert 'class="fitbar"' not in page
+
+
+def test_weekly_chart_counts_today_for_overnight_values_only():
+    today = date(2026, 10, 23)
+    days = (
+        garmin_day(date="2026-10-14", steps=5000, sleep_seconds=6 * 3600),
+        garmin_day(date="2026-10-22", steps=5000, sleep_seconds=6 * 3600),
+        garmin_day(date="2026-10-23", steps=1000, sleep_seconds=8 * 3600),
+    )
+    log = Log(garmin_days=days)
+    steps = _weekly_chart(log, today, lambda d: d.steps, _steps_label, _steps_tick)
+    sleep = _weekly_chart(
+        log, today, lambda d: d.sleep_seconds / 3600, _hours_label, _hours_tick, overnight=True
+    )
+    assert steps["latest"]["label"] == "5,000"
+    assert sleep["latest"]["label"] == "7h 0m"
 
 
 def test_fitness_insights_page_shows_at_a_glance_from_the_latest_day(client, seeded):
