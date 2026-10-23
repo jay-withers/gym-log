@@ -117,6 +117,13 @@ def test_it_has_garmin_activities_and_days_including_a_failed_zone_fetch(log):
     assert any(not a.zone_seconds for a in log.garmin_activities)
 
 
+def test_it_has_what_every_fitness_card_needs(log):
+    """VO2max trend, lactate threshold and overnight HRV each hide without data."""
+    assert len([f for f in log.garmin_fitness if f.vo2max]) >= 2
+    assert log.latest_garmin_fitness.lactate_threshold_bpm
+    assert any(d.hrv_ms for d in log.garmin_days)
+
+
 def test_per_set_targets_are_present_and_not_uniform(log):
     """Both shapes, so `· per set` is exercised as well as the plain range."""
     exercises = [e for day in log.current_block.days.values() for e in day.exercises]
