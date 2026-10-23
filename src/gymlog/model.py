@@ -495,6 +495,9 @@ class GarminDay:
     hrv_status: str = ""
     sleep_score: int = 0
     stress_avg: int = 0
+    # Garmin's own daily target, which it moves on its own when auto goal is on,
+    # so it is kept per day rather than once. 0 on days synced before it was.
+    steps_goal: int = 0
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -506,6 +509,7 @@ class GarminDay:
             "hrv_status": self.hrv_status,
             "sleep_score": self.sleep_score,
             "stress_avg": self.stress_avg,
+            "steps_goal": self.steps_goal,
         }
 
     @classmethod
@@ -519,6 +523,7 @@ class GarminDay:
             hrv_status=str(payload.get("hrv_status", "") or ""),
             sleep_score=int(payload.get("sleep_score", 0) or 0),
             stress_avg=int(payload.get("stress_avg", 0) or 0),
+            steps_goal=int(payload.get("steps_goal", 0) or 0),
         )
 
 

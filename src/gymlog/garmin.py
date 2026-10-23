@@ -288,10 +288,12 @@ def _count(samples: list[tuple[float, Any]], boundaries: tuple[int, ...]) -> tup
 def _day(client: Any, cdate: str) -> GarminDay:
     """One day's steps/resting-HR/sleep/HRV, tolerating any of the four failing on its own."""
     steps = 0
+    steps_goal = 0
     resting_hr = 0
     try:
         summary = client.get_user_summary(cdate)
         steps = int(summary.get("totalSteps") or 0)
+        steps_goal = int(summary.get("dailyStepGoal") or 0)
         resting_hr = int(summary.get("restingHeartRate") or 0)
     except Exception:
         logger.warning("could not fetch daily summary for %s", cdate, exc_info=True)
@@ -339,6 +341,7 @@ def _day(client: Any, cdate: str) -> GarminDay:
         hrv_status=hrv_status,
         sleep_score=sleep_score,
         stress_avg=stress_avg,
+        steps_goal=steps_goal,
     )
 
 

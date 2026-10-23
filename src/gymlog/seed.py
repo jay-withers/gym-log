@@ -274,6 +274,7 @@ def _garmin_days(now: date) -> tuple[GarminDay, ...]:
             stress_avg=[28, 41, 24, 35, 31, 26, 44][weekday],
             hrv_ms=[61, 54, 66, 58, 57, 63, 52][weekday] + drift // 150,
             hrv_status="BALANCED",
+            steps_goal=8500,
         )
 
     return tuple(day(offset) for offset in range(55, -1, -1))

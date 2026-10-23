@@ -1268,13 +1268,18 @@ def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
     fitness = log.latest_garmin_fitness
     if day is None and fitness is None:
         return {}
+    steps_goal = (day.steps_goal if day else 0) or DEFAULT_STEPS_GOAL
     return {
         "steps": day.steps if day else 0,
+        "steps_goal": steps_goal,
+        "steps_pct": _gauge_pct(day.steps if day else 0, steps_goal),
         "resting_hr": day.resting_hr if day else 0,
         "sleep_hours": (day.sleep_seconds // 3600) if day else 0,
         "sleep_minutes": ((day.sleep_seconds % 3600) // 60) if day else 0,
         "sleep_score": day.sleep_score if day else 0,
+        "sleep_quality": _band(day.sleep_score if day else 0, SLEEP_SCORE_BANDS),
         "stress_avg": day.stress_avg if day else 0,
+        "stress_level": _band(day.stress_avg if day else 0, STRESS_BANDS),
         "vo2max": fitness.vo2max if fitness else 0,
         "lactate_threshold_bpm": fitness.lactate_threshold_bpm if fitness else 0,
         "lactate_threshold_pace": (
@@ -1282,6 +1287,23 @@ def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
         ),
         "as_of": _short_date(day.date if day else fitness.date),
     }
+
+
+# Garmin's own wording for both scales, lower bound first, so a gauge reads the
+# way the watch does. A zero is "no reading" on both and gets no word at all.
+SLEEP_SCORE_BANDS = ((1, "Poor"), (60, "Fair"), (80, "Good"), (90, "Excellent"))
+STRESS_BANDS = ((1, "Rest"), (26, "Low"), (51, "Medium"), (76, "High"))
+# Garmin's starting goal, for days synced before `steps_goal` was kept.
+DEFAULT_STEPS_GOAL = 10000
+
+
+def _band(value: int, bands: tuple[tuple[int, str], ...]) -> str:
+    return next((name for low, name in reversed(bands) if value >= low), "")
+
+
+def _gauge_pct(value: float, full: float) -> int:
+    """How much of a gauge's arc to fill: 0-100, a goal beaten still a full arc."""
+    return max(0, min(100, round(100 * value / full))) if full else 0
 
 
 # The weekly line charts' drawing area, in SVG user units. The left margin
