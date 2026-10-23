@@ -1218,7 +1218,7 @@ def fitness_insights(request: Request) -> Any:
         request,
         "insights_fitness.html",
         {
-            "glance": _at_a_glance(log),
+            "glance": _at_a_glance(log, _today()),
             "current": _current_fitness(log),
             "vo2max_trend": _vo2max_trend(log),
             "hrv": _hrv_summary(log),
@@ -1227,8 +1227,12 @@ def fitness_insights(request: Request) -> Any:
     )
 
 
-def _at_a_glance(log: Any) -> dict[str, Any]:
-    """Steps/resting-HR/sleep/stress from the most recently synced day, plus the latest VO2max.
+def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
+    """Steps/resting-HR/sleep/stress from the latest day before today, plus the latest VO2max.
+
+    Not today: a sync mid-morning has today's resting HR and little else, so
+    the latest synced day was a snapshot of mostly dashes. The last finished
+    day is yesterday, or the most recent before it if yesterday never synced.
 
     One combined snapshot rather than reusing `_current_fitness` and a
     day-lookup separately in the template. Built from whichever of
@@ -1238,7 +1242,8 @@ def _at_a_glance(log: Any) -> dict[str, Any]:
     stale relative to the latest `GarminDay`, or vice versa if one sub-fetch
     failed on the more recent sync.
     """
-    day = log.latest_garmin_day
+    finished = [d for d in log.garmin_days if d.date < today.isoformat()]
+    day = finished[-1] if finished else None
     fitness = log.latest_garmin_fitness
     if day is None and fitness is None:
         return {}

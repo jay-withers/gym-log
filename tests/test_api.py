@@ -1777,6 +1777,25 @@ def test_fitness_insights_page_shows_at_a_glance_from_day_data_alone(client, see
     assert "No fitness data yet" not in page
 
 
+def test_fitness_insights_at_a_glance_is_yesterday_not_today(client, seeded):
+    """Today is unfinished - a morning sync has a resting HR and little else."""
+    today = date.today()
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                garmin_day(date=(today - timedelta(days=1)).isoformat(), steps=9500),
+                garmin_day(date=today.isoformat(), steps=0, resting_hr=40),
+            ],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "9,500" in page
+    assert f"as of {(today - timedelta(days=1)):%d %b}" in page
+
+
 def test_fitness_insights_page_is_empty_before_any_sync(client, seeded):
     login(client)
     page = client.get("/insights/fitness").text
