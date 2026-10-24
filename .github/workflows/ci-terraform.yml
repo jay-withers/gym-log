@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: jay-withers/workflows/.github/workflows/terraform.yml@0619e50b64233b7132aa7557fb78b2331fd9c5b1 # v1.5.2
+    uses: jay-withers/workflows/.github/workflows/terraform.yml@74e8ea455cea667b8c6bcf0de23d8f37eeb31fec # v1.10.0
 
   # Plans dev against Azure using GitHub OIDC, through the shared
   # terraform-deploy.yml, which also posts the plan as a PR comment (edited in
@@ -50,7 +50,7 @@ jobs:
       id-token: write
       contents: read
       pull-requests: write # the plan comment
-    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@13ed02c1460d2d5dcc5537e8f8686eb57c403fb9 # v1.7.0
+    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@74e8ea455cea667b8c6bcf0de23d8f37eeb31fec # v1.10.0
     with:
       environment: dev
 

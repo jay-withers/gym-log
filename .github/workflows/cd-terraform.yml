@@ -33,7 +33,8 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@13ed02c1460d2d5dcc5537e8f8686eb57c403fb9 # v1.7.0
+      issues: write # the deploy-failed issue
+    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@74e8ea455cea667b8c6bcf0de23d8f37eeb31fec # v1.10.0
     with:
       environment: dev
       apply: true
