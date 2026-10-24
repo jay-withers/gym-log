@@ -202,7 +202,9 @@ def session_form(request: Request, day: str) -> Any:
     # Suggestions come from everything *except* today's own session. With it
     # included, saving an exercise would immediately re-suggest against the set
     # just typed in, and the card would chase itself up the rep range.
-    history = log.excluding(today, day)
+    # And only from this block: its first week starts with empty boxes rather
+    # than numbers carried over from a different programme.
+    history = log.excluding(today, day).within_block(block.id)
     started = log.session_on(today, day)
 
     prescribed = block.days[day].exercises if day in block.days else ()

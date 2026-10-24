@@ -37,15 +37,19 @@
     <div class="sets">
       {% for position in range(e.sets) %}
       {% set logged = rec.sets[position] if rec and position < rec.sets | length else None %}
+      {# The placeholders are what was done on this set the previous time in
+         this block, and nothing else - no suggestion, no target. Empty in a
+         block's first week. #}
+      {% set before = card.last.sets[position] if card.last and position < card.last.sets | length else None %}
       <div class="set">
         <span>{{ position + 1 }}</span>
         <input type="number" name="reps_{{ card.index }}_{{ position }}"
                value="{{ logged.reps if logged else '' }}"
-               placeholder="{% if card.last and position < card.last.sets | length %}{{ card.last.sets[position].reps }}{% elif card.last %}{{ card.suggestion.reps }}{% else %}{{ e.target_for(position) }}{% endif %} reps"
+               placeholder="{{ '%d reps' % before.reps if before else '' }}"
                inputmode="numeric" min="0" max="999">
         <input type="number" name="weight_{{ card.index }}_{{ position }}"
                value="{{ '%g' % logged.weight if logged else '' }}"
-               placeholder="{{ card.suggestion.weight_label }} kg"
+               placeholder="{{ '%g kg' % before.weight if before else '' }}"
                inputmode="decimal" step="0.5" min="0">
       </div>
       {% endfor %}
@@ -66,7 +70,7 @@
         <span>time</span>
         <input type="text" name="seconds_{{ card.index }}"
                value="{{ rec.time_label if rec and rec.seconds else '' }}"
-               placeholder="{{ card.last.time_label if card.last and card.last.time_label else '90 or 1:30' }}"
+               placeholder="{{ card.last.time_label if card.last and card.last.time_label else '' }}"
                inputmode="numeric" autocomplete="off">
       </div>
     </div>
