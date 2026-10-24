@@ -15,28 +15,70 @@ name: ci-container-build
 on:
   pull_request:
     branches: [main]
-    paths:
-      - src/**
-      - Dockerfile
-      - pyproject.toml
-      - uv.lock
-      - .github/workflows/ci-container-build.yml
 
 permissions:
   contents: read
 
 jobs:
+  # The path filter lives here rather than on the trigger, so the workflow runs
+  # on every pull request and the container-build gate below always reports.
+  # A trigger-level filter would mean a docs-only pull request never produced
+  # the check, and a required check that never reports leaves the pull request
+  # pending for ever.
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      image: ${{ steps.filter.outputs.image }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        id: filter
+        with:
+          filters: |
+            image:
+              - 'src/**'
+              - 'Dockerfile'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/ci-container-build.yml'
+
   # push is left at its default of false: a pull request must never publish an
   # image, and a fork's GITHUB_TOKEN could not push anyway. The cache is shared
   # with cd-publish by image name, so a merge usually reuses the PR's layers.
-  #
-  # Deliberately **not** a required status check: the path filter above means a
-  # docs-only pull request never runs it, and a required check that never
-  # reports leaves the pull request pending for ever rather than failing it.
   build:
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
     permissions:
       contents: read
     uses: jay-withers/workflows/.github/workflows/docker.yml@0619e50b64233b7132aa7557fb78b2331fd9c5b1 # v1.5.2
     with:
       images: |
         [{"name": "gymlog", "context": "."}]
+
+  # The required status check ("container-build"). Skipped counts as success,
+  # so a pull request that touches nothing in the image passes; a failed or
+  # cancelled build fails it. Without this, Renovate's platform auto-merge did
+  # not wait for the build, and a Python 3.15 base image that could not build
+  # merged in three repos.
+  container-build:
+    needs: [changes, build]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify the build job
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          echo "changes=$CHANGES_RESULT build=$BUILD_RESULT"
+          # A failed path filter skips the build, which must not read as a pass.
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::The path filter did not run, so the build was never decided."
+            exit 1
+          fi
+          if [ "$BUILD_RESULT" = "failure" ] || [ "$BUILD_RESULT" = "cancelled" ]; then
+            echo "::error::The container build failed."
+            exit 1
+          fi
