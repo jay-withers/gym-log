@@ -155,6 +155,7 @@ def garmin_day(
     hrv_status: str = "",
     sleep_score: int = 0,
     stress_avg: int = 0,
+    steps_goal: int = 0,
 ) -> GarminDay:
     return GarminDay(
         date=date,
@@ -165,6 +166,7 @@ def garmin_day(
         hrv_status=hrv_status,
         sleep_score=sleep_score,
         stress_avg=stress_avg,
+        steps_goal=steps_goal,
     )
 
 

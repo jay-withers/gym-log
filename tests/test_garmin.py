@@ -425,6 +425,25 @@ def test_a_day_carries_its_average_stress_reading(monkeypatch: pytest.MonkeyPatc
     assert days[0].stress_avg == 31
 
 
+def test_a_day_carries_its_step_goal_from_the_same_summary_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _WithGoal(_FakeGarmin):
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    instance = _WithGoal("me@example.com", "hunter2")
+    instance.summaries = {"2026-09-15": {"totalSteps": 6500, "dailyStepGoal": 8200}}
+    monkeypatch.setattr("garminconnect.Garmin", lambda email, password: instance)
+
+    _activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+
+    assert days[0].steps_goal == 8200
+    assert instance.calls.count("summary:2026-09-15") == 1
+
+
 def test_a_negative_stress_reading_is_clamped_to_zero(monkeypatch: pytest.MonkeyPatch) -> None:
     """Garmin uses -1/-2 for "not enough data" rather than omitting the field."""
 

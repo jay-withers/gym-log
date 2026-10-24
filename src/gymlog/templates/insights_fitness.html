@@ -4,102 +4,115 @@
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
 
-{% if glance or current or hrv.nights %}
+{% if glance or steps_chart or sleep_chart or hrv_chart %}
 <style>
-  .fit-val { font-size: 24px; font-weight: 600; }
   .fit-sub { color: var(--dim); font-size: 13px; }
-  /* Same bar-and-label shape as Running Insights' weekly bars, reused here
-     for two different series (VO2max, HRV) rather than a new chart idiom
-     for each — the reader has already learned what this shape means. */
-  .fitbars { display: flex; gap: 10px; margin-top: 6px; }
-  .fitbar-col { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
-  .fitbar-val { font-size: 12px; font-weight: 600; white-space: nowrap; }
-  .fitbar-track { height: 56px; width: 100%; display: flex; align-items: flex-end; justify-content: center; margin-top: 4px; }
-  .fitbar {
-    width: 24px; min-height: 2px;
-    background: var(--accent); border-radius: 4px 4px 0 0;
-  }
-  .fitbar:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
-  .fitbar-label { color: var(--dim); font-size: 11px; margin-top: 6px; text-align: center; }
-  /* A 2-up grid of small tiles rather than the wider This-week/Last-30-days
-     `.row` cards below: five values side by side at phone width need a
-     denser layout than two do. */
-  .glance-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .glance-val { font-size: 20px; font-weight: 600; }
+  /* Three gauges across for the values with a scale to sit on (a goal, a
+     0-100 score), then the bare numbers that have none in a row beneath. */
+  .gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+  .gauge { position: relative; }
+  .gauge svg { display: block; width: 100%; height: auto; }
+  .gauge .track, .gauge .fill { fill: none; stroke-width: 9; stroke-linecap: round; }
+  .gauge .track { stroke: var(--line); }
+  .gauge .fill { stroke: var(--accent); }
+  /* Sits in the bowl of the arc rather than under it. */
+  .gauge-val { position: absolute; left: 0; right: 0; bottom: 2px; font-size: 18px; font-weight: 600; }
+  .gauge-sub { color: var(--dim); font-size: 12px; margin-top: 2px; }
+  .figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px;
+             padding-top: 12px; border-top: 1px solid var(--line); text-align: center; }
+  .glance-val { font-size: 18px; font-weight: 600; }
+  .weekly { display: block; width: 100%; height: auto; margin-top: 8px; overflow: visible; }
+  .weekly .grid { stroke: var(--line); stroke-width: 1; }
+  .weekly .axis { fill: var(--dim); font-size: 10px; }
+  .weekly .trace { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  /* The ring in the card's colour keeps each dot distinct where it sits on the line. */
+  .weekly .dot { fill: var(--accent); stroke: var(--card); stroke-width: 2; }
+  .weekly .hit { fill: transparent; }
+  .weekly .point:focus { outline: none; }
+  .weekly .point:focus-visible .dot, .weekly .point:hover .dot { stroke: var(--text); }
 </style>
+
+{# A semicircle, filled to `pct` of its length. pathLength lets the fill be
+   a plain percentage whatever the radius; nothing is drawn at 0, where a
+   round cap would still leave a dot. #}
+{% macro gauge(label, value, sub, pct) %}
+<div>
+  <div class="slot">{{ label }}</div>
+  <div class="gauge">
+    <svg viewBox="0 0 100 58" role="img" aria-label="{{ label }}: {{ value }}{% if sub %}, {{ sub }}{% endif %}">
+      <path class="track" d="M8,52 A42,42 0 0 1 92,52" pathLength="100"/>
+      {% if pct %}<path class="fill" d="M8,52 A42,42 0 0 1 92,52" pathLength="100" stroke-dasharray="{{ pct }} 100"/>{% endif %}
+    </svg>
+    <div class="gauge-val">{{ value }}</div>
+  </div>
+  <div class="gauge-sub">{{ sub or "&nbsp;" | safe }}</div>
+</div>
+{% endmacro %}
 
 {% if glance %}
 <div class="card">
   <div class="slot">At a glance</div>
-  <div class="fit-sub" style="margin-bottom: 8px">as of {{ glance.as_of }}</div>
-  <div class="glance-grid">
-    <div>
-      <div class="slot">Steps</div>
-      <div class="glance-val">{{ "{:,}".format(glance.steps) }}</div>
-    </div>
+  <div class="fit-sub" style="margin-bottom: 10px">as of {{ glance.as_of }}</div>
+  <div class="gauges">
+    {{ gauge("Steps", "{:,}".format(glance.steps) if glance.steps else "—",
+             "of " ~ "{:,}".format(glance.steps_goal), glance.steps_pct) }}
+    {{ gauge("Sleep",
+             (glance.sleep_hours ~ "h " ~ glance.sleep_minutes ~ "m") if glance.sleep_hours or glance.sleep_minutes else "—",
+             ("score " ~ glance.sleep_score ~ " · " ~ glance.sleep_quality) if glance.sleep_score else "",
+             glance.sleep_score) }}
+    {{ gauge("Stress", glance.stress_avg or "—", glance.stress_level, glance.stress_avg) }}
+  </div>
+  <div class="figures">
     <div>
       <div class="slot">Resting HR</div>
-      <div class="glance-val">{{ glance.resting_hr or "—" }}{% if glance.resting_hr %} bpm{% endif %}</div>
-    </div>
-    <div>
-      <div class="slot">Sleep</div>
-      <div class="glance-val">{% if glance.sleep_hours or glance.sleep_minutes %}{{ glance.sleep_hours }}h {{ glance.sleep_minutes }}m{% else %}—{% endif %}</div>
-      {% if glance.sleep_score %}<div class="fit-sub">score {{ glance.sleep_score }}</div>{% endif %}
-    </div>
-    <div>
-      <div class="slot">Stress</div>
-      <div class="glance-val">{{ glance.stress_avg or "—" }}</div>
+      <div class="glance-val">{{ glance.resting_hr or "—" }}</div>
+      {% if glance.resting_hr %}<div class="gauge-sub">bpm</div>{% endif %}
     </div>
     <div>
       <div class="slot">VO2 max</div>
       <div class="glance-val">{{ glance.vo2max or "—" }}</div>
     </div>
-  </div>
-</div>
-{% endif %}
-
-{% if current %}
-<div class="card">
-  <div class="slot">Lactate threshold</div>
-  <div class="fit-val">{{ current.lactate_threshold_pace or "—" }}</div>
-  <div class="fit-sub">{% if current.lactate_threshold_bpm %}{{ current.lactate_threshold_bpm }} bpm · {% endif %}as of {{ current.as_of }}</div>
-</div>
-{% endif %}
-
-{% if vo2max_trend %}
-<div class="card">
-  <div class="slot">VO2 max trend</div>
-  <div class="fitbars">
-    {% for v in vo2max_trend %}
-    <div class="fitbar-col">
-      <div class="fitbar-val">{{ v.value }}</div>
-      <div class="fitbar-track">
-        <div class="fitbar" tabindex="0" style="height: {{ v.pct }}%" title="{{ v.date }}: {{ v.value }}"></div>
-      </div>
-      <div class="fitbar-label">{{ v.date }}</div>
+    <div>
+      {# Abbreviated to fit a third of a phone's width; the title spells it out. #}
+      <div class="slot" title="Lactate threshold">LT pace</div>
+      <div class="glance-val">{{ (glance.lactate_threshold_pace | replace(" /km", "")) or "—" }}</div>
+      {% if glance.lactate_threshold_bpm %}<div class="gauge-sub">/km · {{ glance.lactate_threshold_bpm }} bpm</div>{% endif %}
     </div>
-    {% endfor %}
   </div>
 </div>
 {% endif %}
 
-{% if hrv.nights %}
+{# One measure per chart, never two on one axis: steps and hours share no
+   scale. Every point is a focusable target with a native tooltip; the latest
+   week is the one value written out, in the subtitle rather than beside the
+   line, where there is no room for it at phone width. #}
+{% macro weekly_line(title, unit, chart, note="") %}
 <div class="card">
-  <div class="slot">Overnight HRV</div>
-  <div class="fit-sub" style="margin-bottom: 4px">{{ hrv.avg_ms }}ms avg{% if hrv.latest_status %} · last night {{ hrv.latest_status }}{% endif %}</div>
-  <div class="fitbars">
-    {% for n in hrv.nights %}
-    <div class="fitbar-col">
-      <div class="fitbar-val">{{ n.ms }}</div>
-      <div class="fitbar-track">
-        <div class="fitbar" tabindex="0" style="height: {{ n.pct }}%" title="{{ n.label }}: {{ n.ms }}ms"></div>
-      </div>
-      <div class="fitbar-label">{{ n.label }}</div>
-    </div>
+  <div class="slot">{{ title }}</div>
+  <div class="fit-sub">{{ chart.latest.label }} {{ unit }} · week of {{ chart.latest.week }}{% if note %} · {{ note }}{% endif %}</div>
+  <svg class="weekly" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img"
+       aria-label="{{ title }}: {% for p in chart.points %}week of {{ p.week }} {{ p.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
+    {% for g in chart.grid %}
+    <line class="grid" x1="{{ chart.left }}" x2="{{ chart.right }}" y1="{{ g.y }}" y2="{{ g.y }}"/>
+    <text class="axis" x="{{ chart.left - 6 }}" y="{{ g.y }}" text-anchor="end" dominant-baseline="middle">{{ g.label }}</text>
     {% endfor %}
-  </div>
+    <path class="trace" d="{{ chart.path }}"/>
+    {% for p in chart.points %}
+    <g class="point" tabindex="0">
+      <title>Week of {{ p.week }}: {{ p.label }} {{ unit }}</title>
+      <circle class="hit" cx="{{ p.x }}" cy="{{ p.y }}" r="14"/>
+      <circle class="dot" cx="{{ p.x }}" cy="{{ p.y }}" r="4"/>
+    </g>
+    {% endfor %}
+    <text class="axis" x="{{ chart.left }}" y="{{ chart.height - 4 }}">{{ chart.first_week }}</text>
+    <text class="axis" x="{{ chart.right }}" y="{{ chart.height - 4 }}" text-anchor="end">This week</text>
+  </svg>
 </div>
-{% endif %}
+{% endmacro %}
+
+{% if steps_chart %}{{ weekly_line("Steps", "a day", steps_chart) }}{% endif %}
+{% if sleep_chart %}{{ weekly_line("Sleep", "a night", sleep_chart) }}{% endif %}
+{% if hrv_chart %}{{ weekly_line("Overnight HRV", "a night", hrv_chart, "last night " ~ hrv_status if hrv_status else "") }}{% endif %}
 
 <p class="last">{% if synced_at %}Garmin last synced {{ synced_at }}{% else %}Never synced yet{% endif %} — <a href="/garmin">sync</a></p>
 {% else %}

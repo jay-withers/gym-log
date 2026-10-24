@@ -8,9 +8,11 @@ append-only log would mean a duplicate session rather than a harmless no-op.
 from __future__ import annotations
 
 import logging
+import math
 import pathlib
 import re
 import uuid
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -1218,104 +1220,223 @@ def fitness_insights(request: Request) -> Any:
         request,
         "insights_fitness.html",
         {
-            "glance": _at_a_glance(log),
-            "current": _current_fitness(log),
-            "vo2max_trend": _vo2max_trend(log),
-            "hrv": _hrv_summary(log),
+            "glance": _at_a_glance(log, _today()),
+            "steps_chart": _weekly_chart(
+                log, _today(), lambda d: d.steps, _steps_label, _steps_tick, from_zero=True
+            ),
+            "sleep_chart": _weekly_chart(
+                log,
+                _today(),
+                lambda d: d.sleep_seconds / 3600,
+                _hours_label,
+                _hours_tick,
+                min_step=1,
+                overnight=True,
+            ),
+            "hrv_chart": _weekly_chart(
+                log,
+                _today(),
+                lambda d: d.hrv_ms,
+                _ms_label,
+                _ms_label,
+                min_step=5,
+                overnight=True,
+            ),
+            "hrv_status": _hrv_status(log),
             "synced_at": _format_synced_at(log.garmin_synced_at),
         },
     )
 
 
-def _at_a_glance(log: Any) -> dict[str, Any]:
-    """Steps/resting-HR/sleep/stress from the most recently synced day, plus the latest VO2max.
+def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
+    """Steps/resting-HR/sleep/stress from the latest day before today, plus VO2max and LT.
 
-    One combined snapshot rather than reusing `_current_fitness` and a
-    day-lookup separately in the template. Built from whichever of
+    Not today: a sync mid-morning has today's resting HR and little else, so
+    the latest synced day was a snapshot of mostly dashes. The last finished
+    day is yesterday, or the most recent before it if yesterday never synced.
+
+    The lactate threshold rides along with VO2max: both come from the latest
+    `GarminFitness`, so they share its staleness. Built from whichever of
     `garmin_days`/`garmin_fitness` exists, and each independently — not
     "both or neither" — since VO2max only ever gets a value on the day the
     sync ran (see `GarminFitness`), so it can legitimately be a day or more
     stale relative to the latest `GarminDay`, or vice versa if one sub-fetch
     failed on the more recent sync.
     """
-    day = log.latest_garmin_day
+    finished = [d for d in log.garmin_days if d.date < today.isoformat()]
+    day = finished[-1] if finished else None
     fitness = log.latest_garmin_fitness
     if day is None and fitness is None:
         return {}
+    steps_goal = (day.steps_goal if day else 0) or DEFAULT_STEPS_GOAL
     return {
         "steps": day.steps if day else 0,
+        "steps_goal": steps_goal,
+        "steps_pct": _gauge_pct(day.steps if day else 0, steps_goal),
         "resting_hr": day.resting_hr if day else 0,
         "sleep_hours": (day.sleep_seconds // 3600) if day else 0,
         "sleep_minutes": ((day.sleep_seconds % 3600) // 60) if day else 0,
         "sleep_score": day.sleep_score if day else 0,
+        "sleep_quality": _band(day.sleep_score if day else 0, SLEEP_SCORE_BANDS),
         "stress_avg": day.stress_avg if day else 0,
+        "stress_level": _band(day.stress_avg if day else 0, STRESS_BANDS),
         "vo2max": fitness.vo2max if fitness else 0,
+        "lactate_threshold_bpm": fitness.lactate_threshold_bpm if fitness else 0,
+        "lactate_threshold_pace": (
+            _pace_label(fitness.lactate_threshold_pace_seconds_per_km) if fitness else ""
+        ),
         "as_of": _short_date(day.date if day else fitness.date),
     }
 
 
-def _current_fitness(log: Any) -> dict[str, Any]:
-    """The latest known lactate threshold, formatted for display.
+# Garmin's own wording for both scales, lower bound first, so a gauge reads the
+# way the watch does. A zero is "no reading" on both and gets no word at all.
+SLEEP_SCORE_BANDS = ((1, "Poor"), (60, "Fair"), (80, "Good"), (90, "Excellent"))
+STRESS_BANDS = ((1, "Rest"), (26, "Low"), (51, "Medium"), (76, "High"))
+# Garmin's starting goal, for days synced before `steps_goal` was kept.
+DEFAULT_STEPS_GOAL = 10000
 
-    VO2max isn't repeated here — `_at_a_glance` already shows it alongside
-    steps/HR/sleep/stress, and a second card for the same number a few lines
-    down would just be noise.
+
+def _band(value: int, bands: tuple[tuple[int, str], ...]) -> str:
+    return next((name for low, name in reversed(bands) if value >= low), "")
+
+
+def _gauge_pct(value: float, full: float) -> int:
+    """How much of a gauge's arc to fill: 0-100, a goal beaten still a full arc."""
+    return max(0, min(100, round(100 * value / full))) if full else 0
+
+
+# The weekly line charts' drawing area, in SVG user units. The left margin
+# holds the y-axis tick labels, the bottom one the first and last week's.
+CHART_WIDTH, CHART_HEIGHT = 320, 132
+CHART_LEFT, CHART_RIGHT, CHART_TOP, CHART_BOTTOM = 36, 304, 12, 108
+
+
+def _weekly_chart(
+    log: Any,
+    today: date,
+    value: Callable[[Any], float],
+    label: Callable[[float], str],
+    tick: Callable[[float], str],
+    weeks: int = 8,
+    from_zero: bool = False,
+    min_step: float = 0,
+    overnight: bool = False,
+) -> dict[str, Any]:
+    """A daily Garmin value averaged per calendar week, laid out as a line chart.
+
+    Mon-Sun weeks, as `_weekly_running_series`, over finished days only, as
+    `_at_a_glance`: today's half-counted steps would drag this week's average
+    down every morning. `overnight` values are the exception: Garmin dates
+    sleep and HRV by the morning they end, so today's is last night's and
+    already complete. A day with no reading (zero) is left out of its week's
+    average rather than counted as nothing, and a week with no readings is a
+    break in the line rather than a drop to zero.
+
+    The geometry is worked out here rather than in the template so a wrong
+    scale shows up in a test. Steps sit on a zero baseline; sleep doesn't,
+    because a week's average moves within an hour or so and a zero-based axis
+    would flatten that to a straight line.
     """
-    latest = log.latest_garmin_fitness
-    if latest is None:
+    this_monday = _week_start(today)
+    last_day = today if overnight else today - timedelta(days=1)
+    finished = [d for d in log.garmin_days if d.date <= last_day.isoformat()]
+    points: list[dict[str, Any]] = []
+    for weeks_ago in range(weeks - 1, -1, -1):
+        start = this_monday - timedelta(weeks=weeks_ago)
+        end = min(start + timedelta(days=6), last_day)
+        values = [value(d) for d in finished if start.isoformat() <= d.date <= end.isoformat()]
+        values = [v for v in values if v > 0]
+        points.append(
+            {
+                "week": start.strftime("%d %b"),
+                "value": sum(values) / len(values) if values else None,
+            }
+        )
+    known = [p["value"] for p in points if p["value"] is not None]
+    if len(known) < 2:
         return {}
+
+    low, high, step = _ticks(0 if from_zero else min(known), max(known), min_step)
+
+    def y(v: float) -> float:
+        return round(CHART_BOTTOM - (v - low) / (high - low) * (CHART_BOTTOM - CHART_TOP), 1)
+
+    gap = (CHART_RIGHT - CHART_LEFT) / (weeks - 1)
+    path, pen_down = [], False
+    for index, point in enumerate(points):
+        point["x"] = round(CHART_LEFT + index * gap, 1)
+        if point["value"] is None:
+            pen_down = False
+            continue
+        point["y"] = y(point["value"])
+        point["label"] = label(point["value"])
+        path.append(f"{'L' if pen_down else 'M'}{point['x']},{point['y']}")
+        pen_down = True
+
+    grid = []
+    at = low
+    while at <= high + step / 2:
+        grid.append({"y": y(at), "label": tick(at)})
+        at += step
+    plotted = [p for p in points if p["value"] is not None]
     return {
-        "lactate_threshold_bpm": latest.lactate_threshold_bpm,
-        "lactate_threshold_pace": _pace_label(latest.lactate_threshold_pace_seconds_per_km),
-        "as_of": _short_date(latest.date),
+        "width": CHART_WIDTH,
+        "height": CHART_HEIGHT,
+        "left": CHART_LEFT,
+        "right": CHART_RIGHT,
+        "path": " ".join(path),
+        "points": plotted,
+        "latest": plotted[-1],
+        "grid": grid,
+        "first_week": points[0]["week"],
     }
 
 
-def _vo2max_trend(log: Any, limit: int = 8) -> list[dict[str, Any]]:
-    """Up to the last `limit` VO2max readings this app has itself recorded, oldest first.
+def _ticks(low: float, high: float, min_step: float = 0) -> tuple[float, float, float]:
+    """A clean axis around `low`..`high`: (bottom, top, step), about three steps.
 
-    Bar height is scaled between the visible readings' own min and max,
-    not from zero: VO2max moves in a narrow band — a point or two over
-    months — and a zero-based bar chart would flatten every reading to
-    nearly the same height. `max(8, ...)` keeps the lowest reading's bar
-    tall enough to still read as present rather than as a missing week.
+    The step is 1, 2, 2.5 or 5 times a power of ten, and the ends are rounded
+    out to it, so the gridlines land on numbers worth reading (0/5K/10K).
+    `min_step` stops a narrow range splitting into steps that read badly in its
+    unit: a week's sleep moving within an hour would otherwise tick 7.25h.
     """
-    readings = [f for f in log.garmin_fitness if f.vo2max > 0][-limit:]
-    if len(readings) < 2:
-        return []
-    values = [r.vo2max for r in readings]
-    lo, hi = min(values), max(values)
-    span = hi - lo
-    return [
-        {
-            "value": r.vo2max,
-            "date": _short_date(r.date),
-            "pct": 100 if span == 0 else max(8, round(100 * (r.vo2max - lo) / span)),
-        }
-        for r in readings
-    ]
+    span = (high - low) or abs(high) or 1
+    magnitude = 10 ** math.floor(math.log10(span / 3))
+    step = next(m * magnitude for m in (1, 2, 2.5, 5, 10) if span / (m * magnitude) <= 3)
+    step = max(step, min_step)
+    bottom = math.floor(low / step) * step
+    top = math.ceil(high / step) * step
+    if top == bottom:
+        top += step
+    return bottom, top, step
 
 
-def _hrv_summary(log: Any, nights: int = 7) -> dict[str, Any]:
-    """The last `nights` nights of overnight HRV, oldest first, plus the latest status/average.
+def _steps_label(steps: float) -> str:
+    return f"{round(steps):,}"
 
-    The cutoff looks back twice `nights` calendar days, not exactly `nights`:
-    `garmin_hrv_since` only returns nights with a real reading, so a missed
-    or unworn night should be skipped over rather than shortening the chart.
-    """
-    cutoff = (_today() - timedelta(days=nights * 2)).isoformat()
-    recent = log.garmin_hrv_since(cutoff)[-nights:]
-    if not recent:
-        return {"nights": []}
-    peak = max(d.hrv_ms for d in recent) or 1
-    return {
-        "nights": [
-            {"ms": d.hrv_ms, "pct": round(100 * d.hrv_ms / peak), "label": _short_date(d.date)}
-            for d in recent
-        ],
-        "latest_status": recent[-1].hrv_status.replace("_", " ").title(),
-        "avg_ms": round(sum(d.hrv_ms for d in recent) / len(recent)),
-    }
+
+def _steps_tick(steps: float) -> str:
+    return f"{steps / 1000:g}K" if steps else "0"
+
+
+def _hours_label(hours: float) -> str:
+    minutes = round(hours * 60)
+    return f"{minutes // 60}h {minutes % 60}m"
+
+
+def _hours_tick(hours: float) -> str:
+    return f"{hours:g}h"
+
+
+def _ms_label(ms: float) -> str:
+    return f"{round(ms)}ms"
+
+
+def _hrv_status(log: Any) -> str:
+    """Garmin's verdict on the latest night with an HRV reading, e.g. "Balanced"."""
+    nights = [d for d in log.garmin_days if d.hrv_ms]
+    return nights[-1].hrv_status.replace("_", " ").title() if nights else ""
 
 
 def _short_date(iso_date: str) -> str:

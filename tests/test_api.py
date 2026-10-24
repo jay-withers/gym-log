@@ -11,6 +11,14 @@ from fastapi.testclient import TestClient
 from gymlog import chat, store
 from gymlog import settings as settings_module
 from gymlog.api.main import create_app
+from gymlog.api.routes import (
+    _hours_label,
+    _hours_tick,
+    _steps_label,
+    _steps_tick,
+    _ticks,
+    _weekly_chart,
+)
 from gymlog.model import Block, Day, Log, SetLog
 
 from .factories import (
@@ -1687,49 +1695,111 @@ def test_fitness_insights_page_shows_current_vo2max_and_lactate_threshold(client
     login(client)
     page = client.get("/insights/fitness").text
     assert "52.3" in page
-    assert "165 bpm" in page
-    assert "4:18 /km" in page  # 258s/km formatted
+    assert ">4:18<" in page  # 258s/km formatted
+    assert "/km · 165 bpm" in page
+    # A figure in the at-a-glance card, not a card of its own.
+    assert page.count("Lactate threshold") == 1
+    assert page.index("At a glance") < page.index("Lactate threshold")
     assert "as of 24 Sep" in page
     assert "Garmin last synced 24 Sep 2026, 06:00 UTC" in page
 
 
-def test_fitness_insights_page_shows_the_vo2max_trend(client, seeded):
+def _weeks_of_days(today: date, weeks: int, steps: int, sleep_seconds: int) -> list:
+    return [
+        garmin_day(
+            date=(today - timedelta(days=offset)).isoformat(),
+            steps=steps,
+            sleep_seconds=sleep_seconds,
+        )
+        for offset in range(weeks * 7, 0, -1)
+    ]
+
+
+def test_fitness_insights_page_shows_weekly_steps_and_sleep(client, seeded):
+    today = date.today()
     store.update(
         lambda current: current.with_garmin_sync(
             activities=[],
-            days=[],
+            days=_weeks_of_days(today, 8, steps=8240, sleep_seconds=7 * 3600 + 12 * 60),
             keep_since="2020-01-01",
-            fitness=[
-                garmin_fitness(date="2026-09-10", vo2max=50.0),
-                garmin_fitness(date="2026-09-24", vo2max=52.0),
-            ],
         )
     )
     login(client)
     page = client.get("/insights/fitness").text
-    assert page.count('class="fitbar"') >= 2
-    assert "10 Sep" in page
-    assert "24 Sep" in page
+    assert "VO2 max trend" not in page
+    assert page.count('class="weekly"') == 2
+    assert "8,240 a day" in page
+    assert "7h 12m a night" in page
 
 
-def test_fitness_insights_page_shows_overnight_hrv(client, seeded):
-    yesterday = (date.today() - timedelta(days=1)).isoformat()
-    today = date.today().isoformat()
+def test_weekly_chart_averages_finished_days_and_skips_missing_ones():
+
+    today = date(2026, 10, 23)  # a Friday
+    days = [
+        garmin_day(date="2026-10-12", sleep_seconds=6 * 3600),  # last week
+        garmin_day(date="2026-10-19", sleep_seconds=7 * 3600),  # this week
+        garmin_day(date="2026-10-20", sleep_seconds=0),  # unworn: not a zero
+        garmin_day(date="2026-10-21", sleep_seconds=8 * 3600),
+        garmin_day(date="2026-10-23", sleep_seconds=3600),  # today: unfinished
+    ]
+    log = Log(garmin_days=tuple(days))
+    chart = _weekly_chart(log, today, lambda d: d.sleep_seconds / 3600, _hours_label, _hours_tick)
+    assert [p["label"] for p in chart["points"]] == ["6h 0m", "7h 30m"]
+    # Six weeks with nothing at all are a gap, not points at zero.
+    assert chart["path"].count("M") == 1
+    assert chart["grid"][0]["label"] == "6h"
+
+
+def test_weekly_chart_ticks_round_numbers():
+    assert _ticks(0, 8700) == (0, 10000, 5000)
+    # Without a floor on the step, a week of sleep within the hour ticks 7.25h.
+    assert _ticks(7.1, 7.8, min_step=1) == (7, 8, 1)
+
+
+def test_weekly_chart_needs_two_weeks_to_draw_a_line():
+
+    log = Log(garmin_days=(garmin_day(date="2026-10-21", steps=5000),))
+    assert (
+        _weekly_chart(log, date(2026, 10, 23), lambda d: d.steps, _steps_label, _steps_tick) == {}
+    )
+
+
+def test_fitness_insights_page_shows_weekly_overnight_hrv(client, seeded):
+    today = date.today()
     store.update(
         lambda current: current.with_garmin_sync(
             activities=[],
             days=[
-                garmin_day(date=yesterday, hrv_ms=58, hrv_status="BALANCED"),
-                garmin_day(date=today, hrv_ms=62, hrv_status="BALANCED"),
-            ],
+                garmin_day(date=(today - timedelta(days=offset)).isoformat(), hrv_ms=60)
+                for offset in range(14, 0, -1)
+            ]
+            # Last night's reading, dated today: complete, so counted.
+            + [garmin_day(date=today.isoformat(), hrv_ms=60, hrv_status="UNBALANCED")],
             keep_since="2020-01-01",
         )
     )
     login(client)
     page = client.get("/insights/fitness").text
-    assert "62ms avg" not in page  # avg of 58 and 62 is 60, not 62
-    assert "60ms avg" in page
-    assert "Balanced" in page
+    assert "Overnight HRV" in page
+    assert "60ms a night" in page
+    assert "last night Unbalanced" in page
+    assert 'class="fitbar"' not in page
+
+
+def test_weekly_chart_counts_today_for_overnight_values_only():
+    today = date(2026, 10, 23)
+    days = (
+        garmin_day(date="2026-10-14", steps=5000, sleep_seconds=6 * 3600),
+        garmin_day(date="2026-10-22", steps=5000, sleep_seconds=6 * 3600),
+        garmin_day(date="2026-10-23", steps=1000, sleep_seconds=8 * 3600),
+    )
+    log = Log(garmin_days=days)
+    steps = _weekly_chart(log, today, lambda d: d.steps, _steps_label, _steps_tick)
+    sleep = _weekly_chart(
+        log, today, lambda d: d.sleep_seconds / 3600, _hours_label, _hours_tick, overnight=True
+    )
+    assert steps["latest"]["label"] == "5,000"
+    assert sleep["latest"]["label"] == "7h 0m"
 
 
 def test_fitness_insights_page_shows_at_a_glance_from_the_latest_day(client, seeded):
@@ -1775,6 +1845,25 @@ def test_fitness_insights_page_shows_at_a_glance_from_day_data_alone(client, see
     page = client.get("/insights/fitness").text
     assert "4,000" in page
     assert "No fitness data yet" not in page
+
+
+def test_fitness_insights_at_a_glance_is_yesterday_not_today(client, seeded):
+    """Today is unfinished - a morning sync has a resting HR and little else."""
+    today = date.today()
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                garmin_day(date=(today - timedelta(days=1)).isoformat(), steps=9500),
+                garmin_day(date=today.isoformat(), steps=0, resting_hr=40),
+            ],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "9,500" in page
+    assert f"as of {(today - timedelta(days=1)):%d %b}" in page
 
 
 def test_fitness_insights_page_is_empty_before_any_sync(client, seeded):

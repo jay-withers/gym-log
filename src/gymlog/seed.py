@@ -39,6 +39,7 @@ from .model import (
     Exercise,
     GarminActivity,
     GarminDay,
+    GarminFitness,
     Goal,
     Insight,
     Log,
@@ -90,6 +91,7 @@ def sample_log(today: date | None = None) -> Log:
         insights=_insights(now),
         garmin_activities=_garmin_activities(now),
         garmin_days=_garmin_days(now),
+        garmin_fitness=_garmin_fitness(now),
         garmin_synced_at=f"{now.isoformat()}T07:15:00+00:00",
     )
 
@@ -257,15 +259,39 @@ def _garmin_activities(now: date) -> tuple[GarminActivity, ...]:
 
 def _garmin_days(now: date) -> tuple[GarminDay, ...]:
     # Oldest first, matching how `Log.to_json` sorts these by date — same
-    # reasoning as `_garmin_activities` above.
-    return tuple(
-        GarminDay(
+    # reasoning as `_garmin_activities` above. Eight weeks, so the weekly steps
+    # and sleep charts have a line to draw: a week's pattern repeated, nudged
+    # by how many weeks back it is so the weekly averages actually move.
+    def day(offset: int) -> GarminDay:
+        weekday, weeks_ago = offset % 7, offset // 7
+        drift = [0, 600, -400, 900, -800, 300, 1200, -200][weeks_ago]
+        return GarminDay(
             date=(now - timedelta(days=offset)).isoformat(),
-            steps=[9200, 4100, 11300, 7600, 6200, 10500, 5300][offset],
+            steps=[9200, 4100, 11300, 7600, 6200, 10500, 5300][weekday] + drift,
             resting_hr=55,
-            sleep_seconds=[27000, 24600, 29400, 25200, 26100, 28200, 23400][offset],
+            sleep_seconds=[27000, 24600, 29400, 25200, 26100, 28200, 23400][weekday] + drift * 2,
+            sleep_score=[82, 71, 88, 74, 77, 85, 66][weekday],
+            stress_avg=[28, 41, 24, 35, 31, 26, 44][weekday],
+            hrv_ms=[61, 54, 66, 58, 57, 63, 52][weekday] + drift // 150,
+            hrv_status="BALANCED",
+            steps_goal=8500,
         )
-        for offset in range(6, -1, -1)
+
+    return tuple(day(offset) for offset in range(55, -1, -1))
+
+
+def _garmin_fitness(now: date) -> tuple[GarminFitness, ...]:
+    # A sync only ever records today's reading (see `GarminFitness`), so a real
+    # trend is one reading per sync. Weekly here, oldest first, creeping up so
+    # the VO2max trend has a shape; the lactate threshold card reads the last.
+    return tuple(
+        GarminFitness(
+            date=(now - timedelta(weeks=weeks_ago)).isoformat(),
+            vo2max=[51.9, 51.6, 51.2, 51.3, 50.9, 50.8][weeks_ago],
+            lactate_threshold_bpm=172,
+            lactate_threshold_pace_seconds_per_km=285,
+        )
+        for weeks_ago in range(5, -1, -1)
     )
 
 
