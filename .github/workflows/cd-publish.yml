@@ -53,7 +53,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: jay-withers/workflows/.github/workflows/docker.yml@0619e50b64233b7132aa7557fb78b2331fd9c5b1 # v1.5.2
+    uses: jay-withers/workflows/.github/workflows/docker.yml@74e8ea455cea667b8c6bcf0de23d8f37eeb31fec # v1.10.0
     with:
       images: |
         [{"name": "gymlog", "context": "."}]
@@ -76,6 +76,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    uses: jay-withers/workflows/.github/workflows/container-apps-deploy.yml@acee2bc5b3bc7491e547b2541fb4fa84b3723f2d # v1.8.0
+      issues: write # the deploy-failed issue
+    uses: jay-withers/workflows/.github/workflows/container-apps-deploy.yml@74e8ea455cea667b8c6bcf0de23d8f37eeb31fec # v1.10.0
     with:
       version: ${{ inputs.version }}
