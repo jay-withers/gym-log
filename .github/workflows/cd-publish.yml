@@ -1,6 +1,6 @@
 name: cd-publish
 
-# Publishes the image to GHCR for a given tag. Invoked by cd-tag after a version
+# Publishes the image to GHCR for a given tag, then deploys it to dev. Invoked by cd-tag after a version
 # bump, or manually to (re)publish an existing tag.
 #
 # It exists as a workflow of its own rather than folding into cd-tag because the
@@ -61,4 +61,21 @@ jobs:
       push: true
       tags: ${{ inputs.version }}
       tag-with-sha: true
-      summary-note: Deploy with `make deploy IMAGE_TAG=${{ inputs.version }}`.
+      summary-note: The `deploy` job rolls this onto dev. To redeploy, re-run this workflow with the tag.
+
+  # Rolls the tag just published onto dev with this repo's own `make deploy`,
+  # through the shared container-apps-deploy.yml: OIDC in the `dev` GitHub
+  # environment, then `make deploy IMAGE_TAG=<version>` from a checkout of the
+  # tag. It runs on a manual re-publish too, so workflow_dispatch is also how
+  # to redeploy an existing tag.
+  #
+  # id-token: write must also be granted by cd-tag's publish job, which calls
+  # this workflow: a called workflow never holds more than its caller.
+  deploy:
+    needs: publish
+    permissions:
+      id-token: write
+      contents: read
+    uses: jay-withers/workflows/.github/workflows/container-apps-deploy.yml@acee2bc5b3bc7491e547b2541fb4fa84b3723f2d # v1.8.0
+    with:
+      version: ${{ inputs.version }}
