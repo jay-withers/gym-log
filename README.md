@@ -328,8 +328,14 @@ Ordering-sensitive:
 Every workflow is a thin caller of a reusable workflow in
 [jay-withers/workflows](https://github.com/jay-withers/workflows), pinned by
 commit SHA with the tag as a comment. Required checks are set in `github-repos`,
-not here: `pre-commit / Pre-commit`, `test / Test` and `terraform / Terraform`.
-Read them off `gh pr checks` rather than inferring them.
+not here: `pre-commit / Pre-commit`, `test / Test`, `terraform / Terraform` and
+`container-build`. Read them off `gh pr checks` rather than inferring them.
+
+`ci-container-build`'s **`container-build`** gate is a required check. The
+workflow runs on every pull request; a `changes` job decides whether the image
+build runs, and the gate passes when it was skipped and fails when it failed. It
+used to be path-filtered on the trigger and so could not be required, which let
+Renovate auto-merge a Python 3.15 base image that could not build.
 
 `ci-terraform` plans dev on every pull request that touches Terraform and posts
 the plan as a comment; `terraform-plan` is its always-reporting gate.
