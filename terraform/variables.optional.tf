@@ -21,7 +21,7 @@ variable "tags" {
 }
 
 variable "key_vault_administrator_object_ids" {
-  description = "Extra Entra object IDs granted Key Vault Secrets Officer and Storage Blob Data Contributor. Whoever runs `terraform apply` is always included, so this is only for a second person or a second machine."
+  description = "Entra object IDs granted Key Vault Secrets Officer and Storage Blob Data Contributor. Listed explicitly rather than taken from whoever runs `terraform apply`, because cd-terraform applies as the pipeline identity."
   type        = list(string)
   default     = []
 }
