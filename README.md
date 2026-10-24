@@ -299,9 +299,11 @@ Ordering-sensitive:
    it, **then** add the repository and `state_consumers` entries to
    `terraform/terraform.tfvars`, then apply. The container must exist before the
    data source looks it up.
-2. Set `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` as
-   repository variables, or the plan legs stay skipped.
-3. `make apply`.
+2. Nothing to set by hand for CI: `github-repos` puts `AZURE_CLIENT_ID`,
+   `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` on this repo's `dev`
+   environment.
+3. `make apply`. After this first apply, `cd-terraform` applies dev on every
+   merge that touches Terraform.
 4. `make secrets` and run what it prints to set `APP-PASSCODE`,
    `DEEPSEEK-API-KEY`, `GARMIN-EMAIL`, `GARMIN-PASSWORD`, `RESEND-API-KEY`
    and `INSIGHT-EMAIL-TO`. The insight and
@@ -319,8 +321,15 @@ Every workflow is a thin caller of a reusable workflow in
 [jay-withers/workflows](https://github.com/jay-withers/workflows), pinned by
 commit SHA with the tag as a comment. Required checks are set in `github-repos`,
 not here: `pre-commit / Pre-commit`, `test / Test` and `terraform / Terraform`.
-Read them off `gh pr checks` rather than inferring them. Terraform plans are
-run manually with Azure access because the shared platform environment is
-resolved through a data source.
+Read them off `gh pr checks` rather than inferring them.
+
+`ci-terraform` plans dev on every pull request that touches Terraform and posts
+the plan as a comment; `terraform-plan` is its always-reporting gate.
+`cd-terraform` applies dev on merge with the same shared workflow, which runs
+in the `dev` GitHub environment holding the Azure login variables. The
+pipeline identity is only Contributor on `rg-gymlog-dev`, so a change that adds
+or replaces a role assignment needs a local `make apply`. Key Vault and blob
+access go to the object IDs in `environments/dev.tfvars`, not to whoever
+applies.
 
 Generated Terraform reference: [`terraform/README.md`](terraform/README.md).

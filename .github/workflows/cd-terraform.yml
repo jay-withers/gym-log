@@ -1,0 +1,39 @@
+name: cd-terraform
+
+# Applies dev on every merge to main that touches Terraform, through the
+# shared terraform-deploy.yml: plan, then apply that exact plan in the same
+# job, skipped when nothing changed. This replaces a local `make apply ENV=dev`.
+#
+# Only dev, because the platform has no other environment.
+#
+# Auth is the OIDC identity github-repos creates for this repo. The shared
+# job runs in the `dev` GitHub environment, which holds AZURE_CLIENT_ID,
+# AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID and makes the token subject
+# `<repo prefix>:environment:dev` — the subject the identity's one federated
+# credential trusts, for ci-terraform's plans and this apply alike. The
+# identity holds Contributor on rg-gymlog-dev and Reader on the
+# subscription, nothing more. Contributor cannot write role assignments, so a
+# change that adds or replaces one fails here with AuthorizationFailed; apply
+# that change locally with `make apply ENV=dev`, then re-run this workflow.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".terraform-version"
+      - ".github/workflows/cd-terraform.yml"
+  # Re-apply without a commit: after a failed run, or to correct drift.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    permissions:
+      id-token: write
+      contents: read
+    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@13ed02c1460d2d5dcc5537e8f8686eb57c403fb9 # v1.7.0
+    with:
+      environment: dev
+      apply: true

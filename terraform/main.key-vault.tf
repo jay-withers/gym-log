@@ -43,14 +43,13 @@ resource "azurerm_role_assignment" "identity_secrets_user" {
   principal_type = "ServicePrincipal"
 }
 
-# Whoever applies can then populate the values. Terraform deliberately creates
+# The administrators can then populate the values (not "whoever applies":
+# cd-terraform applies as the pipeline identity, which would move this grant
+# to itself on every run). Terraform deliberately creates
 # **no** `azurerm_key_vault_secret`: no secret value belongs in source or in
 # state. See the README for the `az keyvault secret set` calls.
 resource "azurerm_role_assignment" "deployer_secrets_officer" {
-  for_each = toset(concat(
-    [data.azurerm_client_config.current.object_id],
-    var.key_vault_administrator_object_ids,
-  ))
+  for_each = toset(var.key_vault_administrator_object_ids)
 
   scope                = azurerm_key_vault.this.id
   role_definition_name = "Key Vault Secrets Officer"
