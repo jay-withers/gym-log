@@ -73,6 +73,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # cd-publish's deploy job
     uses: ./.github/workflows/cd-publish.yml
     with:
       version: ${{ needs.tag.outputs.tag }}
