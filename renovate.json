@@ -18,5 +18,13 @@
       ],
       "datasourceTemplate": "github-releases"
     }
+  ],
+  "packageRules": [
+    {
+      "description": "A Python minor is not a routine bump: compiled deps (httptools via uvicorn[standard]) lag new interpreters with wheels, and the slim image has no compiler to build them. 3.15 broke the image this way in #72. Raise this ceiling by hand once the lock resolves to wheels for the new minor.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["python"],
+      "allowedVersions": "<3.15"
+    }
   ]
 }
