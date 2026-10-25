@@ -129,7 +129,7 @@ deployed-tag: ## Print the image tag live on the app
 
 # Run by cd-publish after every deploy (and by hand after a local one). A
 # failure there rolls the app and jobs back to `make deployed-tag`'s answer.
-smoke: ## Check IMAGE_TAG is live and ready on the app, and set on both jobs (IMAGE_TAG required)
+smoke: ## Check IMAGE_TAG is live and ready on the app, and selfcheck both jobs (IMAGE_TAG required)
 	@if [ -z "$(IMAGE_TAG_EXPLICIT)" ]; then \
 		echo "error: pass the tag to check, e.g. make smoke IMAGE_TAG=v0.1.0" >&2; exit 1; fi
 	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null
