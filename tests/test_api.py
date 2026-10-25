@@ -1856,8 +1856,6 @@ def test_fitness_insights_page_shows_at_a_glance_from_the_latest_day(client, see
     page = client.get("/insights/fitness").text
     assert "9,500" in page
     assert "48" in page and "bpm" in page
-    assert "7h 35m" in page
-    assert "score 85" in page
     assert "31" in page
     assert "52.3" in page
     assert "as of 24 Sep" in page
@@ -1896,6 +1894,53 @@ def test_fitness_insights_at_a_glance_is_yesterday_not_today(client, seeded):
     page = client.get("/insights/fitness").text
     assert "9,500" in page
     assert f"as of {(today - timedelta(days=1)):%d %b}" in page
+
+
+def test_fitness_insights_at_a_glance_sleep_is_last_night(client, seeded):
+    """Garmin dates a night by the morning it ends: today's record is last
+    night, and yesterday's is the night before, which must not be shown."""
+    today = date.today()
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                garmin_day(
+                    date=(today - timedelta(days=1)).isoformat(),
+                    sleep_seconds=31980,  # 8h 53m
+                    sleep_score=82,
+                ),
+                garmin_day(date=today.isoformat(), sleep_seconds=29340, sleep_score=85),  # 8h 9m
+            ],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "8h 9m" in page
+    assert "score 85" in page
+    assert "score 82" not in page
+
+
+def test_fitness_insights_at_a_glance_sleep_is_blank_before_last_night_syncs(client, seeded):
+    today = date.today()
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                garmin_day(
+                    date=(today - timedelta(days=1)).isoformat(),
+                    steps=9500,
+                    sleep_seconds=31980,
+                    sleep_score=82,
+                )
+            ],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "9,500" in page
+    assert "score 82" not in page
 
 
 def test_fitness_insights_page_is_empty_before_any_sync(client, seeded):

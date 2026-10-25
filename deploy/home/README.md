@@ -172,7 +172,7 @@ container. The tag is required, same as `make deploy`.
 | Timer | When | Does |
 | --- | --- | --- |
 | `health-insight.timer` | Sundays 20:00 UTC | `gymlog insight` |
-| `health-garmin.timer` | daily 05:00 UTC | `gymlog garmin-sync` |
+| `health-garmin.timer` | daily 09:00 UTC | `gymlog garmin-sync` |
 | `health-backup.timer` | hourly | `backup.sh` |
 
 All are `Persistent=true`: a run missed while the PC was off happens at next

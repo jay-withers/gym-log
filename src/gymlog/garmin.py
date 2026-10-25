@@ -13,8 +13,8 @@ Field names below (`activityId`, `startTimeLocal`, `activityType.typeKey`,
 `dailySleepDTO.sleepTimeSeconds`/`.sleepScores.overall.value`,
 `metricDescriptors[].key`/`activityDetailMetrics[].metrics` (`directTimestamp`,
 `directHeartRate`), `maxHeartRateUsed`, `hrvSummary.lastNightAvg`/
-`.status`, `generic.vo2MaxPreciseValue`/`.vo2MaxValue`,
-`speed_and_heart_rate.speed`/`.heartRate`, `overallStressLevel`) are
+`.status`, `mostRecentVO2Max.generic.vo2MaxPreciseValue`/`.vo2MaxValue`,
+`speed_and_heart_rate.speed`/`.heartRate`, `avgStressLevel`) are
 Garmin's own, confirmed against community-documented response shapes
 rather than this library's (minimal) type hints — Garmin can change them
 without notice, which is why every read here is defensive (`.get()` with a
@@ -327,8 +327,10 @@ def _day(client: Any, cdate: str) -> GarminDay:
         stress = client.get_stress_data(cdate)
         # Garmin uses -1/-2 for "not enough data" rather than omitting the
         # field, so a negative reading is clamped to 0 rather than kept as a
-        # nonsensical negative stress level.
-        stress_avg = max(0, int((stress or {}).get("overallStressLevel") or 0))
+        # nonsensical negative stress level. `avgStressLevel`, not the
+        # `overallStressLevel` this once read: that field doesn't exist, so
+        # every day stored 0.
+        stress_avg = max(0, int((stress or {}).get("avgStressLevel") or 0))
     except Exception:
         logger.warning("could not fetch stress data for %s", cdate, exc_info=True)
 
@@ -348,15 +350,15 @@ def _day(client: Any, cdate: str) -> GarminDay:
 def _fitness(client: Any, cdate: str) -> GarminFitness | None:
     """VO2max and lactate threshold as Garmin reports them right now, stamped with `cdate`.
 
-    Both `get_max_metrics` and `get_lactate_threshold` answer with today's
-    current reading no matter what date is asked for — a documented quirk of
-    Garmin's own endpoints (`metrics-service`'s maxmet range and
-    `biometric-service`'s latestLactateThreshold), not a request built wrong
-    here. Calling this once per sync, for `today`, and stamping the result
-    with that date is how a real trend still builds up over the app's own
-    history of daily syncs, rather than either re-stamping the same "current"
-    number onto every day in the trailing window or claiming a history
-    Garmin doesn't actually have.
+    VO2max comes from `get_training_status`'s `mostRecentVO2Max`, not
+    `get_max_metrics`: the latter only answers for a date Garmin recorded a
+    new estimate on (an outdoor run), so asking it for today returned `[]` on
+    most days and every stored VO2max was 0. `get_lactate_threshold` takes no
+    date at all. Both are "the latest reading", so calling this once per sync,
+    for `today`, and stamping the result with that date is how a real trend
+    still builds up over the app's own history of daily syncs, rather than
+    either re-stamping the same "current" number onto every day in the
+    trailing window or claiming a history Garmin doesn't actually have.
 
     Returns None rather than a zeroed `GarminFitness` when neither reading
     came back, so a wholly failed fetch leaves no trace in the log instead of
@@ -364,12 +366,12 @@ def _fitness(client: Any, cdate: str) -> GarminFitness | None:
     """
     vo2max = 0.0
     try:
-        raw = client.get_max_metrics(cdate)
-        entry = raw[0] if isinstance(raw, list) and raw else raw if isinstance(raw, dict) else {}
-        generic = (entry or {}).get("generic") or {}
+        training_status = client.get_training_status(cdate)
+        latest = (training_status or {}).get("mostRecentVO2Max") or {}
+        generic = latest.get("generic") or {}
         vo2max = float(generic.get("vo2MaxPreciseValue") or generic.get("vo2MaxValue") or 0)
     except Exception:
-        logger.warning("could not fetch max metrics for %s", cdate, exc_info=True)
+        logger.warning("could not fetch training status for %s", cdate, exc_info=True)
 
     lactate_threshold_bpm = 0
     lactate_threshold_pace_seconds_per_km = 0

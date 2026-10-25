@@ -532,14 +532,12 @@ class GarminFitness:
     """VO2max and lactate threshold as Garmin reported them on `date`.
 
     Unlike `GarminDay`'s steps/resting-HR/sleep/HRV, which Garmin genuinely
-    answers per historical date, the endpoints behind these two fields always
-    answer with *today's* current reading regardless of the date asked (a
-    documented quirk of both, not a request this app sends wrong) — see
-    `gymlog.garmin._fitness`. So this is only ever created once per sync, for
-    the day the sync actually ran, never backfilled for the rest of the
-    trailing window the way a `GarminDay` is. A real trend still builds up
-    over time, just from this app's own daily snapshots rather than from
-    Garmin's history.
+    answers per historical date, these two fields are read as Garmin's latest
+    reading rather than one for a given date — see `gymlog.garmin._fitness`.
+    So this is only ever created once per sync, for the day the sync actually
+    ran, never backfilled for the rest of the trailing window the way a
+    `GarminDay` is. A real trend still builds up over time, just from this
+    app's own daily snapshots rather than from Garmin's history.
     """
 
     date: str

@@ -46,9 +46,11 @@ resource "azurerm_container_app_job" "garmin_sync" {
   replica_retry_limit        = 1
 
   schedule_trigger_config {
-    # 05:00 UTC — early enough that the prior day's Garmin data (sleep
-    # especially, which finalizes on waking) has settled by the time this runs.
-    cron_expression          = "0 5 * * *"
+    # 09:00 UTC — late enough that last night's sleep, which Garmin dates by
+    # the morning it ends and only has once the watch syncs after waking, is
+    # there. 05:00 ran before waking, so the page's "last night" was always
+    # blank until a manual sync.
+    cron_expression          = "0 9 * * *"
     parallelism              = 1
     replica_completion_count = 1
   }
