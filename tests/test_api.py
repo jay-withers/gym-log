@@ -1084,6 +1084,14 @@ def test_a_cookie_secret_decouples_the_two(client, seeded, monkeypatch):
 )
 def test_a_cookie_this_process_did_not_issue_is_refused(client, seeded, cookie):
     login(client)
+    # Replace the session login() put in the jar rather than adding beside it.
+    # `cookies.set` with no domain is a second cookie of the same name next to
+    # the login's (domain testserver.local); both are sent, and which one the
+    # server reads depends on the HTTP client's ordering and Starlette's
+    # handling of duplicate names - after a lock refresh the valid one won, and
+    # this passed a forged cookie. A real attacker without a session only has
+    # the forged one.
+    client.cookies.clear()
     client.cookies.set("gymlog_session", cookie)
     assert client.get("/").status_code == 303
 
