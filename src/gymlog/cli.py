@@ -1,4 +1,4 @@
-"""One entrypoint — `gymlog serve|import|show|seed`.
+"""One entrypoint — `gymlog serve|import|show|seed|insight|garmin-sync|selfcheck`.
 
 `serve` is the workload; `import` and `show` are operator commands that run
 against the real blob, so they need `STATE_CONTAINER_URL` and a credential with
@@ -117,6 +117,11 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
 
+    sub.add_parser(
+        "selfcheck",
+        help="check settings, secrets and storage as a job would, doing nothing",
+    )
+
     args = parser.parse_args(argv)
 
     _configure_logging()
@@ -137,6 +142,10 @@ def main(argv: list[str] | None = None) -> int:
             return _insight(email=args.email)
         if args.command == "garmin-sync":
             return _garmin_sync(args.days)
+        if args.command == "selfcheck":
+            from . import selfcheck
+
+            return selfcheck.run()
     finally:
         telemetry.flush()
 

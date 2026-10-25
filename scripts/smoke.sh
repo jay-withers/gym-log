@@ -14,12 +14,21 @@
 #     a cold start. An image from before `version` existed is accepted once the
 #     latest *ready* revision is the one running it, so rolling back to one
 #     still passes;
-#   - /readyz answers 200.
+#   - /readyz answers 200 (not checked on a rollback to an image without
+#     `version`, which may predate it).
 #
-# For a job, only the configured image: starting one has side effects.
+# For a job, the configured image, and then one run of it with its args
+# swapped for `selfcheck`: the same image, identity, env and secrets as a real
+# run, but the app's selfcheck command only loads its settings, reads its
+# secrets and reaches its storage or database, and sends nothing. A real run
+# would email, spend LLM tokens or trade. Every job's run is started before
+# any is waited on. With SMOKE_PHASE=rollback (container-apps-deploy.yml sets
+# it) the runs are skipped: the old image may predate `selfcheck`, it has
+# already run here, and restoring service shouldn't wait on it.
 #
 # Shared verbatim by every app repo that deploys through container-apps-deploy
-# (gym-log, finances, career, repo-agent, security-testing). Change it in all.
+# (gym-log, finances, career, repo-agent, security-testing, market-agent).
+# Change it in all.
 set -euo pipefail
 
 if [[ $# -lt 4 ]]; then
@@ -29,6 +38,9 @@ fi
 tag="$1" rg="$2" image="$3:$1"
 shift 3
 timeout="${SMOKE_TIMEOUT:-300}"
+job_timeout="${SMOKE_JOB_TIMEOUT:-600}"
+phase="${SMOKE_PHASE:-release}"
+started=()
 
 fail() {
   echo "smoke: FAIL: $*" >&2
@@ -64,16 +76,57 @@ check_app() {
   done
   rm -f /tmp/smoke-body.$$
 
+  # Rolling back to an image from before `version`: it may predate /readyz too
+  # (market-agent's dashboard did), and it has already run here.
+  if [[ "$phase" == rollback && -z "$version" ]]; then
+    echo "smoke: $name: $tag live (rollback to an image without version; /readyz not checked)"
+    return 0
+  fi
+
   code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "https://$fqdn/readyz" || true)"
   [[ "$code" == 200 ]] || fail "$name: /readyz answered HTTP $code"
   echo "smoke: $name: $tag live and ready on https://$fqdn"
 }
 
 check_job() {
-  local name="$1" configured
-  configured="$(az containerapp job show -g "$rg" -n "$name" --query 'properties.template.containers[0].image' -o tsv)"
+  local name="$1" job configured body execution
+  job="$(az containerapp job show -g "$rg" -n "$name" -o json)"
+  configured="$(jq -r '.properties.template.containers[0].image' <<<"$job")"
   [[ "$configured" == "$image" ]] || fail "job $name is configured with $configured, not $image"
   echo "smoke: job $name: configured with $tag"
+  [[ "$phase" != rollback ]] || return 0
+
+  # The job's own template, args swapped. ARM's start API rather than
+  # `az containerapp job start --args`, which builds the override from its
+  # flags alone and drops the env (and with it every secret reference).
+  body="$(jq -c '.properties.template | {
+      containers: [.containers[] | {image, name, command, env, resources} + {args: ["selfcheck"]}],
+      initContainers: [(.initContainers // [])[] | {image, name, command, args, env, resources}]
+    } | (.containers, .initContainers) |= map(with_entries(select(.value != null)))' <<<"$job")"
+  execution="$(az rest --method post \
+    --url "https://management.azure.com$(jq -r .id <<<"$job")/start?api-version=2024-03-01" \
+    --body "$body" --query name -o tsv)"
+  [[ -n "$execution" ]] || fail "job $name: could not start a selfcheck run"
+  echo "smoke: job $name: selfcheck run $execution started"
+  started+=("$name/$execution")
+}
+
+wait_for_runs() {
+  local entry name execution status deadline=$((SECONDS + job_timeout))
+  for entry in "${started[@]}"; do
+    name="${entry%%/*}" execution="${entry#*/}"
+    while :; do
+      status="$(az containerapp job execution show -g "$rg" -n "$name" \
+        --job-execution-name "$execution" --query properties.status -o tsv)"
+      case "$status" in
+        Succeeded) echo "smoke: job $name: selfcheck run succeeded"; break ;;
+        Failed | Stopped | Degraded)
+          fail "job $name: selfcheck run $execution ended $status. Logs: az containerapp job logs show -g $rg -n $name --execution $execution --container <name>" ;;
+      esac
+      ((SECONDS < deadline)) || fail "job $name: selfcheck run $execution still $status after ${job_timeout}s"
+      sleep 10
+    done
+  done
 }
 
 for target in "$@"; do
@@ -83,3 +136,4 @@ for target in "$@"; do
     *) echo "smoke: unknown target $target (want app:<name> or job:<name>)" >&2; exit 2 ;;
   esac
 done
+((${#started[@]} == 0)) || wait_for_runs

@@ -137,6 +137,13 @@ and rolls back on failure. `/healthz` must keep reporting `version` from
 serving from `latestReadyRevisionName`, a weaker check meant for rolling back
 to images from before `version` existed.
 
+Each job is also run once with `args = ["selfcheck"]` (`selfcheck.py`), through
+ARM's job start API with the job's own template so the env and secret
+references survive. **Keep `selfcheck` free of side effects** (no email, no
+LLM, no Garmin login, no writes): it runs on every deploy. And add a secret to
+`selfcheck.SECRETS` when a job starts reading one, or a release that lacks it
+deploys green and fails at its first scheduled run.
+
 ## Testing
 
 `pytest`, flat `tests/`, one file per module. `filterwarnings = ["error"]`, with
