@@ -81,6 +81,12 @@ def test_healthz_does_not_touch_storage(client, monkeypatch):
     assert client.get("/healthz").status_code == 200
 
 
+def test_healthz_reports_the_deployed_image_tag(client, monkeypatch):
+    """`make smoke` reads this to prove the new revision is the one serving."""
+    monkeypatch.setenv("IMAGE_TAG", "v1.2.3")
+    assert client.get("/healthz").json()["version"] == "v1.2.3"
+
+
 def test_readyz_does_touch_storage(client, monkeypatch):
     monkeypatch.setattr(store, "load", lambda: (_ for _ in ()).throw(RuntimeError("blob down")))
     assert client.get("/readyz").status_code == 503

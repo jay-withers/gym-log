@@ -14,6 +14,7 @@ that reaches the log.
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -59,8 +60,16 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict[str, str]:
-        """Liveness. Deliberately does not touch storage — see the module docstring."""
-        return {"status": "ok", "environment": cfg.environment}
+        """Liveness. Deliberately does not touch storage — see the module docstring.
+
+        `version` is the image tag `make deploy` set, which `make smoke` checks to
+        prove the new revision is the one serving.
+        """
+        return {
+            "status": "ok",
+            "environment": cfg.environment,
+            "version": os.environ.get("IMAGE_TAG", "unknown"),
+        }
 
     @app.get("/readyz", include_in_schema=False)
     def readyz(response: Response) -> dict[str, Any]:
