@@ -11,3 +11,11 @@ output:
 sort:
   enabled: true
   by: name
+
+settings:
+  # Provider versions come from the constraints in versions.tf, not from
+  # .terraform.lock.hcl. Read from the lock, every lock refresh rewrote this
+  # README, and Renovate's lock-file maintenance PRs - which can't run hooks -
+  # failed pre-commit and never merged, leaving transitive dependencies (and
+  # their CVEs) frozen for weeks.
+  lockfile: false
