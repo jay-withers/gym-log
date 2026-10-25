@@ -127,6 +127,16 @@ The whole `env` map is ignored rather than `IMAGE_TAG`'s entry, because indexing
 into a map-driven `dynamic` block by position would silently shift if
 `common_env` gained or lost a key.
 
+## The smoke test is shared — copy, don't diverge
+
+`scripts/smoke.sh` is shared verbatim with finances, career, repo-agent and
+security-testing, and `make smoke`/`make deployed-tag` follow the same shape
+in each. The shared `container-apps-deploy.yml` runs them around every deploy
+and rolls back on failure. `/healthz` must keep reporting `version` from
+`IMAGE_TAG`: without it, the smoke test can only infer the new revision is
+serving from `latestReadyRevisionName`, a weaker check meant for rolling back
+to images from before `version` existed.
+
 ## Testing
 
 `pytest`, flat `tests/`, one file per module. `filterwarnings = ["error"]`, with
