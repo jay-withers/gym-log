@@ -63,7 +63,13 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # and USER names the number, not the name — a runtime enforcing runAsNonRoot has
 # to resolve the user before the container starts, and it cannot read this
 # image's /etc/passwd to do it.
-RUN useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin gymlog
+#
+# The same layer removes the base image's pip, which vendors certifi, urllib3,
+# msgpack and setuptools' pkg_resources at whatever versions shipped with it;
+# Trivy reports them (a CRITICAL certifi among them). Nothing at runtime uses
+# pip: the app runs from the venv copied in below, which uv built without one.
+RUN python -m pip uninstall --yes --root-user-action=ignore pip \
+    && useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin gymlog
 
 WORKDIR /app
 COPY --from=builder --chown=10001:10001 /app/.venv /app/.venv
