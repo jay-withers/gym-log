@@ -37,7 +37,7 @@ class _FakeGarmin:
         self.summaries: dict[str, dict[str, Any]] = {}
         self.sleep: dict[str, dict[str, Any]] = {}
         self.hrv: dict[str, dict[str, Any]] = {}
-        self.max_metrics: dict[str, Any] = {}
+        self.training_status: dict[str, Any] = {}
         self.lactate_threshold: dict[str, Any] = {}
         self.stress: dict[str, dict[str, Any]] = {}
         self.calls: list[str] = []
@@ -75,9 +75,9 @@ class _FakeGarmin:
         self.calls.append(f"hrv:{cdate}")
         return self.hrv.get(cdate, {})
 
-    def get_max_metrics(self, cdate: str) -> dict[str, Any]:
-        self.calls.append(f"max_metrics:{cdate}")
-        return self.max_metrics
+    def get_training_status(self, cdate: str) -> dict[str, Any]:
+        self.calls.append(f"training_status:{cdate}")
+        return self.training_status
 
     def get_lactate_threshold(self) -> dict[str, Any]:
         self.calls.append("lactate_threshold")
@@ -417,7 +417,7 @@ def test_a_day_carries_its_average_stress_reading(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
     monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
     instance = _WithStress("me@example.com", "hunter2")
-    instance.stress = {"2026-09-15": {"overallStressLevel": 31}}
+    instance.stress = {"2026-09-15": {"avgStressLevel": 31}}
     monkeypatch.setattr("garminconnect.Garmin", lambda email, password: instance)
 
     _activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
@@ -454,7 +454,7 @@ def test_a_negative_stress_reading_is_clamped_to_zero(monkeypatch: pytest.Monkey
     monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
     monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
     instance = _NotEnoughData("me@example.com", "hunter2")
-    instance.stress = {"2026-09-15": {"overallStressLevel": -1}}
+    instance.stress = {"2026-09-15": {"avgStressLevel": -1}}
     monkeypatch.setattr("garminconnect.Garmin", lambda email, password: instance)
 
     _activities, days, _fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
@@ -484,7 +484,7 @@ def test_a_failed_stress_fetch_degrades_to_zero_without_aborting_the_sync(
 def test_fitness_reads_vo2max_and_lactate_threshold_for_today_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Both endpoints only ever answer for "today", so this must be fetched
+    """Both readings are Garmin's latest, not per date, so this must be fetched
     once per sync — not looped across the whole trailing window the way
     `_day` is — and stamped with the sync's own `today`."""
     calls: list[str] = []
@@ -493,9 +493,11 @@ def test_fitness_reads_vo2max_and_lactate_threshold_for_today_only(
         def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
             return []
 
-        def get_max_metrics(self, cdate: str) -> dict[str, Any]:
-            calls.append(f"max_metrics:{cdate}")
-            return {"generic": {"vo2MaxPreciseValue": 52.3, "vo2MaxValue": 52}}
+        def get_training_status(self, cdate: str) -> dict[str, Any]:
+            calls.append(f"training_status:{cdate}")
+            return {
+                "mostRecentVO2Max": {"generic": {"vo2MaxPreciseValue": 52.3, "vo2MaxValue": 52}}
+            }
 
         def get_lactate_threshold(self) -> dict[str, Any]:
             calls.append("lactate_threshold")
@@ -512,7 +514,7 @@ def test_fitness_reads_vo2max_and_lactate_threshold_for_today_only(
 
     _activities, days, fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=3)
 
-    assert calls.count("max_metrics:2026-09-15") == 1
+    assert calls.count("training_status:2026-09-15") == 1
     assert calls.count("lactate_threshold") == 1
     assert len(days) == 4  # the fetch above is not part of the per-day loop
     assert len(fitness) == 1
@@ -556,8 +558,8 @@ def test_fitness_falls_back_to_the_imprecise_vo2max_value(
         def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
             return []
 
-        def get_max_metrics(self, cdate: str) -> dict[str, Any]:
-            return {"generic": {"vo2MaxValue": 48}}
+        def get_training_status(self, cdate: str) -> dict[str, Any]:
+            return {"mostRecentVO2Max": {"generic": {"vo2MaxValue": 48}}}
 
     monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
     monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
@@ -584,14 +586,14 @@ def test_fitness_is_none_when_neither_reading_comes_back(
     assert fitness == []
 
 
-def test_a_failed_max_metrics_fetch_still_returns_the_lactate_threshold(
+def test_a_failed_training_status_fetch_still_returns_the_lactate_threshold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class _MaxMetricsFails(_FakeGarmin):
+    class _TrainingStatusFails(_FakeGarmin):
         def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
             return []
 
-        def get_max_metrics(self, cdate: str) -> dict[str, Any]:
+        def get_training_status(self, cdate: str) -> dict[str, Any]:
             raise RuntimeError("Garmin said no")
 
         def get_lactate_threshold(self) -> dict[str, Any]:
@@ -599,7 +601,7 @@ def test_a_failed_max_metrics_fetch_still_returns_the_lactate_threshold(
 
     monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
     monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
-    monkeypatch.setattr("garminconnect.Garmin", _MaxMetricsFails)
+    monkeypatch.setattr("garminconnect.Garmin", _TrainingStatusFails)
 
     _activities, _days, fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
 

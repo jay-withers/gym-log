@@ -52,7 +52,7 @@
 {% if glance %}
 <div class="card">
   <div class="slot">At a glance</div>
-  <div class="fit-sub" style="margin-bottom: 10px">as of {{ glance.as_of }}</div>
+  <div class="fit-sub" style="margin-bottom: 10px">{% if glance.as_of %}as of {{ glance.as_of }} · {% endif %}sleep last night</div>
   <div class="gauges">
     {{ gauge("Steps", "{:,}".format(glance.steps) if glance.steps else "—",
              "of " ~ "{:,}".format(glance.steps_goal), glance.steps_pct) }}

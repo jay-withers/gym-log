@@ -1251,11 +1251,16 @@ def fitness_insights(request: Request) -> Any:
 
 
 def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
-    """Steps/resting-HR/sleep/stress from the latest day before today, plus VO2max and LT.
+    """The last finished day's steps/resting-HR/stress, last night's sleep, VO2max and LT.
 
     Not today: a sync mid-morning has today's resting HR and little else, so
     the latest synced day was a snapshot of mostly dashes. The last finished
     day is yesterday, or the most recent before it if yesterday never synced.
+
+    Sleep is the exception, as `overnight` is in `_weekly_chart`: Garmin dates
+    a night by the morning it ends, so today's record is last night's and
+    yesterday's is the night before. It is today's or nothing - falling back
+    to an older night would show that one as if it were last night.
 
     The lactate threshold rides along with VO2max: both come from the latest
     `GarminFitness`, so they share its staleness. Built from whichever of
@@ -1267,8 +1272,9 @@ def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
     """
     finished = [d for d in log.garmin_days if d.date < today.isoformat()]
     day = finished[-1] if finished else None
+    night = next((d for d in log.garmin_days if d.date == today.isoformat()), None)
     fitness = log.latest_garmin_fitness
-    if day is None and fitness is None:
+    if day is None and night is None and fitness is None:
         return {}
     steps_goal = (day.steps_goal if day else 0) or DEFAULT_STEPS_GOAL
     return {
@@ -1276,10 +1282,10 @@ def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
         "steps_goal": steps_goal,
         "steps_pct": _gauge_pct(day.steps if day else 0, steps_goal),
         "resting_hr": day.resting_hr if day else 0,
-        "sleep_hours": (day.sleep_seconds // 3600) if day else 0,
-        "sleep_minutes": ((day.sleep_seconds % 3600) // 60) if day else 0,
-        "sleep_score": day.sleep_score if day else 0,
-        "sleep_quality": _band(day.sleep_score if day else 0, SLEEP_SCORE_BANDS),
+        "sleep_hours": (night.sleep_seconds // 3600) if night else 0,
+        "sleep_minutes": ((night.sleep_seconds % 3600) // 60) if night else 0,
+        "sleep_score": night.sleep_score if night else 0,
+        "sleep_quality": _band(night.sleep_score if night else 0, SLEEP_SCORE_BANDS),
         "stress_avg": day.stress_avg if day else 0,
         "stress_level": _band(day.stress_avg if day else 0, STRESS_BANDS),
         "vo2max": fitness.vo2max if fitness else 0,
@@ -1287,7 +1293,7 @@ def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
         "lactate_threshold_pace": (
             _pace_label(fitness.lactate_threshold_pace_seconds_per_km) if fitness else ""
         ),
-        "as_of": _short_date(day.date if day else fitness.date),
+        "as_of": _short_date(day.date if day else fitness.date) if day or fitness else "",
     }
 
 
