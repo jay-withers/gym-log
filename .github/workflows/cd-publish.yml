@@ -53,7 +53,8 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: jay-withers/workflows/.github/workflows/docker.yml@74e8ea455cea667b8c6bcf0de23d8f37eeb31fec # v1.10.0
+      security-events: write # Trivy findings to code scanning
+    uses: jay-withers/workflows/.github/workflows/docker.yml@c3cb744bf5ded408403142ab2ad28b5cdefe08c1 # v1.12.0
     with:
       images: |
         [{"name": "gymlog", "context": "."}]
@@ -77,6 +78,6 @@ jobs:
       id-token: write
       contents: read
       issues: write # the deploy-failed issue
-    uses: jay-withers/workflows/.github/workflows/container-apps-deploy.yml@74e8ea455cea667b8c6bcf0de23d8f37eeb31fec # v1.10.0
+    uses: jay-withers/workflows/.github/workflows/container-apps-deploy.yml@c3cb744bf5ded408403142ab2ad28b5cdefe08c1 # v1.12.0
     with:
       version: ${{ inputs.version }}

@@ -1,8 +1,10 @@
 name: cd-terraform
 
-# Applies dev on every merge to main that touches Terraform, through the
-# shared terraform-deploy.yml: plan, then apply that exact plan in the same
-# job, skipped when nothing changed. This replaces a local `make apply ENV=dev`.
+# Plans dev on every merge to main that touches Terraform, through the shared
+# terraform-deploy.yml, and applies only when run by hand (Actions -> Run
+# workflow). A merge whose plan has changes opens a `terraform-pending` issue
+# instead; the manual run applies exactly the plan it prints and closes the
+# issue. Infrastructure changes wait for a human; app deploys don't.
 #
 # Only dev, because the platform has no other environment.
 #
@@ -22,7 +24,7 @@ on:
       - "terraform/**"
       - ".terraform-version"
       - ".github/workflows/cd-terraform.yml"
-  # Re-apply without a commit: after a failed run, or to correct drift.
+  # The manual apply: also re-runs a failed apply, or corrects drift.
   workflow_dispatch:
 
 permissions:
@@ -34,7 +36,7 @@ jobs:
       id-token: write
       contents: read
       issues: write # the deploy-failed issue
-    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@74e8ea455cea667b8c6bcf0de23d8f37eeb31fec # v1.10.0
+    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@c3cb744bf5ded408403142ab2ad28b5cdefe08c1 # v1.12.0
     with:
       environment: dev
-      apply: true
+      apply: ${{ github.event_name == 'workflow_dispatch' }}
