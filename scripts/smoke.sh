@@ -14,7 +14,8 @@
 #     a cold start. An image from before `version` existed is accepted once the
 #     latest *ready* revision is the one running it, so rolling back to one
 #     still passes;
-#   - /readyz answers 200.
+#   - /readyz answers 200 (not checked on a rollback to an image without
+#     `version`, which may predate it).
 #
 # For a job, the configured image, and then one run of it with its args
 # swapped for `selfcheck`: the same image, identity, env and secrets as a real
@@ -74,6 +75,13 @@ check_app() {
     sleep 10
   done
   rm -f /tmp/smoke-body.$$
+
+  # Rolling back to an image from before `version`: it may predate /readyz too
+  # (market-agent's dashboard did), and it has already run here.
+  if [[ "$phase" == rollback && -z "$version" ]]; then
+    echo "smoke: $name: $tag live (rollback to an image without version; /readyz not checked)"
+    return 0
+  fi
 
   code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "https://$fqdn/readyz" || true)"
   [[ "$code" == 200 ]] || fail "$name: /readyz answered HTTP $code"
