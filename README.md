@@ -310,8 +310,8 @@ Ordering-sensitive:
 2. Nothing to set by hand for CI: `github-repos` puts `AZURE_CLIENT_ID`,
    `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` on this repo's `dev`
    environment.
-3. `make apply`. After this first apply, `cd-terraform` applies dev on every
-   merge that touches Terraform.
+3. `make apply`. After this first apply, Terraform changes go through
+   `cd-terraform`: it plans on merge and applies when you run it by hand.
 4. `make secrets` and run what it prints to set `APP-PASSCODE`,
    `DEEPSEEK-API-KEY`, `GARMIN-EMAIL`, `GARMIN-PASSWORD`, `RESEND-API-KEY`
    and `INSIGHT-EMAIL-TO`. The insight and
@@ -339,8 +339,10 @@ Renovate auto-merge a Python 3.15 base image that could not build.
 
 `ci-terraform` plans dev on every pull request that touches Terraform and posts
 the plan as a comment; `terraform-plan` is its always-reporting gate.
-`cd-terraform` applies dev on merge with the same shared workflow, which runs
-in the `dev` GitHub environment holding the Azure login variables. The
+`cd-terraform` plans dev on merge with the same shared workflow, in the `dev`
+GitHub environment holding the Azure login variables, and applies only when
+run by hand (Actions → Run workflow). A merge whose plan has changes opens a
+`terraform-pending` issue until then. The
 pipeline identity is only Contributor on `rg-gymlog-dev`, so a change that adds
 or replaces a role assignment needs a local `make apply`. Key Vault and blob
 access go to the object IDs in `environments/dev.tfvars`, not to whoever
