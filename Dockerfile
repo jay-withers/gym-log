@@ -14,7 +14,7 @@
 # "non-major" bump moved the runtime from 3.12 to 3.14 and left the builder on
 # 3.12; the resulting image had no site-packages on sys.path at all and died
 # with a bare "No module named". One FROM line means they cannot drift again.
-FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83 AS base
+FROM python:3.14-slim-bookworm@sha256:945c2676dc2b18e0c1f16879244122c57c0ffede60006bf3df159c507a31bcae AS base
 
 
 FROM base AS builder
