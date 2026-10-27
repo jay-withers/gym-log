@@ -68,7 +68,19 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # msgpack and setuptools' pkg_resources at whatever versions shipped with it;
 # Trivy reports them (a CRITICAL certifi among them). Nothing at runtime uses
 # pip: the app runs from the venv copied in below, which uv built without one.
-RUN python -m pip uninstall --yes --root-user-action=ignore pip \
+#
+# The same layer applies Debian's published security fixes. The base image is
+# rebuilt on its own schedule, and in between Trivy fails the build on a
+# fixable HIGH/CRITICAL package (libssl3, CVE-2026-84782, was the first). The
+# CI build caches layers by instruction, so OS_PATCH_DATE (today's date, passed
+# by jay-withers/workflows' docker.yml) is declared just above it: this layer
+# re-runs once a day and everything before it stays cached.
+ARG OS_PATCH_DATE
+# hadolint ignore=DL3008
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall --yes --root-user-action=ignore pip \
     && useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin gymlog
 
 WORKDIR /app
