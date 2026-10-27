@@ -38,8 +38,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
 
-# Already non-root (USER 10001, numeric so runAsNonRoot can resolve it without
-# reading /etc/passwd), with /app/.venv/bin on PATH and WORKDIR /app.
+# Brings /app/.venv/bin on PATH and WORKDIR /app.
 FROM ghcr.io/jay-withers/dev-containers/python-app:v0.18.0@sha256:6218e3ffc531d9c411a5be2ef3b3a5988e1c279c557d257a8594394810db054c
 
 # This label is what connects the pushed package to this repository, and that
@@ -51,6 +50,12 @@ FROM ghcr.io/jay-withers/dev-containers/python-app:v0.18.0@sha256:6218e3ffc531d9
 LABEL org.opencontainers.image.source="https://github.com/jay-withers/gym-log"
 
 COPY --from=builder --chown=10001:10001 /app/.venv /app/.venv
+
+# python-app already runs as this user; restated so this file alone says the
+# image is non-root (repo-agent's container.runs_as_root reads only this file)
+# and stays so if the base ever changes. Numeric, because a runtime enforcing
+# runAsNonRoot has to resolve the user without reading /etc/passwd.
+USER 10001
 
 EXPOSE 8000
 
