@@ -170,9 +170,13 @@ Two things the fixtures exist to guarantee:
   other clue. The Makefile does it rather than leaving it to memory.
 - **QEMU emulation swallows Python logging.** If an emulated container fails
   silently, rebuild natively before believing the code is at fault.
-- One `FROM ... AS base` that both stages derive from. Naming the Python version
-  twice let a Renovate "non-major" bump move the runtime to 3.14 and leave the
-  builder on 3.12, producing an image with no site-packages on `sys.path`.
+- Both stages come from `jay-withers/dev-containers`: `python-app-builder` for
+  the builder, `python-app` for the runtime, pinned at the **same version**
+  (Renovate raises them together). The builder is built FROM the runtime, so
+  they share one interpreter. Naming the Python version twice once let a
+  Renovate "non-major" bump move the runtime to 3.14 and leave the builder on
+  3.12, producing an image with no site-packages on `sys.path`. OS patches,
+  pip's removal and the uid 10001 user live there too, not here.
 - `uv sync --no-editable`, or the runtime stage copies a venv whose `.pth` points
   at a build-stage path that does not exist.
 - The `org.opencontainers.image.source` label is what links the package to this
