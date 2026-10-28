@@ -117,8 +117,9 @@ contents cannot be reconstructed.
 
 ## `make deploy` is az cli, not terraform apply
 
-`terraform apply` seeds the first revision. After that `image` and `env` sit
-under `ignore_changes` and `make deploy` owns them, so a deploy needs no state
+`terraform apply` creates the app and jobs on dev-containers' `placeholder`
+image (200 on every path on `$PORT`; exits 0 in a job), never a guessed release
+tag. After that `image` and `env` sit under `ignore_changes` and `make deploy` owns them, so a deploy needs no state
 lock and no plan of unrelated drift. The trade-off: changing any *other* value in
 `common_env` needs a `make deploy` to land on a running revision — `terraform
 plan` reports no diff even though the value it computes has moved.

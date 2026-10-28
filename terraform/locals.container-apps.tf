@@ -3,7 +3,22 @@ locals {
   # id, and its `id` is the data-plane URL, which a role assignment rejects.
   log_container_scope = "${azurerm_storage_account.log.id}/blobServices/default/containers/${azurerm_storage_container.log.name}"
 
-  image = "${var.image_registry}/gymlog:${var.image_tag}"
+  # **The first revision runs a placeholder, not the app.** Terraform only
+  # needs an image to create the app and its jobs; the first `make deploy`
+  # (cd-publish, on the first release) puts the real one on, and the image is
+  # under `ignore_changes`, so Terraform never touches it again. The placeholder
+  # answers 200 on every path on $PORT, so the probes pass, and exits 0 at once
+  # in a job. This replaced seeding from a guessed release tag, which passes
+  # plan and apply and only fails when the revision pulls it.
+  #
+  # `latest` deliberately: dev-containers prunes all but its last ten releases
+  # and never `latest`, and a moving tag's usual trap (a re-push deploys
+  # nothing) can't apply to an image used only at create.
+  #
+  # **A job or app that is replaced (a ForceNew change) comes back on this**,
+  # and a job then "succeeds" doing nothing. Run `make deploy` after any apply
+  # that replaces one.
+  image = "ghcr.io/jay-withers/dev-containers/placeholder:latest"
 
   # uvicorn binds this, the Dockerfile EXPOSEs it, and both probes below check it.
   target_port = 8000
@@ -22,8 +37,8 @@ locals {
     KEY_VAULT_URI                         = azurerm_key_vault.this.vault_uri
     APPLICATIONINSIGHTS_CONNECTION_STRING = data.azurerm_application_insights.platform.connection_string
     ENVIRONMENT                           = var.environment
-    # Recorded so a trace names the build that produced it.
-    IMAGE_TAG = var.image_tag
+    # IMAGE_TAG, which a trace records, is set by `make deploy` alongside the
+    # image: the placeholder Terraform creates with has no release tag.
     # Where the log is read and written. Not a secret — it is a URL, and
     # reaching it still needs the managed identity's RBAC grant.
     STATE_CONTAINER_URL = "${azurerm_storage_account.log.primary_blob_endpoint}${azurerm_storage_container.log.name}"

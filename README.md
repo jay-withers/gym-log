@@ -294,7 +294,9 @@ make deploy IMAGE_TAG=v0.1.0
 make smoke IMAGE_TAG=v0.1.0   # what CI checks after a deploy
 ```
 
-`terraform apply` seeds the first revision only. After that the image and env sit
+`terraform apply` creates the app and jobs on dev-containers' `placeholder`
+image, which answers 200 on every path and exits 0 in a job, so the first apply
+never depends on a release existing. After that the image and env sit
 under `ignore_changes` and `make deploy` (az cli) owns them, so a plan reports no
 change even when the running image has moved on.
 
@@ -335,7 +337,9 @@ Ordering-sensitive:
 5. **Flip the GHCR package to public.** New packages default to private
    regardless of repository visibility, and there is no pull secret.
 6. `make import FILE=Gym_3.xlsx NAME="Block 3"`.
-7. `make deploy IMAGE_TAG=v0.0.1`.
+7. Merge something that releases the app, or run `make deploy IMAGE_TAG=<first
+   release>`: until then the app serves the placeholder and the jobs do
+   nothing.
 
 ## CI
 

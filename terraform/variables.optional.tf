@@ -50,32 +50,6 @@ variable "platform_app_insights_name" {
   default     = "appi-platform-dev"
 }
 
-# --- the image ----------------------------------------------------------------
-
-variable "image_registry" {
-  description = "Registry and repository prefix the image is pulled from. A public package on ghcr.io deliberately: a private one would need a `registry` block and a Key Vault-backed pull secret on the app, and there is no Azure Container Registry because ACR Basic is a flat monthly charge with no consumption tier."
-  type        = string
-  default     = "ghcr.io/jay-withers/gym-log"
-}
-
-variable "image_tag" {
-  description = "Image tag seeding the app's **first** revision only. Every deploy after that is `make deploy IMAGE_TAG=vX.Y.Z`, because the container's image and env sit under `ignore_changes` — so a plan against an existing deployment reports no change here even when the running image has moved on. Don't read a stale-looking default as the deployed version."
-  type        = string
-  # Must name a tag that actually exists in the registry. cd-tag's first release
-  # on a repo with no prior tags is v0.0.1, not v0.1.0 — and a tag that does not
-  # exist fails at revision start-up on the image pull, long after both plan and
-  # apply have reported success.
-  default = "v0.0.1"
-
-  validation {
-    # A moving tag deploys nothing: Container Apps creates a revision only when
-    # the template changes, so re-pushing `latest` reports success and changes
-    # nothing at all.
-    condition     = !contains(["latest", "main", "unset"], var.image_tag)
-    error_message = "image_tag must be an immutable tag, not latest/main/unset."
-  }
-}
-
 # --- the custom domain --------------------------------------------------------
 
 variable "custom_domain_name" {
