@@ -116,4 +116,6 @@ resource "azurerm_role_assignment" "deployer_log_contributor" {
   scope                = local.log_container_scope
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = each.value
+  principal_type       = "User"
+  description          = "Reads and edits the training log by hand (gymlog import/show)"
 }
