@@ -23,7 +23,7 @@ module "naming_garmin_sync" {
 
 resource "azurerm_container_app_job" "garmin_sync" {
   name                         = module.naming_garmin_sync.container_app_job.name
-  resource_group_name          = azurerm_resource_group.this.name
+  resource_group_name          = data.azurerm_resource_group.this.name
   container_app_environment_id = data.azurerm_container_app_environment.platform.id
 
   # Unlike the app, which rejects this argument — see main.container-apps-job.tf.

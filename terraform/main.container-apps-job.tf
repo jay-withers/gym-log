@@ -22,7 +22,7 @@ module "naming_insight" {
 
 resource "azurerm_container_app_job" "insight" {
   name                         = module.naming_insight.container_app_job.name
-  resource_group_name          = azurerm_resource_group.this.name
+  resource_group_name          = data.azurerm_resource_group.this.name
   container_app_environment_id = data.azurerm_container_app_environment.platform.id
 
   # Unlike the app, which rejects this argument: a job is not attached to a

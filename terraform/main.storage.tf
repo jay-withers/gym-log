@@ -37,8 +37,8 @@ resource "azurerm_storage_account" "log" {
   # checkov:skip=CKV2_AZURE_33: no private endpoint, as above.
   # checkov:skip=CKV2_AZURE_47: public access as above.
   name                = module.naming.storage_account.name
-  resource_group_name = azurerm_resource_group.this.name
-  location            = azurerm_resource_group.this.location
+  resource_group_name = data.azurerm_resource_group.this.name
+  location            = data.azurerm_resource_group.this.location
 
   account_tier             = "Standard"
   account_kind             = "StorageV2"
