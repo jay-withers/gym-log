@@ -361,8 +361,9 @@ the plan as a comment; `terraform-plan` is its always-reporting gate.
 GitHub environment holding the Azure login variables, and applies only when
 run by hand (Actions → Run workflow). A merge whose plan has changes opens a
 `terraform-pending` issue until then. The
-pipeline identity is only Contributor on `rg-gymlog-dev`, so a change that adds
-or replaces a role assignment needs a local `make apply`. Key Vault and blob
+pipeline identity is Contributor and conditioned RBAC Administrator on
+`rg-gymlog-dev`, both granted by github-repos, which also owns the group, so a
+role assignment inside the group applies through cd-terraform too. Key Vault and blob
 access go to the object IDs in `environments/dev.tfvars`, not to whoever
 applies.
 

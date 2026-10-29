@@ -28,8 +28,9 @@ data "azurerm_container_app_environment" "platform" {
 Consequences that bite:
 
 - **A container app may live in a different resource group from its environment,
-  but not a different region.** The resource group takes its `location` from the
-  environment data source rather than a variable, so this cannot drift.
+  but not a different region.** The resource group is github-repos'
+  (`create_resource_groups`), created in the environment's region and read
+  here by data source.
 - **A data source against a not-yet-applied dependency fails at *plan* time.**
   Only `dev` is ever applied on the platform, so this repo plans `dev` alone
   rather than a dev/stg/prd matrix. Add an environment here when the platform
