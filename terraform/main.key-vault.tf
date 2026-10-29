@@ -54,4 +54,5 @@ resource "azurerm_role_assignment" "deployer_secrets_officer" {
   scope                = azurerm_key_vault.this.id
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = each.value
+  principal_type       = "User"
 }
