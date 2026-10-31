@@ -67,9 +67,3 @@ variable "insight_email_from" {
   type        = string
   default     = ""
 }
-
-variable "auth_client_id" {
-  description = "Client ID of this app's Entra app registration for Container Apps' built-in auth, from azure-landingzone governance's `app_auth_client_ids` output (key `gymlog`). Empty leaves built-in auth off, and the passcode is then the only gate. Not a secret."
-  type        = string
-  default     = ""
-}

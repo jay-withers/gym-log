@@ -168,13 +168,9 @@ Six sections that are not derived from sets and reps:
   database. market-agent's PostgreSQL bills ~£13/month whether used or not, and
   was forced there by a policy blocking Azure SQL rather than chosen.
 - **Server-rendered Jinja2**, no build step, no SPA, one image.
-- **A passcode, then a signed cookie** valid for thirty days. Optionally an
-  **Entra sign-in in front of that** (Container Apps' built-in auth,
-  `terraform/main.container-apps-auth.tf`), off until `auth_client_id` is set
-  in `environments/dev.tfvars`. The app registration comes from
-  azure-landingzone's governance (`app_auth_client_ids`, key `gymlog`). Only
-  the operator can sign in, and no client secret exists: the app's own identity
-  stands in for one. `/healthz` and `/readyz` stay open for the smoke test.
+- **A passcode, then a signed cookie** valid for thirty days. Entra sign-in would
+  need the `azapi` provider, which nothing in this estate uses, in exchange for a
+  redirect on a phone between sets.
 
 ### Cost
 
