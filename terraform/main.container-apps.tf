@@ -34,6 +34,17 @@ resource "azurerm_container_app" "this" {
     identity_ids = [azurerm_user_assigned_identity.this.id]
   }
 
+  # Built-in auth's stand-in for a client secret (main.container-apps-auth.tf):
+  # this identity's client ID, which isn't secret, under the name the platform
+  # looks for to sign its token exchange with the identity.
+  dynamic "secret" {
+    for_each = var.auth_client_id != "" ? [1] : []
+    content {
+      name  = local.auth_identity_secret_name
+      value = azurerm_user_assigned_identity.this.client_id
+    }
+  }
+
   ingress {
     # Reachable from the internet, which is the entire point — it is opened on a
     # phone, on mobile data, in a gym. The passcode gate in api/deps.py is what
