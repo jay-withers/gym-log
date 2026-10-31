@@ -149,11 +149,15 @@ ssh health-home 'sudo systemctl start health-backup && ls /mnt/backup/health'
 and check the history at `https://health-home.jaywithers.uk` matches what
 Azure showed.
 
-Then switch the real domain. In DNS, delete the `health` CNAME (pointing at
-`*.azurecontainerapps.io`) and the `asuid.health` TXT record. Then add a
+Then switch the real domain. The `health` CNAME (pointing at
+`*.azurecontainerapps.io`) and the `asuid.health` TXT record are Terraform's,
+in [jay-withers/cloudflare](https://github.com/jay-withers/cloudflare): remove
+`health` from `app_domains` there and apply it, which deletes both. Don't
+delete them in the dashboard; the next apply would put them back. Then add a
 second public hostname on the tunnel: subdomain `health`, service
-`http://gymlog:8000`. Cloudflare creates the new DNS record itself. Once it
-works, remove the `health-home` hostname and its DNS record.
+`http://gymlog:8000`. Cloudflare creates the new DNS record itself, and it
+stays out of that repo. Once it works, remove the `health-home` hostname and
+its DNS record.
 
 The Azure app keeps running, unreachable at that name, until it's retired.
 Its managed certificate will fail to renew, which is harmless until then.
