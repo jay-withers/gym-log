@@ -1216,28 +1216,34 @@ def _week_label(weeks_ago: int) -> str:
 
 
 @router.get("/insights/fitness", response_class=HTMLResponse, include_in_schema=False)
-def fitness_insights(request: Request) -> Any:
+def fitness_insights(request: Request, span: str = "week") -> Any:
     log, _etag = store.load()
+    if span not in FITNESS_SPANS:
+        span = "week"
+    today = _today()
     return templates.TemplateResponse(
         request,
         "insights_fitness.html",
         {
-            "glance": _at_a_glance(log, _today()),
-            "steps_chart": _weekly_chart(
-                log, _today(), lambda d: d.steps, _steps_label, _steps_tick, from_zero=True
+            "glance": _at_a_glance(log, today),
+            "span": span,
+            "steps_chart": _fitness_chart(
+                log, today, span, lambda d: d.steps, _steps_label, _steps_tick, from_zero=True
             ),
-            "sleep_chart": _weekly_chart(
+            "sleep_chart": _fitness_chart(
                 log,
-                _today(),
+                today,
+                span,
                 lambda d: d.sleep_seconds / 3600,
                 _hours_label,
                 _hours_tick,
                 min_step=1,
                 overnight=True,
             ),
-            "hrv_chart": _weekly_chart(
+            "hrv_chart": _fitness_chart(
                 log,
-                _today(),
+                today,
+                span,
                 lambda d: d.hrv_ms,
                 _ms_label,
                 _ms_label,
@@ -1257,7 +1263,7 @@ def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
     the latest synced day was a snapshot of mostly dashes. The last finished
     day is yesterday, or the most recent before it if yesterday never synced.
 
-    Sleep is the exception, as `overnight` is in `_weekly_chart`: Garmin dates
+    Sleep is the exception, as `overnight` is in `_fitness_chart`: Garmin dates
     a night by the morning it ends, so today's record is last night's and
     yesterday's is the night before. It is today's or nothing - falling back
     to an older night would show that one as if it were last night.
@@ -1317,60 +1323,104 @@ def _gauge_pct(value: float, full: float) -> int:
 # The weekly line charts' drawing area, in SVG user units. The left margin
 # holds the y-axis tick labels, the bottom one the first and last week's.
 CHART_WIDTH, CHART_HEIGHT = 320, 132
-CHART_LEFT, CHART_RIGHT, CHART_TOP, CHART_BOTTOM = 36, 304, 12, 108
+CHART_LEFT, CHART_RIGHT, CHART_TOP, CHART_BOTTOM = 36, 300, 12, 108
+
+# The fitness page's toggle: the past 7 days a point a day, or the last 4
+# calendar weeks a point a week.
+FITNESS_SPANS = ("week", "month")
 
 
-def _weekly_chart(
+def _fitness_chart(
     log: Any,
     today: date,
+    span: str,
     value: Callable[[Any], float],
     label: Callable[[float], str],
     tick: Callable[[float], str],
-    weeks: int = 8,
     from_zero: bool = False,
     min_step: float = 0,
     overnight: bool = False,
 ) -> dict[str, Any]:
-    """A daily Garmin value averaged per calendar week, laid out as a line chart.
+    """A daily Garmin value as a line chart: a point a day for the past week,
+    or a weekly average for the last 4 calendar weeks (`span` "month").
 
-    Mon-Sun weeks, as `_weekly_running_series`, over finished days only, as
-    `_at_a_glance`: today's half-counted steps would drag this week's average
-    down every morning. `overnight` values are the exception: Garmin dates
-    sleep and HRV by the morning they end, so today's is last night's and
-    already complete. A day with no reading (zero) is left out of its week's
-    average rather than counted as nothing, and a week with no readings is a
+    Finished days only, as `_at_a_glance`: today's half-counted steps would
+    drag the line down every morning. `overnight` values are the exception:
+    Garmin dates sleep and HRV by the morning they end, so today's is last
+    night's and already complete. A day with no reading (zero) is left out
+    rather than counted as nothing, and a day or week with no readings is a
     break in the line rather than a drop to zero.
 
-    The geometry is worked out here rather than in the template so a wrong
-    scale shows up in a test. Steps sit on a zero baseline; sleep doesn't,
-    because a week's average moves within an hour or so and a zero-based axis
-    would flatten that to a straight line.
+    The headline is the average over everything plotted for the week view
+    (one day alone says little), and the latest week's for the month view.
     """
-    this_monday = _week_start(today)
     last_day = today if overnight else today - timedelta(days=1)
-    finished = [d for d in log.garmin_days if d.date <= last_day.isoformat()]
+    by_date = {d.date: value(d) for d in log.garmin_days if d.date <= last_day.isoformat()}
+
+    def mean(start: date, end: date) -> float | None:
+        values = [
+            v
+            for when, v in by_date.items()
+            if start.isoformat() <= when <= end.isoformat() and v > 0
+        ]
+        return sum(values) / len(values) if values else None
+
     points: list[dict[str, Any]] = []
-    for weeks_ago in range(weeks - 1, -1, -1):
-        start = this_monday - timedelta(weeks=weeks_ago)
-        end = min(start + timedelta(days=6), last_day)
-        values = [value(d) for d in finished if start.isoformat() <= d.date <= end.isoformat()]
-        values = [v for v in values if v > 0]
-        points.append(
-            {
-                "week": start.strftime("%d %b"),
-                "value": sum(values) / len(values) if values else None,
-            }
-        )
+    if span == "month":
+        this_monday = _week_start(today)
+        for weeks_ago in range(3, -1, -1):
+            start = this_monday - timedelta(weeks=weeks_ago)
+            points.append(
+                {
+                    "tick": start.strftime("%d %b"),
+                    "when": f"Week of {start.strftime('%d %b')}",
+                    "value": mean(start, min(start + timedelta(days=6), last_day)),
+                }
+            )
+    else:
+        for days_ago in range(6, -1, -1):
+            day = last_day - timedelta(days=days_ago)
+            points.append(
+                {
+                    "tick": day.strftime("%a"),
+                    "when": day.strftime("%a %d %b"),
+                    "value": mean(day, day),
+                }
+            )
     known = [p["value"] for p in points if p["value"] is not None]
     if len(known) < 2:
         return {}
+    chart = _line_chart(points, label, tick, from_zero, min_step)
+    if span == "month":
+        chart["headline"] = chart["points"][-1]["label"]
+        chart["period"] = f"week of {chart['points'][-1]['tick']}"
+    else:
+        chart["headline"] = label(sum(known) / len(known))
+        chart["period"] = "past 7 days"
+    return chart
 
+
+def _line_chart(
+    points: list[dict[str, Any]],
+    label: Callable[[float], str],
+    tick: Callable[[float], str],
+    from_zero: bool,
+    min_step: float,
+) -> dict[str, Any]:
+    """Lay `points` (oldest first, `value` None for a gap) out on the chart's grid.
+
+    The geometry is worked out here rather than in the template so a wrong
+    scale shows up in a test. Steps sit on a zero baseline; sleep doesn't,
+    because its average moves within an hour or so and a zero-based axis
+    would flatten that to a straight line.
+    """
+    known = [p["value"] for p in points if p["value"] is not None]
     low, high, step = _ticks(0 if from_zero else min(known), max(known), min_step)
 
     def y(v: float) -> float:
         return round(CHART_BOTTOM - (v - low) / (high - low) * (CHART_BOTTOM - CHART_TOP), 1)
 
-    gap = (CHART_RIGHT - CHART_LEFT) / (weeks - 1)
+    gap = (CHART_RIGHT - CHART_LEFT) / (len(points) - 1)
     path, pen_down = [], False
     for index, point in enumerate(points):
         point["x"] = round(CHART_LEFT + index * gap, 1)
@@ -1387,17 +1437,17 @@ def _weekly_chart(
     while at <= high + step / 2:
         grid.append({"y": y(at), "label": tick(at)})
         at += step
-    plotted = [p for p in points if p["value"] is not None]
     return {
         "width": CHART_WIDTH,
         "height": CHART_HEIGHT,
         "left": CHART_LEFT,
         "right": CHART_RIGHT,
         "path": " ".join(path),
-        "points": plotted,
-        "latest": plotted[-1],
+        "points": [p for p in points if p["value"] is not None],
+        # Every slot gets an x-axis label, gaps included, so a missing day
+        # or week reads as an empty slot rather than a squeezed axis.
+        "ticks": [{"x": p["x"], "label": p["tick"]} for p in points],
         "grid": grid,
-        "first_week": points[0]["week"],
     }
 
 

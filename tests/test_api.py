@@ -12,12 +12,12 @@ from gymlog import chat, store
 from gymlog import settings as settings_module
 from gymlog.api.main import create_app
 from gymlog.api.routes import (
+    _fitness_chart,
     _hours_label,
     _hours_tick,
     _steps_label,
     _steps_tick,
     _ticks,
-    _weekly_chart,
 )
 from gymlog.model import Block, Day, Log, SetLog
 
@@ -1761,26 +1761,57 @@ def test_fitness_insights_page_shows_weekly_steps_and_sleep(client, seeded):
     page = client.get("/insights/fitness").text
     assert "VO2 max trend" not in page
     assert page.count('class="weekly"') == 2
-    assert "8,240 a day" in page
+    assert "8,240 a day · past 7 days" in page
     assert "7h 12m a night" in page
+    month = client.get("/insights/fitness?span=month").text
+    assert "8,240 a day · week of" in month
+    assert 'class="chip on" href="/insights/fitness?span=month"' in month
+    # An unknown span falls back to the default rather than erroring.
+    assert "past 7 days" in client.get("/insights/fitness?span=year").text
 
 
-def test_weekly_chart_averages_finished_days_and_skips_missing_ones():
+def test_fitness_chart_month_averages_finished_weeks_and_skips_missing_days():
 
     today = date(2026, 10, 23)  # a Friday
     days = [
-        garmin_day(date="2026-10-12", sleep_seconds=6 * 3600),  # last week
+        garmin_day(date="2026-09-27", sleep_seconds=9 * 3600),  # 4 weeks back: off the chart
+        garmin_day(date="2026-09-28", sleep_seconds=6 * 3600),  # 3 weeks back
         garmin_day(date="2026-10-19", sleep_seconds=7 * 3600),  # this week
         garmin_day(date="2026-10-20", sleep_seconds=0),  # unworn: not a zero
         garmin_day(date="2026-10-21", sleep_seconds=8 * 3600),
         garmin_day(date="2026-10-23", sleep_seconds=3600),  # today: unfinished
     ]
     log = Log(garmin_days=tuple(days))
-    chart = _weekly_chart(log, today, lambda d: d.sleep_seconds / 3600, _hours_label, _hours_tick)
+    chart = _fitness_chart(
+        log, today, "month", lambda d: d.sleep_seconds / 3600, _hours_label, _hours_tick
+    )
     assert [p["label"] for p in chart["points"]] == ["6h 0m", "7h 30m"]
-    # Six weeks with nothing at all are a gap, not points at zero.
-    assert chart["path"].count("M") == 1
+    assert [t["label"] for t in chart["ticks"]] == ["28 Sep", "05 Oct", "12 Oct", "19 Oct"]
+    # Two empty weeks between are a gap, not points at zero.
+    assert chart["path"].count("M") == 2
+    assert chart["headline"] == "7h 30m"
+    assert chart["period"] == "week of 19 Oct"
     assert chart["grid"][0]["label"] == "6h"
+
+
+def test_fitness_chart_week_is_a_point_a_day_for_the_past_seven():
+
+    today = date(2026, 10, 23)  # a Friday
+    days = [
+        garmin_day(date="2026-10-15", steps=9000),  # eight days back: off the chart
+        garmin_day(date="2026-10-16", steps=4000),
+        garmin_day(date="2026-10-22", steps=6000),
+        garmin_day(date="2026-10-23", steps=100),  # today: unfinished
+    ]
+    log = Log(garmin_days=tuple(days))
+    chart = _fitness_chart(log, today, "week", lambda d: d.steps, _steps_label, _steps_tick)
+    assert [t["label"] for t in chart["ticks"]] == ["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"]
+    assert [p["label"] for p in chart["points"]] == ["4,000", "6,000"]
+    assert chart["headline"] == "5,000"
+    assert chart["period"] == "past 7 days"
+    # The end labels sit on the first and last slots, not off to one side.
+    assert chart["ticks"][0]["x"] == chart["points"][0]["x"]
+    assert chart["ticks"][-1]["x"] == chart["points"][-1]["x"]
 
 
 def test_weekly_chart_ticks_round_numbers():
@@ -1789,12 +1820,14 @@ def test_weekly_chart_ticks_round_numbers():
     assert _ticks(7.1, 7.8, min_step=1) == (7, 8, 1)
 
 
-def test_weekly_chart_needs_two_weeks_to_draw_a_line():
+def test_fitness_chart_needs_two_points_to_draw_a_line():
 
     log = Log(garmin_days=(garmin_day(date="2026-10-21", steps=5000),))
-    assert (
-        _weekly_chart(log, date(2026, 10, 23), lambda d: d.steps, _steps_label, _steps_tick) == {}
-    )
+    for span in ("week", "month"):
+        chart = _fitness_chart(
+            log, date(2026, 10, 23), span, lambda d: d.steps, _steps_label, _steps_tick
+        )
+        assert chart == {}
 
 
 def test_fitness_insights_page_shows_weekly_overnight_hrv(client, seeded):
@@ -1819,7 +1852,7 @@ def test_fitness_insights_page_shows_weekly_overnight_hrv(client, seeded):
     assert 'class="fitbar"' not in page
 
 
-def test_weekly_chart_counts_today_for_overnight_values_only():
+def test_fitness_chart_counts_today_for_overnight_values_only():
     today = date(2026, 10, 23)
     days = (
         garmin_day(date="2026-10-14", steps=5000, sleep_seconds=6 * 3600),
@@ -1827,12 +1860,29 @@ def test_weekly_chart_counts_today_for_overnight_values_only():
         garmin_day(date="2026-10-23", steps=1000, sleep_seconds=8 * 3600),
     )
     log = Log(garmin_days=days)
-    steps = _weekly_chart(log, today, lambda d: d.steps, _steps_label, _steps_tick)
-    sleep = _weekly_chart(
-        log, today, lambda d: d.sleep_seconds / 3600, _hours_label, _hours_tick, overnight=True
+    steps = _fitness_chart(log, today, "month", lambda d: d.steps, _steps_label, _steps_tick)
+    sleep = _fitness_chart(
+        log,
+        today,
+        "month",
+        lambda d: d.sleep_seconds / 3600,
+        _hours_label,
+        _hours_tick,
+        overnight=True,
     )
-    assert steps["latest"]["label"] == "5,000"
-    assert sleep["latest"]["label"] == "7h 0m"
+    assert steps["headline"] == "5,000"
+    assert sleep["headline"] == "7h 0m"
+    # Today's sleep is last night's, so the week view ends on today.
+    sleep_week = _fitness_chart(
+        log,
+        today,
+        "week",
+        lambda d: d.sleep_seconds / 3600,
+        _hours_label,
+        _hours_tick,
+        overnight=True,
+    )
+    assert sleep_week["points"][-1]["when"] == "Fri 23 Oct"
 
 
 def test_fitness_insights_page_shows_at_a_glance_from_the_latest_day(client, seeded):

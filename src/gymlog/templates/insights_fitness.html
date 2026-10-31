@@ -83,15 +83,15 @@
 {% endif %}
 
 {# One measure per chart, never two on one axis: steps and hours share no
-   scale. Every point is a focusable target with a native tooltip; the latest
-   week is the one value written out, in the subtitle rather than beside the
-   line, where there is no room for it at phone width. #}
+   scale. Every point is a focusable target with a native tooltip; the
+   headline is the one value written out, in the subtitle rather than beside
+   the line, where there is no room for it at phone width. #}
 {% macro weekly_line(title, unit, chart, note="") %}
 <div class="card">
   <div class="slot">{{ title }}</div>
-  <div class="fit-sub">{{ chart.latest.label }} {{ unit }} · week of {{ chart.latest.week }}{% if note %} · {{ note }}{% endif %}</div>
+  <div class="fit-sub">{{ chart.headline }} {{ unit }} · {{ chart.period }}{% if note %} · {{ note }}{% endif %}</div>
   <svg class="weekly" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img"
-       aria-label="{{ title }}: {% for p in chart.points %}week of {{ p.week }} {{ p.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
+       aria-label="{{ title }}: {% for p in chart.points %}{{ p.when }} {{ p.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
     {% for g in chart.grid %}
     <line class="grid" x1="{{ chart.left }}" x2="{{ chart.right }}" y1="{{ g.y }}" y2="{{ g.y }}"/>
     <text class="axis" x="{{ chart.left - 6 }}" y="{{ g.y }}" text-anchor="end" dominant-baseline="middle">{{ g.label }}</text>
@@ -99,17 +99,24 @@
     <path class="trace" d="{{ chart.path }}"/>
     {% for p in chart.points %}
     <g class="point" tabindex="0">
-      <title>Week of {{ p.week }}: {{ p.label }} {{ unit }}</title>
+      <title>{{ p.when }}: {{ p.label }} {{ unit }}</title>
       <circle class="hit" cx="{{ p.x }}" cy="{{ p.y }}" r="14"/>
       <circle class="dot" cx="{{ p.x }}" cy="{{ p.y }}" r="4"/>
     </g>
     {% endfor %}
-    <text class="axis" x="{{ chart.left }}" y="{{ chart.height - 4 }}">{{ chart.first_week }}</text>
-    <text class="axis" x="{{ chart.right }}" y="{{ chart.height - 4 }}" text-anchor="end">This week</text>
+    {% for t in chart.ticks %}
+    <text class="axis" x="{{ t.x }}" y="{{ chart.height - 4 }}" text-anchor="middle">{{ t.label }}</text>
+    {% endfor %}
   </svg>
 </div>
 {% endmacro %}
 
+{% if steps_chart or sleep_chart or hrv_chart %}
+<div class="chips">
+  <a class="chip {% if span == 'week' %}on{% endif %}" href="/insights/fitness?span=week">Past week</a>
+  <a class="chip {% if span == 'month' %}on{% endif %}" href="/insights/fitness?span=month">4 weeks</a>
+</div>
+{% endif %}
 {% if steps_chart %}{{ weekly_line("Steps", "a day", steps_chart) }}{% endif %}
 {% if sleep_chart %}{{ weekly_line("Sleep", "a night", sleep_chart) }}{% endif %}
 {% if hrv_chart %}{{ weekly_line("Overnight HRV", "a night", hrv_chart, "last night " ~ hrv_status if hrv_status else "") }}{% endif %}
