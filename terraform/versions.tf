@@ -11,12 +11,6 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 5.0"
     }
-    # Container Apps' built-in auth (main.container-apps-auth.tf): azurerm has
-    # no resource for an authConfig.
-    azapi = {
-      source  = "Azure/azapi"
-      version = "~> 2.0"
-    }
     # Transitive dependency of module.naming, declared so the provider footprint
     # is visible.
     random = {
@@ -39,9 +33,5 @@ provider "azurerm" {
     }
   }
 
-  use_oidc = true
-}
-
-provider "azapi" {
   use_oidc = true
 }
