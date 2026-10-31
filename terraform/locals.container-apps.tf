@@ -23,6 +23,11 @@ locals {
   # uvicorn binds this, the Dockerfile EXPOSEs it, and both probes below check it.
   target_port = 8000
 
+  # The secret name Container Apps' built-in auth treats as "use the managed
+  # identity with this client ID as a federated credential" instead of reading
+  # a client secret from it.
+  auth_identity_secret_name = "override-use-mi-fic-assertion-client-id"
+
   # The smallest combination Container Apps accepts; memory must be 2 GiB per
   # vCPU. This renders a handful of Jinja templates against a 100 KB document —
   # it is bounded by the cold start, not by CPU.
