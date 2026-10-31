@@ -13,10 +13,12 @@ name: cd-terraform
 # AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID and makes the token subject
 # `<repo prefix>:environment:dev` — the subject the identity's one federated
 # credential trusts, for ci-terraform's plans and this apply alike. The
-# identity holds Contributor on rg-gymlog-dev and Reader on the
-# subscription, nothing more. Contributor cannot write role assignments, so a
-# change that adds or replaces one fails here with AuthorizationFailed; apply
-# that change locally with `make apply ENV=dev`, then re-run this workflow.
+# identity holds Contributor and Role Based Access Control Administrator on
+# rg-gymlog-dev (conditioned: it can't grant Owner, User Access Administrator or
+# RBAC Administrator), Reader on the subscription and join on
+# cae-platform-dev, nothing more. So role assignments inside rg-gymlog-dev
+# apply here. One anywhere else fails with AuthorizationFailed: apply that
+# change locally with `make apply ENV=dev`, then re-run this workflow.
 on:
   push:
     branches: [main]
