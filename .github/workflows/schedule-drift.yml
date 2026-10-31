@@ -26,7 +26,7 @@ jobs:
       id-token: write
       contents: read
       issues: write # a clean plan closes a stale deploy-failed issue
-    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@cf0cef323fa1178c47faf5bde016cc329572652e # v1.19.0
+    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@e58b7edf840e0d24387064427d7c7e81338c6d40 # v1.20.0
     with:
       environment: dev
       drift: true
