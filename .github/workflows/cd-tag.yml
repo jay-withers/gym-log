@@ -74,6 +74,7 @@ jobs:
       contents: read
       packages: write
       id-token: write # cd-publish's deploy job
+      attestations: write # cd-publish's provenance attestations
       issues: write # cd-publish's deploy-failed issue
       security-events: write # cd-publish's Trivy upload
     uses: ./.github/workflows/cd-publish.yml
