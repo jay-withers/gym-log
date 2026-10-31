@@ -50,7 +50,7 @@ jobs:
       id-token: write
       contents: read
       pull-requests: write # the plan comment
-    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@8b7425eeca2c88ce25d82983f451a5386057c503 # v1.17.0
+    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@e58b7edf840e0d24387064427d7c7e81338c6d40 # v1.20.0
     with:
       environment: dev
 
