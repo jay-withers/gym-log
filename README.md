@@ -319,10 +319,9 @@ corrected; the ignore meant no apply ever pushed it.
 Ordering-sensitive:
 
 1. In [jay-withers/github-repos](https://github.com/jay-withers/github-repos):
-   add `gym-log` to `scripts/bootstrap-state.ps1`'s `containers.json` and re-run
-   it, **then** add the repository and `state_consumers` entries to
-   `terraform/terraform.tfvars`, then apply. The container must exist before the
-   data source looks it up.
+   add the repository and `state_consumers` entries to
+   `terraform/terraform.tfvars` and apply. That creates the state container
+   too.
 2. Nothing to set by hand for CI: `github-repos` puts `AZURE_CLIENT_ID`,
    `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` on this repo's `dev`
    environment.
