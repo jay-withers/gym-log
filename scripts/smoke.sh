@@ -47,9 +47,22 @@ fail() {
   exit 1
 }
 
+# ARM answers the odd read with a 503 (market-agent's v0.26.3 deploy was
+# rolled back for one), so read-only az calls get four tries. The POST that
+# starts a selfcheck run doesn't: a retry could start a second run.
+az_read() {
+  local attempt
+  for attempt in 1 2 3 4; do
+    if az "$@"; then return 0; fi
+    ((attempt < 4)) || return 1
+    echo "smoke: az $1 $2 failed (try $attempt of 4), retrying in $((attempt * 10))s" >&2
+    sleep $((attempt * 10))
+  done
+}
+
 check_app() {
   local name="$1" app fqdn latest ready configured deadline body code version
-  app="$(az containerapp show -g "$rg" -n "$name" -o json)"
+  app="$(az_read containerapp show -g "$rg" -n "$name" -o json)"
   configured="$(jq -r '.properties.template.containers[0].image' <<<"$app")"
   [[ "$configured" == "$image" ]] || fail "$name is configured with $configured, not $image"
   fqdn="$(jq -r '.properties.configuration.ingress.fqdn // empty' <<<"$app")"
@@ -66,7 +79,7 @@ check_app() {
       if [[ "$version" == "$tag" ]]; then
         break
       elif [[ -z "$version" ]]; then
-        ready="$(az containerapp show -g "$rg" -n "$name" --query properties.latestReadyRevisionName -o tsv)"
+        ready="$(az_read containerapp show -g "$rg" -n "$name" --query properties.latestReadyRevisionName -o tsv)"
         [[ "$ready" == "$latest" ]] && break
       fi
     fi
@@ -90,7 +103,7 @@ check_app() {
 
 check_job() {
   local name="$1" job configured body execution
-  job="$(az containerapp job show -g "$rg" -n "$name" -o json)"
+  job="$(az_read containerapp job show -g "$rg" -n "$name" -o json)"
   configured="$(jq -r '.properties.template.containers[0].image' <<<"$job")"
   [[ "$configured" == "$image" ]] || fail "job $name is configured with $configured, not $image"
   echo "smoke: job $name: configured with $tag"
@@ -116,7 +129,7 @@ wait_for_runs() {
   for entry in "${started[@]}"; do
     name="${entry%%/*}" execution="${entry#*/}"
     while :; do
-      status="$(az containerapp job execution show -g "$rg" -n "$name" \
+      status="$(az_read containerapp job execution show -g "$rg" -n "$name" \
         --job-execution-name "$execution" --query properties.status -o tsv)"
       case "$status" in
         Succeeded) echo "smoke: job $name: selfcheck run succeeded"; break ;;
