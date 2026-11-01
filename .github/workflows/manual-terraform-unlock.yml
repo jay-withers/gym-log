@@ -1,0 +1,32 @@
+name: manual-terraform-unlock
+
+# Releases a stuck Terraform state lock, through the shared
+# terraform-unlock.yml. Use it when a plan or apply died mid-run (a cancelled
+# job, a lost runner) and every later run fails with "Error acquiring the
+# state lock": run this by hand (Actions -> Run workflow) with the lock ID
+# that error prints, then re-run the plan or apply.
+#
+# Same environment and identity as cd-terraform, so no extra grant: breaking
+# the lease is a write on this repo's state container. The shared job refuses
+# while another Terraform run is in progress here (hence `actions: read`).
+on:
+  workflow_dispatch:
+    inputs:
+      lock-id:
+        description: Lock ID from the "Error acquiring the state lock" message
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  unlock:
+    permissions:
+      id-token: write
+      contents: read
+      actions: read # the in-progress check
+    uses: jay-withers/workflows/.github/workflows/terraform-unlock.yml@b601226fd14608467b882d453891af76b3d4c41a # v1.23.0
+    with:
+      lock-id: ${{ inputs.lock-id }}
+      environment: dev
