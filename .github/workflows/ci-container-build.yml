@@ -53,7 +53,7 @@ jobs:
     permissions:
       contents: read
       security-events: write # Trivy findings to code scanning
-    uses: jay-withers/workflows/.github/workflows/docker.yml@8b7425eeca2c88ce25d82983f451a5386057c503 # v1.17.0
+    uses: jay-withers/workflows/.github/workflows/docker.yml@ab2039ca464268f3298e14ae9941837ba5492411 # v1.24.6
     with:
       images: |
         [{"name": "gymlog", "context": "."}]
