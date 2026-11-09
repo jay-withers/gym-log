@@ -1,6 +1,6 @@
 {
   "name": "gym-log",
-  "image": "ghcr.io/jay-withers/dev-containers/terraform:v0.19.7@sha256:b196387029a7afef6fbc47e8be5e30075760348f14c24730b4eda2823aff4e49",
+  "image": "ghcr.io/jay-withers/dev-containers/terraform:v0.20.18@sha256:7b6f483c8faceecef4760f279cde3f7376134e999a5f78ac364d7ae6ff256f77",
   "mounts": [
     // The same source works on every host: Docker Desktop (macOS, Windows)
     // resolves it inside its own VM. docker-socket-setup handles the ownership
