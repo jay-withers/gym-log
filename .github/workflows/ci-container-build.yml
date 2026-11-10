@@ -15,6 +15,14 @@ name: ci-container-build
 on:
   pull_request:
     branches: [main]
+  # Daily on main as well, so a fix published upstream for something in the
+  # image (a CVE the Trivy gate fails on) is heard about the day it lands,
+  # through a build-failed issue, rather than as every Renovate PR failing
+  # container-build for a reason unrelated to it. Run it by hand to re-check
+  # once fixed; the next green build closes the issue.
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -26,6 +34,7 @@ jobs:
   # the check, and a required check that never reports leaves the pull request
   # pending for ever.
   changes:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -49,14 +58,20 @@ jobs:
   # with cd-publish by image name, so a merge usually reuses the PR's layers.
   build:
     needs: changes
-    if: needs.changes.outputs.image == 'true'
+    # Outside a pull request `changes` is skipped, and a skipped need would
+    # skip this too without !cancelled().
+    if: >-
+      !cancelled()
+      && (github.event_name != 'pull_request' || needs.changes.outputs.image == 'true')
     permissions:
       contents: read
       security-events: write # Trivy findings to code scanning
-    uses: jay-withers/workflows/.github/workflows/docker.yml@097b8b97138b3af033cab166dd31e84deccf8f9d # v1.24.11
+      issues: write # build-failed issue, outside pull requests
+    uses: jay-withers/workflows/.github/workflows/docker.yml@eb13ecca8f178aa368d78f4266ba40d9ab78f729 # v1.25.0
     with:
       images: |
         [{"name": "gymlog", "context": "."}]
+      failure-issue: ${{ github.event_name != 'pull_request' }}
 
   # The required status check ("container-build"). Skipped counts as success,
   # so a pull request that touches nothing in the image passes; a failed or
@@ -70,12 +85,14 @@ jobs:
     steps:
       - name: Verify the build job
         env:
+          EVENT: ${{ github.event_name }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           BUILD_RESULT: ${{ needs.build.result }}
         run: |
           echo "changes=$CHANGES_RESULT build=$BUILD_RESULT"
           # A failed path filter skips the build, which must not read as a pass.
-          if [ "$CHANGES_RESULT" != "success" ]; then
+          # Only a pull request runs the filter; elsewhere it is skipped.
+          if [ "$EVENT" = "pull_request" ] && [ "$CHANGES_RESULT" != "success" ]; then
             echo "::error::The path filter did not run, so the build was never decided."
             exit 1
           fi
