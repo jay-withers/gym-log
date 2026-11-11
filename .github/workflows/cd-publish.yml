@@ -56,7 +56,7 @@ jobs:
       id-token: write # provenance and SBOM attestations
       attestations: write
       security-events: write # Trivy findings to code scanning
-    uses: jay-withers/workflows/.github/workflows/docker.yml@eb13ecca8f178aa368d78f4266ba40d9ab78f729 # v1.25.0
+    uses: jay-withers/workflows/.github/workflows/docker.yml@1961dfbd65114641c5fcfd4677a7ca3f0668e513 # v1.26.1
     with:
       images: |
         [{"name": "gymlog", "context": "."}]
@@ -80,7 +80,7 @@ jobs:
       id-token: write
       contents: read
       issues: write # the deploy-failed issue
-    uses: jay-withers/workflows/.github/workflows/container-apps-deploy.yml@eb13ecca8f178aa368d78f4266ba40d9ab78f729 # v1.25.0
+    uses: jay-withers/workflows/.github/workflows/container-apps-deploy.yml@1961dfbd65114641c5fcfd4677a7ca3f0668e513 # v1.26.1
     with:
       version: ${{ inputs.version }}
       verify-images: ghcr.io/${{ github.repository }}/gymlog

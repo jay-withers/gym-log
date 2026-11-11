@@ -1,0 +1,15 @@
+# Tool versions for this repo. Locally: run jay-withers/toolchain's setup.sh
+# once per machine, then `mise install` here. CI installs the same versions
+# (jay-withers/workflows v1.26.1+), and Renovate keeps them current.
+
+[tools]
+# runs pre-commit and its Python hooks.
+python = "3.14.10"
+uv = "0.13.6"
+pre-commit = "4.7.0"
+# actionlint lints workflow run: blocks with it, and silently skips them without it.
+shellcheck = "0.11.0"
+terraform = "1.17.1"
+tflint = "0.65.0"
+terraform-docs = "0.24.0"
+checkov = "3.3.20"

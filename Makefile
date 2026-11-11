@@ -16,13 +16,10 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-# Expected to be re-run after a dev container rebuild, not just after a clone:
-# uv installs into ~/.local/bin, which is the container's writable layer and
-# does not survive one.
-install: ## Install pre-commit hooks and Python dependencies
+install: ## Install mise tools, pre-commit hooks and Python dependencies
+	mise install
 	pre-commit install
 	pre-commit install --hook-type commit-msg
-	command -v uv >/dev/null || curl -fsSL https://astral.sh/uv/install.sh | sh
 	uv sync --extra dev
 
 test: ## Run the test suite
