@@ -34,7 +34,7 @@ jobs:
     # Deliberately not path filtered: the suite takes under a second, and a
     # required check skipped by a path filter never reports, which blocks a pull
     # request rather than passing it.
-    uses: jay-withers/workflows/.github/workflows/python.yml@eb13ecca8f178aa368d78f4266ba40d9ab78f729 # v1.25.0
+    uses: jay-withers/workflows/.github/workflows/python.yml@1961dfbd65114641c5fcfd4677a7ca3f0668e513 # v1.26.1
     with:
       # The package is at the repository root; there is one deliverable and no
       # apps/ nesting to point at.

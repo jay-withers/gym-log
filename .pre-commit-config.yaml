@@ -79,10 +79,8 @@ repos:
   - repo: local
     hooks:
       # Replaces the upstream hadolint-docker hook: that one calls
-      # `docker system info`, which fails whenever DOCKER_HOST is unset — and
-      # pre-commit run from `git commit` inherits a non-login shell, where the
-      # dev container's profile snippet has not run. A blocked commit depending
-      # on how the shell was started is not a trade worth making.
+      # `docker system info` and fails with a wall of JSON when the daemon is
+      # unreachable. scripts/hadolint.sh says what is wrong instead.
       - id: hadolint
         name: Lint Dockerfiles
         description: Runs hadolint against every Dockerfile, resolving DOCKER_HOST first.

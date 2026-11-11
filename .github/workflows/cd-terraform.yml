@@ -24,7 +24,7 @@ on:
     branches: [main]
     paths:
       - "terraform/**"
-      - ".terraform-version"
+      - "mise.toml"
       - ".github/workflows/cd-terraform.yml"
   # The manual apply: also re-runs a failed apply, or corrects drift.
   workflow_dispatch:
@@ -38,7 +38,7 @@ jobs:
       id-token: write
       contents: read
       issues: write # the deploy-failed issue
-    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@eb13ecca8f178aa368d78f4266ba40d9ab78f729 # v1.25.0
+    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@1961dfbd65114641c5fcfd4677a7ca3f0668e513 # v1.26.1
     with:
       environment: dev
       apply: ${{ github.event_name == 'workflow_dispatch' }}
