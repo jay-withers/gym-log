@@ -49,19 +49,19 @@ def checks() -> list[tuple[str, Callable[[], object]]]:
         if not secret(name):
             raise ValueError("resolved to an empty value")
 
-    def secret_checks(names: tuple[str, ...]) -> list[tuple[str, Callable[[], object]]]:
+    def presence_checks(names: tuple[str, ...]) -> list[tuple[str, Callable[[], object]]]:
         return [(f"secret {name}", partial(present, name)) for name in names]
 
     found: list[tuple[str, Callable[[], object]]] = [
         ("settings", settings),
-        *secret_checks(SECRETS),
+        *presence_checks(SECRETS),
         ("storage", store.load),
     ]
     # Only the backup job is given a bucket, so only its selfcheck lists these.
     if settings().backup_bucket:
         from . import backup
 
-        found += secret_checks(BACKUP_SECRETS)
+        found += presence_checks(BACKUP_SECRETS)
         found.append(("backup bucket", backup.check_bucket))
     return found
 
