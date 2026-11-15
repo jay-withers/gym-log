@@ -17,7 +17,7 @@ import pytest
 
 from gymlog import store, telemetry
 from gymlog.cli import _configure_logging, _terminate, main
-from gymlog.model import Log
+from gymlog.model import Insight, Log
 
 from .factories import block, garmin_activity, garmin_day, garmin_fitness, insight
 
@@ -102,7 +102,7 @@ def test_insight_records_what_generate_insight_returns(monkeypatch):
 
 
 def test_insight_does_not_email_unless_asked(monkeypatch):
-    sent = []
+    sent: list[Insight] = []
     monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: insight())
     monkeypatch.setattr("gymlog.mailer.send_insight", sent.append)
 
@@ -113,7 +113,7 @@ def test_insight_does_not_email_unless_asked(monkeypatch):
 
 def test_insight_email_sends_what_was_recorded(monkeypatch):
     generated = insight(id="i1")
-    sent = []
+    sent: list[Insight] = []
     monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: generated)
     monkeypatch.setattr("gymlog.mailer.send_insight", sent.append)
 

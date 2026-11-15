@@ -34,18 +34,20 @@ jobs:
     # Deliberately not path filtered: the suite takes under a second, and a
     # required check skipped by a path filter never reports, which blocks a pull
     # request rather than passing it.
-    uses: jay-withers/workflows/.github/workflows/python.yml@1961dfbd65114641c5fcfd4677a7ca3f0668e513 # v1.26.1
+    uses: jay-withers/workflows/.github/workflows/python.yml@80eaaece845470ae15cb01af2cb859afcd01a66d # v1.28.0
     with:
       # The package is at the repository root; there is one deliverable and no
       # apps/ nesting to point at.
       working-directory: .
       python-version: "3.14"
       extras: dev
-      # Reported, never gated. The progression rule and the model are pure and
-      # should sit near 100%; the HTTP surface is covered through TestClient.
-      # A threshold would mostly measure how much of the Azure SDK path is
-      # mocked, which asserts the mock rather than the behaviour.
+      # The total is reported, never gated: a floor on it would mostly measure
+      # how much of the Azure SDK path is mocked. diff-coverage gates only the
+      # lines a PR changes, where the cheap way to pass is to test the new
+      # code. A test that only asserts a mock still counts, so review tests.
       coverage: gymlog
       coverage-pr-comment: true
+      diff-coverage: "80"
+      typecheck: mypy
       # No `postgres` input: this project has no database. That is the whole
       # reason the shared platform carries none.
