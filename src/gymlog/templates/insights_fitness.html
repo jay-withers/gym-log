@@ -4,8 +4,8 @@
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
 
-{% set charts = [steps_chart, sleep_chart, hrv_chart, resting_hr_chart, stress_chart, vo2max_chart, lt_bpm_chart, lt_pace_chart] | select | list %}
-{% if glance or charts or recovery %}
+{% set charts = [steps_chart, sleep_chart, hrv_chart, resting_hr_chart, stress_chart, vo2max_chart, lt_bpm_chart, lt_pace_chart, body_battery_chart, readiness_chart, weight_chart] | select | list %}
+{% if glance or charts or recovery or intensity %}
 <style>
   .fit-sub { color: var(--dim); font-size: 13px; }
   /* Three gauges across for the values with a scale to sit on (a goal, a
@@ -22,6 +22,8 @@
   .figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px;
              padding-top: 12px; border-top: 1px solid var(--line); text-align: center; }
   .glance-val { font-size: 18px; font-weight: 600; }
+  .meter { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: 8px; }
+  .meter span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
   .weekly { display: block; width: 100%; height: auto; margin-top: 8px; overflow: visible; }
   .weekly .grid { stroke: var(--line); stroke-width: 1; }
   .weekly .axis { fill: var(--dim); font-size: 10px; }
@@ -82,6 +84,32 @@
       {% if glance.lactate_threshold_bpm %}<div class="gauge-sub">/km · {{ glance.lactate_threshold_bpm }} bpm</div>{% endif %}
     </div>
   </div>
+  <div class="figures">
+    <div>
+      <div class="slot">Body Battery</div>
+      <div class="glance-val">{{ glance.body_battery_high or "—" }}</div>
+      {% if glance.body_battery_high %}<div class="gauge-sub">high · low {{ glance.body_battery_low }}</div>{% endif %}
+    </div>
+    <div>
+      <div class="slot">Readiness</div>
+      <div class="glance-val">{{ glance.readiness or "—" }}</div>
+      {% if glance.readiness %}<div class="gauge-sub">{{ glance.readiness_level }}</div>{% endif %}
+    </div>
+    <div>
+      {# Acute over chronic training load; the title spells it out. #}
+      <div class="slot" title="7-day load over 28-day load">Load</div>
+      <div class="glance-val">{{ glance.load_ratio or "—" }}</div>
+      {% if glance.load_ratio %}<div class="gauge-sub">{{ glance.load_level }}</div>{% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if intensity %}
+<div class="card">
+  <div class="slot">Intensity minutes</div>
+  <div class="fit-sub">{{ intensity.minutes }} of {{ intensity.goal }} this week{% if intensity.minutes >= intensity.goal %} · goal met{% endif %}</div>
+  <div class="meter" role="img" aria-label="{{ intensity.minutes }} of {{ intensity.goal }} intensity minutes this week"><span style="width: {{ intensity.pct }}%"></span></div>
 </div>
 {% endif %}
 
@@ -128,6 +156,9 @@
 {% if vo2max_chart %}{{ weekly_line("VO2 max", "", vo2max_chart) }}{% endif %}
 {% if lt_bpm_chart %}{{ weekly_line("Lactate threshold HR", "bpm", lt_bpm_chart) }}{% endif %}
 {% if lt_pace_chart %}{{ weekly_line("Lactate threshold pace", "/km", lt_pace_chart, "lower is faster") }}{% endif %}
+{% if body_battery_chart %}{{ weekly_line("Body Battery", "peak", body_battery_chart) }}{% endif %}
+{% if readiness_chart %}{{ weekly_line("Training readiness", "", readiness_chart) }}{% endif %}
+{% if weight_chart %}{{ weekly_line("Weight", "kg", weight_chart) }}{% endif %}
 
 <p class="last">{% if synced_at %}Garmin last synced {{ synced_at }}{% else %}Never synced yet{% endif %} — <a href="/garmin">sync</a></p>
 {% else %}

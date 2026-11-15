@@ -49,6 +49,10 @@
     {{ d.steps }} steps
     {% if d.resting_hr %}· resting HR {{ d.resting_hr }}{% endif %}
     {% if d.sleep_seconds %}· sleep {{ d.sleep_seconds // 3600 }}h{{ (d.sleep_seconds % 3600) // 60 }}m{% endif %}
+    {% if d.body_battery_high %}· Body Battery {{ d.body_battery_high }}-{{ d.body_battery_low }}{% endif %}
+    {% if d.training_readiness %}· readiness {{ d.training_readiness }}{% endif %}
+    {% if d.intensity_minutes %}· {{ d.intensity_minutes }} intensity min{% endif %}
+    {% if d.weight_grams %}· {{ "%.1f" | format(d.weight_grams / 1000) }} kg{% endif %}
   </p>
 </div>
 {% endfor %}

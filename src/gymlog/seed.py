@@ -257,6 +257,10 @@ def _garmin_activities(now: date) -> tuple[GarminActivity, ...]:
     )
 
 
+# Garmin's words for each sample day's readiness score below.
+READINESS_LEVELS = ("HIGH", "MODERATE", "HIGH", "MODERATE", "MODERATE", "HIGH", "LOW")
+
+
 def _garmin_days(now: date) -> tuple[GarminDay, ...]:
     # Oldest first, matching how `Log.to_json` sorts these by date — same
     # reasoning as `_garmin_activities` above. Eight weeks, so the weekly steps
@@ -275,6 +279,13 @@ def _garmin_days(now: date) -> tuple[GarminDay, ...]:
             hrv_ms=[61, 54, 66, 58, 57, 63, 52][weekday] + drift // 150,
             hrv_status="BALANCED",
             steps_goal=8500,
+            body_battery_high=[86, 64, 92, 71, 75, 88, 58][weekday],
+            body_battery_low=[18, 12, 25, 15, 20, 22, 9][weekday],
+            intensity_minutes=[44, 0, 62, 10, 38, 0, 70][weekday],
+            training_readiness=[78, 52, 84, 61, 66, 80, 43][weekday],
+            training_readiness_level=READINESS_LEVELS[weekday],
+            # One weigh-in a week, drifting down.
+            weight_grams=(81400 - 150 * (7 - weeks_ago)) if weekday == 0 else 0,
         )
 
     return tuple(day(offset) for offset in range(55, -1, -1))
@@ -290,6 +301,8 @@ def _garmin_fitness(now: date) -> tuple[GarminFitness, ...]:
             vo2max=[51.9, 51.6, 51.2, 51.3, 50.9, 50.8][weeks_ago],
             lactate_threshold_bpm=172,
             lactate_threshold_pace_seconds_per_km=285,
+            acute_load=[340, 365, 390, 372, 401, 428][weeks_ago],
+            chronic_load=[352, 358, 366, 370, 379, 390][weeks_ago],
         )
         for weeks_ago in range(5, -1, -1)
     )
