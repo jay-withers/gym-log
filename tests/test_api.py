@@ -2287,3 +2287,89 @@ def test_recovery_card_is_hidden_without_last_night(client, seeded):
     login(client)
     assert "recovery-verdict" not in client.get("/strength").text
     assert "recovery-verdict" not in client.get("/insights/fitness").text
+
+
+def test_fitness_insights_glance_shows_body_battery_readiness_and_load(client, seeded):
+    today = date.today()
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                garmin_day(
+                    date=(today - timedelta(days=1)).isoformat(),
+                    body_battery_high=88,
+                    body_battery_low=21,
+                ),
+                garmin_day(
+                    date=today.isoformat(),
+                    training_readiness=77,
+                    training_readiness_level="HIGH",
+                ),
+            ],
+            keep_since="2020-01-01",
+            fitness=[garmin_fitness(date=today.isoformat(), acute_load=600, chronic_load=380)],
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert ">88<" in page
+    assert "high · low 21" in page
+    assert ">77<" in page
+    assert ">High<" in page
+    # 600 / 380 = 1.58: above 1.5, a jump in load.
+    assert ">1.6<" in page
+
+
+def test_load_balance_bands():
+    from gymlog.api.routes import _load_balance
+
+    def level(acute, chronic):
+        return _load_balance(garmin_fitness(acute_load=acute, chronic_load=chronic))
+
+    assert level(300, 400) == {"load_ratio": "0.8", "load_level": "Low"}
+    assert level(400, 400)["load_level"] == "Optimal"
+    assert level(610, 400)["load_level"] == "High"
+    assert level(0, 400) == {"load_ratio": "", "load_level": ""}
+    assert _load_balance(None) == {"load_ratio": "", "load_level": ""}
+
+
+def test_intensity_minutes_count_this_calendar_week_including_today():
+    from gymlog.api.routes import _intensity_week
+
+    today = date(2026, 10, 23)  # a Friday
+    log = Log(
+        garmin_days=(
+            garmin_day(date="2026-10-18", intensity_minutes=500),  # last Sunday: off
+            garmin_day(date="2026-10-19", intensity_minutes=40),
+            garmin_day(date="2026-10-21", intensity_minutes=60),
+            garmin_day(date="2026-10-23", intensity_minutes=20),  # today: counts
+        )
+    )
+    assert _intensity_week(log, today) == {"minutes": 120, "goal": 150, "pct": 80}
+    assert _intensity_week(Log(), today) == {}
+
+
+def test_fitness_insights_page_shows_intensity_and_new_trend_charts(client, seeded):
+    today = date.today()
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                garmin_day(
+                    date=(today - timedelta(days=offset)).isoformat(),
+                    body_battery_high=80,
+                    training_readiness=70,
+                    weight_grams=80500,
+                    intensity_minutes=200,
+                )
+                for offset in range(14, -1, -1)
+            ],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "of 150 this week · goal met" in page
+    assert "80 peak · past 7 days" in page
+    assert "Training readiness" in page
+    assert "80.5 kg · past 7 days" in page

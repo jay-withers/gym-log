@@ -40,6 +40,8 @@ class _FakeGarmin:
         self.training_status: dict[str, Any] = {}
         self.lactate_threshold: dict[str, Any] = {}
         self.stress: dict[str, dict[str, Any]] = {}
+        self.readiness: dict[str, list[dict[str, Any]]] = {}
+        self.weigh_ins: dict[str, dict[str, Any]] = {}
         self.calls: list[str] = []
 
     def login(self, tokenstore: str | None = None) -> tuple[None, None]:
@@ -86,6 +88,14 @@ class _FakeGarmin:
     def get_stress_data(self, cdate: str) -> dict[str, Any]:
         self.calls.append(f"stress:{cdate}")
         return self.stress.get(cdate, {})
+
+    def get_training_readiness(self, cdate: str) -> list[dict[str, Any]]:
+        self.calls.append(f"readiness:{cdate}")
+        return self.readiness.get(cdate, [])
+
+    def get_daily_weigh_ins(self, cdate: str) -> dict[str, Any]:
+        self.calls.append(f"weigh_ins:{cdate}")
+        return self.weigh_ins.get(cdate, {})
 
 
 ACTIVITY_PAYLOAD = {
@@ -655,3 +665,137 @@ def test_a_first_run_with_no_cached_session_logs_in_with_none(
     garmin.sync_garmin(today=date(2026, 9, 15))
 
     assert instances[0].logged_in_with is None
+
+
+def _one_day(monkeypatch: pytest.MonkeyPatch, **overrides: Any) -> Any:
+    """Sync a single day (2026-09-15) from a fake with `overrides` set on it."""
+
+    class _Day(_FakeGarmin):
+        def __init__(self, email: str, password: str) -> None:
+            super().__init__(email, password)
+            for name, value in overrides.items():
+                setattr(self, name, value)
+
+        def get_activities_by_date(self, start: str, end: str) -> list[dict[str, Any]]:
+            return []
+
+    monkeypatch.setenv("GARMIN_EMAIL", "me@example.com")
+    monkeypatch.setenv("GARMIN_PASSWORD", "hunter2")
+    monkeypatch.setattr("garminconnect.Garmin", _Day)
+    _activities, days, fitness = garmin.sync_garmin(today=date(2026, 9, 15), days=0)
+    return days[0], fitness
+
+
+def test_a_day_carries_body_battery_and_intensity_minutes_from_the_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    day, _fitness = _one_day(
+        monkeypatch,
+        summaries={
+            "2026-09-15": {
+                "bodyBatteryHighestValue": 88,
+                "bodyBatteryLowestValue": 21,
+                "moderateIntensityMinutes": 20,
+                "vigorousIntensityMinutes": 15,
+            }
+        },
+    )
+    assert (day.body_battery_high, day.body_battery_low) == (88, 21)
+    # Vigorous counts double, as Garmin's weekly goal counts it.
+    assert day.intensity_minutes == 50
+
+
+def test_a_day_takes_the_latest_training_readiness_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    day, _fitness = _one_day(
+        monkeypatch,
+        readiness={
+            "2026-09-15": [
+                {"timestamp": "2026-09-15T09:30:00.0", "score": 71, "level": "MODERATE"},
+                {"timestamp": "2026-09-15T06:10:00.0", "score": 64, "level": "MODERATE"},
+                {"timestamp": "2026-09-15T13:00:00.0", "score": 77, "level": "HIGH"},
+            ]
+        },
+    )
+    assert (day.training_readiness, day.training_readiness_level) == (77, "HIGH")
+
+
+def test_a_day_carries_its_last_weigh_in_in_grams(monkeypatch: pytest.MonkeyPatch) -> None:
+    day, _fitness = _one_day(
+        monkeypatch,
+        weigh_ins={"2026-09-15": {"dateWeightList": [{"weight": 81200.0}, {"weight": 80900.0}]}},
+    )
+    assert day.weight_grams == 80900
+
+
+def test_new_day_readings_default_to_zero_when_garmin_has_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    day, _fitness = _one_day(monkeypatch)
+    assert day.body_battery_high == day.intensity_minutes == 0
+    assert day.training_readiness == day.weight_grams == 0
+    assert day.training_readiness_level == ""
+
+
+def test_failed_readiness_and_weigh_in_fetches_do_not_abort_the_day(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(*_args: Any) -> Any:
+        raise RuntimeError("Garmin is down")
+
+    day, _fitness = _one_day(
+        monkeypatch,
+        summaries={"2026-09-15": {"totalSteps": 4000}},
+        get_training_readiness=fail,
+        get_daily_weigh_ins=fail,
+    )
+    assert day.steps == 4000
+    assert day.training_readiness == day.weight_grams == 0
+
+
+def test_fitness_reads_the_primary_devices_training_load(monkeypatch: pytest.MonkeyPatch) -> None:
+    _day, fitness = _one_day(
+        monkeypatch,
+        training_status={
+            "mostRecentTrainingStatus": {
+                "latestTrainingStatusData": {
+                    "111": {
+                        "primaryTrainingDevice": False,
+                        "acuteTrainingLoadDTO": {
+                            "dailyTrainingLoadAcute": 900,
+                            "dailyTrainingLoadChronic": 100,
+                        },
+                    },
+                    "222": {
+                        "primaryTrainingDevice": True,
+                        "acuteTrainingLoadDTO": {
+                            "dailyTrainingLoadAcute": 412.6,
+                            "dailyTrainingLoadChronic": 380,
+                        },
+                    },
+                }
+            }
+        },
+    )
+    # A training load alone, without VO2max or LT, is still a reading worth keeping.
+    assert len(fitness) == 1
+    assert (fitness[0].acute_load, fitness[0].chronic_load) == (413, 380)
+
+
+def test_training_load_falls_back_to_any_device_that_has_one() -> None:
+    status = {
+        "mostRecentTrainingStatus": {
+            "latestTrainingStatusData": {
+                "111": {"primaryTrainingDevice": False},
+                "222": {
+                    "acuteTrainingLoadDTO": {
+                        "dailyTrainingLoadAcute": 300,
+                        "dailyTrainingLoadChronic": 310,
+                    }
+                },
+            }
+        }
+    }
+    assert garmin._training_load(status) == (300, 310)
+    assert garmin._training_load({}) == (0, 0)

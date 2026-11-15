@@ -1307,6 +1307,37 @@ def fitness_insights(request: Request, span: str = "week") -> Any:
                 overnight=True,
                 records=log.garmin_fitness,
             ),
+            "intensity": _intensity_week(log, today),
+            "body_battery_chart": _fitness_chart(
+                log,
+                today,
+                span,
+                lambda d: d.body_battery_high,
+                _round_label,
+                _round_label,
+                min_step=5,
+            ),
+            "readiness_chart": _fitness_chart(
+                log,
+                today,
+                span,
+                lambda d: d.training_readiness,
+                _round_label,
+                _round_label,
+                min_step=5,
+                overnight=True,
+            ),
+            # A weigh-in today is as complete as it gets, so it counts.
+            "weight_chart": _fitness_chart(
+                log,
+                today,
+                span,
+                lambda d: d.weight_grams / 1000,
+                _kg_label,
+                _kg_label,
+                min_step=0.5,
+                overnight=True,
+            ),
             "synced_at": _format_synced_at(log.garmin_synced_at),
         },
     )
@@ -1356,6 +1387,53 @@ def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
             _pace_label(fitness.lactate_threshold_pace_seconds_per_km) if fitness else ""
         ),
         "as_of": _short_date(day.date if day else fitness.date) if day or fitness else "",
+        "body_battery_high": day.body_battery_high if day else 0,
+        "body_battery_low": day.body_battery_low if day else 0,
+        # This morning's, like sleep: Garmin scores readiness on waking.
+        "readiness": night.training_readiness if night else 0,
+        "readiness_level": _title(night.training_readiness_level) if night else "",
+        **_load_balance(fitness),
+    }
+
+
+def _title(garmin_word: str) -> str:
+    """ "Moderate" from Garmin's "MODERATE", "Very High" from "VERY_HIGH"."""
+    return garmin_word.replace("_", " ").title()
+
+
+def _load_balance(fitness: Any) -> dict[str, Any]:
+    """Acute over chronic training load, and a word for where it sits.
+
+    The bands are the usual acute:chronic workload ones: under 0.8 is
+    detraining, over 1.5 is a jump in load worth easing off from.
+    """
+    if fitness is None or not fitness.acute_load or not fitness.chronic_load:
+        return {"load_ratio": "", "load_level": ""}
+    ratio = fitness.acute_load / fitness.chronic_load
+    level = "Low" if ratio < 0.8 else "High" if ratio > 1.5 else "Optimal"
+    return {"load_ratio": f"{ratio:.1f}", "load_level": level}
+
+
+# Garmin's default weekly goal, and the WHO's guideline for adults.
+INTENSITY_MINUTES_GOAL = 150
+
+
+def _intensity_week(log: Any, today: date) -> dict[str, Any]:
+    """Intensity minutes this calendar week (Mon-today) against the weekly goal.
+
+    Today counts even though it's unfinished: the total only ever goes up,
+    and "how far to go this week" is the question it answers. Empty until any
+    day this week has synced.
+    """
+    monday = _week_start(today).isoformat()
+    week = [d for d in log.garmin_days if monday <= d.date <= today.isoformat()]
+    if not week:
+        return {}
+    minutes = sum(d.intensity_minutes for d in week)
+    return {
+        "minutes": minutes,
+        "goal": INTENSITY_MINUTES_GOAL,
+        "pct": _gauge_pct(minutes, INTENSITY_MINUTES_GOAL),
     }
 
 
@@ -1556,6 +1634,10 @@ def _round_label(value: float) -> str:
     return f"{round(value)}"
 
 
+def _kg_label(kg: float) -> str:
+    return f"{kg:.1f}".removesuffix(".0")
+
+
 def _vo2max_label(vo2max: float) -> str:
     return f"{vo2max:.1f}".removesuffix(".0")
 
@@ -1581,11 +1663,14 @@ RECOVERY_SIGNALS = (
     ("HRV", "hrv_ms", "ms", True),
     ("Resting HR", "resting_hr", "bpm", False),
     ("Sleep score", "sleep_score", "", True),
+    ("Readiness", "training_readiness", "", True),
+    ("Body Battery", "body_battery_high", "", True),
 )
 
 
 def _recovery(log: Any, today: date) -> dict[str, Any]:
-    """Last night's HRV, resting HR and sleep score against your own normal.
+    """Last night's HRV, resting HR, sleep score, readiness and Body Battery
+    peak against your own normal.
 
     "Normal" is the mean plus or minus one standard deviation of the previous
     `RECOVERY_BASELINE_DAYS` days, not counting today and ignoring zeros

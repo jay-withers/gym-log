@@ -286,15 +286,26 @@ def _count(samples: list[tuple[float, Any]], boundaries: tuple[int, ...]) -> tup
 
 
 def _day(client: Any, cdate: str) -> GarminDay:
-    """One day's steps/resting-HR/sleep/HRV, tolerating any of the four failing on its own."""
+    """One day's Garmin readings, tolerating any one fetch failing on its own."""
     steps = 0
     steps_goal = 0
     resting_hr = 0
+    body_battery_high = 0
+    body_battery_low = 0
+    intensity_minutes = 0
     try:
         summary = client.get_user_summary(cdate)
         steps = int(summary.get("totalSteps") or 0)
         steps_goal = int(summary.get("dailyStepGoal") or 0)
         resting_hr = int(summary.get("restingHeartRate") or 0)
+        # Body Battery and intensity minutes ride on the same summary, not
+        # calls of their own. Vigorous minutes count double, as Garmin's own
+        # weekly goal counts them.
+        body_battery_high = int(summary.get("bodyBatteryHighestValue") or 0)
+        body_battery_low = int(summary.get("bodyBatteryLowestValue") or 0)
+        intensity_minutes = int(summary.get("moderateIntensityMinutes") or 0) + 2 * int(
+            summary.get("vigorousIntensityMinutes") or 0
+        )
     except Exception:
         logger.warning("could not fetch daily summary for %s", cdate, exc_info=True)
 
@@ -334,6 +345,27 @@ def _day(client: Any, cdate: str) -> GarminDay:
     except Exception:
         logger.warning("could not fetch stress data for %s", cdate, exc_info=True)
 
+    training_readiness = 0
+    training_readiness_level = ""
+    try:
+        # A list of snapshots, one per wake-up or scheduled update; the latest
+        # timestamp is the day's reading.
+        snapshots = [r for r in client.get_training_readiness(cdate) or [] if isinstance(r, dict)]
+        if snapshots:
+            latest = max(snapshots, key=lambda r: str(r.get("timestamp") or ""))
+            training_readiness = int(latest.get("score") or 0)
+            training_readiness_level = str(latest.get("level") or "")
+    except Exception:
+        logger.warning("could not fetch training readiness for %s", cdate, exc_info=True)
+
+    weight_grams = 0
+    try:
+        weigh_ins = (client.get_daily_weigh_ins(cdate) or {}).get("dateWeightList") or []
+        weights = [int(w.get("weight") or 0) for w in weigh_ins if isinstance(w, dict)]
+        weight_grams = next((w for w in reversed(weights) if w), 0)
+    except Exception:
+        logger.warning("could not fetch weigh-ins for %s", cdate, exc_info=True)
+
     return GarminDay(
         date=cdate,
         steps=steps,
@@ -344,6 +376,12 @@ def _day(client: Any, cdate: str) -> GarminDay:
         sleep_score=sleep_score,
         stress_avg=stress_avg,
         steps_goal=steps_goal,
+        body_battery_high=body_battery_high,
+        body_battery_low=body_battery_low,
+        intensity_minutes=intensity_minutes,
+        training_readiness=training_readiness,
+        training_readiness_level=training_readiness_level,
+        weight_grams=weight_grams,
     )
 
 
@@ -365,11 +403,14 @@ def _fitness(client: Any, cdate: str) -> GarminFitness | None:
     looking like a real "0 vo2max" data point.
     """
     vo2max = 0.0
+    acute_load = 0
+    chronic_load = 0
     try:
-        training_status = client.get_training_status(cdate)
-        latest = (training_status or {}).get("mostRecentVO2Max") or {}
+        training_status = client.get_training_status(cdate) or {}
+        latest = training_status.get("mostRecentVO2Max") or {}
         generic = latest.get("generic") or {}
         vo2max = float(generic.get("vo2MaxPreciseValue") or generic.get("vo2MaxValue") or 0)
+        acute_load, chronic_load = _training_load(training_status)
     except Exception:
         logger.warning("could not fetch training status for %s", cdate, exc_info=True)
 
@@ -390,11 +431,36 @@ def _fitness(client: Any, cdate: str) -> GarminFitness | None:
     except Exception:
         logger.warning("could not fetch lactate threshold for %s", cdate, exc_info=True)
 
-    if not vo2max and not lactate_threshold_bpm:
+    if not vo2max and not lactate_threshold_bpm and not acute_load:
         return None
     return GarminFitness(
         date=cdate,
         vo2max=vo2max,
         lactate_threshold_bpm=lactate_threshold_bpm,
         lactate_threshold_pace_seconds_per_km=lactate_threshold_pace_seconds_per_km,
+        acute_load=acute_load,
+        chronic_load=chronic_load,
+    )
+
+
+def _training_load(training_status: dict[str, Any]) -> tuple[int, int]:
+    """Acute (7-day) and chronic (28-day) load from a training status response.
+
+    They sit per device under `mostRecentTrainingStatus.latestTrainingStatusData`,
+    keyed by device id. The primary training device's reading wins; failing
+    that, the first device that has one. (0, 0) when no device does.
+    """
+    by_device = (training_status.get("mostRecentTrainingStatus") or {}).get(
+        "latestTrainingStatusData"
+    ) or {}
+    devices = [
+        d for d in by_device.values() if isinstance(d, dict) and d.get("acuteTrainingLoadDTO")
+    ]
+    if not devices:
+        return 0, 0
+    device = next((d for d in devices if d.get("primaryTrainingDevice")), devices[0])
+    load = device["acuteTrainingLoadDTO"]
+    return (
+        round(load.get("dailyTrainingLoadAcute") or 0),
+        round(load.get("dailyTrainingLoadChronic") or 0),
     )

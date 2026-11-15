@@ -498,6 +498,16 @@ class GarminDay:
     # Garmin's own daily target, which it moves on its own when auto goal is on,
     # so it is kept per day rather than once. 0 on days synced before it was.
     steps_goal: int = 0
+    # The day's Body Battery peak and trough, 0-100.
+    body_battery_high: int = 0
+    body_battery_low: int = 0
+    # Moderate plus twice vigorous, the way Garmin counts toward its weekly goal.
+    intensity_minutes: int = 0
+    # The morning's training readiness score (0-100) and Garmin's word for it.
+    training_readiness: int = 0
+    training_readiness_level: str = ""
+    # The day's last weigh-in, in grams as Garmin keeps it; 0 on days without one.
+    weight_grams: int = 0
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -510,6 +520,12 @@ class GarminDay:
             "sleep_score": self.sleep_score,
             "stress_avg": self.stress_avg,
             "steps_goal": self.steps_goal,
+            "body_battery_high": self.body_battery_high,
+            "body_battery_low": self.body_battery_low,
+            "intensity_minutes": self.intensity_minutes,
+            "training_readiness": self.training_readiness,
+            "training_readiness_level": self.training_readiness_level,
+            "weight_grams": self.weight_grams,
         }
 
     @classmethod
@@ -524,6 +540,12 @@ class GarminDay:
             sleep_score=int(payload.get("sleep_score", 0) or 0),
             stress_avg=int(payload.get("stress_avg", 0) or 0),
             steps_goal=int(payload.get("steps_goal", 0) or 0),
+            body_battery_high=int(payload.get("body_battery_high", 0) or 0),
+            body_battery_low=int(payload.get("body_battery_low", 0) or 0),
+            intensity_minutes=int(payload.get("intensity_minutes", 0) or 0),
+            training_readiness=int(payload.get("training_readiness", 0) or 0),
+            training_readiness_level=str(payload.get("training_readiness_level", "") or ""),
+            weight_grams=int(payload.get("weight_grams", 0) or 0),
         )
 
 
@@ -544,6 +566,10 @@ class GarminFitness:
     vo2max: float = 0.0
     lactate_threshold_bpm: int = 0
     lactate_threshold_pace_seconds_per_km: int = 0
+    # Garmin's 7-day (acute) and 28-day (chronic) training load, from the same
+    # training status response as VO2max. Their ratio is the load balance.
+    acute_load: int = 0
+    chronic_load: int = 0
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -551,6 +577,8 @@ class GarminFitness:
             "vo2max": self.vo2max,
             "lactate_threshold_bpm": self.lactate_threshold_bpm,
             "lactate_threshold_pace_seconds_per_km": self.lactate_threshold_pace_seconds_per_km,
+            "acute_load": self.acute_load,
+            "chronic_load": self.chronic_load,
         }
 
     @classmethod
@@ -562,6 +590,8 @@ class GarminFitness:
             lactate_threshold_pace_seconds_per_km=int(
                 payload.get("lactate_threshold_pace_seconds_per_km", 0) or 0
             ),
+            acute_load=int(payload.get("acute_load", 0) or 0),
+            chronic_load=int(payload.get("chronic_load", 0) or 0),
         )
 
 

@@ -156,6 +156,12 @@ def garmin_day(
     sleep_score: int = 0,
     stress_avg: int = 0,
     steps_goal: int = 0,
+    body_battery_high: int = 0,
+    body_battery_low: int = 0,
+    intensity_minutes: int = 0,
+    training_readiness: int = 0,
+    training_readiness_level: str = "",
+    weight_grams: int = 0,
 ) -> GarminDay:
     return GarminDay(
         date=date,
@@ -167,6 +173,12 @@ def garmin_day(
         sleep_score=sleep_score,
         stress_avg=stress_avg,
         steps_goal=steps_goal,
+        body_battery_high=body_battery_high,
+        body_battery_low=body_battery_low,
+        intensity_minutes=intensity_minutes,
+        training_readiness=training_readiness,
+        training_readiness_level=training_readiness_level,
+        weight_grams=weight_grams,
     )
 
 
@@ -175,10 +187,14 @@ def garmin_fitness(
     vo2max: float = 52.0,
     lactate_threshold_bpm: int = 165,
     lactate_threshold_pace_seconds_per_km: int = 258,
+    acute_load: int = 0,
+    chronic_load: int = 0,
 ) -> GarminFitness:
     return GarminFitness(
         date=date,
         vo2max=vo2max,
         lactate_threshold_bpm=lactate_threshold_bpm,
         lactate_threshold_pace_seconds_per_km=lactate_threshold_pace_seconds_per_km,
+        acute_load=acute_load,
+        chronic_load=chronic_load,
     )
