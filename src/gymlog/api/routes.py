@@ -648,9 +648,13 @@ def achievements_list(request: Request) -> Any:
 
 
 @router.get("/achievements/new", response_class=HTMLResponse, include_in_schema=False)
-def new_achievement_form(request: Request) -> Any:
+def new_achievement_form(request: Request, title: str = "", when: str = "") -> Any:
+    """`title` and `when` prefill the form, for the strength page's "log as an
+    achievement" link beside a PR. Nothing is saved until the form is sent."""
     return templates.TemplateResponse(
-        request, "achievement_form.html", {"achievement": None, "today": _today().isoformat()}
+        request,
+        "achievement_form.html",
+        {"achievement": None, "today": when or _today().isoformat(), "title": title},
     )
 
 
@@ -1215,6 +1219,227 @@ def _week_label(weeks_ago: int) -> str:
     if weeks_ago == 1:
         return "Last week"
     return f"{weeks_ago} wks ago"
+
+
+@router.get("/insights/strength", response_class=HTMLResponse, include_in_schema=False)
+def strength_insights(request: Request, exercise: str = "") -> Any:
+    log, _etag = store.load()
+    block = log.current_block
+    today = _today()
+    e1rm = _e1rm_by_exercise(log, block)
+    if exercise not in e1rm:
+        exercise = next(iter(e1rm), "")
+    return templates.TemplateResponse(
+        request,
+        "insights_strength.html",
+        {
+            "block": block,
+            "adherence": _adherence(log, block, today),
+            "e1rm": e1rm,
+            "exercise": exercise,
+            "e1rm_chart": _e1rm_chart(e1rm.get(exercise, [])),
+            "volume_chart": _volume_chart(log, today),
+            "stalled": _stalled(log, block),
+            "prs": _recent_prs(log, today),
+        },
+    )
+
+
+def _e1rm(set_log: Any) -> float:
+    """Estimated one-rep max by Epley: weight x (1 + reps/30). 0 for an unloaded set.
+
+    An estimate that drifts high past 10-12 reps, which is fine here: it is
+    compared only with itself, on the same movement in the same rep range.
+    """
+    if set_log.weight <= 0 or set_log.reps <= 0:
+        return 0.0
+    return set_log.weight * (1 + set_log.reps / 30)
+
+
+def _best_e1rm(entry: Any) -> float:
+    return max((_e1rm(s) for s in entry.sets), default=0.0)
+
+
+def _e1rm_by_exercise(log: Any, block: Any) -> dict[str, list[dict[str, Any]]]:
+    """Each movement's best estimated 1RM per session in the current block, oldest first.
+
+    Keyed by movement, not slot: a block's two days can put different
+    movements in one slot, and a line through both would chart the gap
+    between them as progress. The current block only, for the same reason
+    across a rotation. Ordered by `log.slots`, then by first appearance;
+    a movement with nothing loaded is left out.
+    """
+    if block is None:
+        return {}
+    out: dict[str, list[dict[str, Any]]] = {}
+    for session in sorted(log.sessions, key=lambda s: s.date):
+        if session.block != block.id:
+            continue
+        for entry in session.entries:
+            best = _best_e1rm(entry)
+            if best:
+                out.setdefault(entry.exercise, []).append(
+                    {"date": session.date, "slot": entry.slot, "e1rm": best}
+                )
+    order = {slot: i for i, slot in enumerate(log.slots)}
+    return dict(sorted(out.items(), key=lambda item: order.get(item[1][0]["slot"], len(order))))
+
+
+def _e1rm_chart(points: list[dict[str, Any]]) -> dict[str, Any]:
+    """One movement's e1RM line, a point a session. Ticks only at the ends: a block
+    is 16 sessions, too many dates for a phone's width."""
+    if len(points) < 2:
+        return {}
+    last = len(points) - 1
+    chart = _line_chart(
+        [
+            {
+                "tick": _short_date(p["date"]) if i in (0, last) else "",
+                "when": _short_date(p["date"]),
+                "value": p["e1rm"],
+            }
+            for i, p in enumerate(points)
+        ],
+        _kg_label,
+        _kg_label,
+        from_zero=False,
+        min_step=2.5,
+    )
+    first, latest = points[0]["e1rm"], points[-1]["e1rm"]
+    chart["headline"] = _kg_label(latest)
+    chart["period"] = "latest, this block"
+    chart["change_pct"] = round(100 * (latest - first) / first)
+    return chart
+
+
+def _volume_chart(log: Any, today: date) -> dict[str, Any]:
+    """Weekly volume (reps x weight, every set) for the last 4 calendar weeks.
+
+    Every session counts, in or out of the block, since this is about how much
+    work was done rather than progress on one movement. An empty week is 0,
+    not a gap: no lifting is a real zero here, unlike an unworn watch.
+    """
+    this_monday = _week_start(today)
+    points = []
+    for weeks_ago in range(3, -1, -1):
+        start = this_monday - timedelta(weeks=weeks_ago)
+        end = start + timedelta(days=6)
+        kg = sum(
+            s.reps * s.weight
+            for session in log.sessions
+            if start.isoformat() <= session.date <= end.isoformat()
+            for entry in session.entries
+            for s in entry.sets
+        )
+        points.append(
+            {
+                "tick": start.strftime("%d %b"),
+                "when": f"Week of {start.strftime('%d %b')}",
+                "value": kg,
+            }
+        )
+    if not any(p["value"] for p in points):
+        return {}
+    chart = _line_chart(points, _volume_label, _volume_tick, from_zero=True, min_step=0)
+    chart["headline"] = chart["points"][-1]["label"]
+    chart["period"] = "this week"
+    return chart
+
+
+def _volume_label(kg: float) -> str:
+    return f"{round(kg):,}"
+
+
+def _volume_tick(kg: float) -> str:
+    return f"{kg / 1000:g}K" if kg else "0"
+
+
+def _adherence(log: Any, block: Any, today: date) -> dict[str, Any]:
+    """Sessions logged this block against what its days ask for.
+
+    "Expected" counts whole weeks behind you plus the current week in full,
+    capped at the block's length: the current week is a target to hit, and
+    the number to beat is shown as "this week", not as a shortfall.
+    """
+    if block is None or not block.days:
+        return {}
+    per_week = len(block.days)
+    week = min(block.week_of(today), block.weeks)
+    started = date.fromisoformat(block.started) if block.started else today
+    this_week_start = started + timedelta(weeks=week - 1)
+    done = [s for s in log.sessions if s.block == block.id and s.day in block.days]
+    this_week = [s for s in done if s.date >= this_week_start.isoformat()]
+    expected = per_week * week
+    return {
+        "done": len(done),
+        "expected": expected,
+        "pct": _gauge_pct(len(done), expected),
+        "this_week": len(this_week),
+        "per_week": per_week,
+    }
+
+
+def _stalled(log: Any, block: Any) -> list[dict[str, Any]]:
+    """Movements in the current block whose last outing fell short of the range.
+
+    The same rule the session screen flags (`progression.suggest`'s
+    `stalled`), so the two never disagree about what "stalled" means.
+    """
+    if block is None:
+        return []
+    out = []
+    for day in block.days.values():
+        for exercise in day.exercises:
+            previous = log.last_entry(exercise.name)
+            if previous is None:
+                continue
+            suggestion = suggest(exercise, *previous)
+            if suggestion is not None and suggestion.stalled:
+                out.append(
+                    {
+                        "exercise": exercise.name,
+                        "slot": exercise.slot,
+                        "reason": suggestion.reason,
+                        "date": _short_date(previous[1]),
+                    }
+                )
+    return out
+
+
+# How far back the strength page looks for personal records.
+PR_WINDOW_DAYS = 30
+
+
+def _recent_prs(log: Any, today: date) -> list[dict[str, Any]]:
+    """Sessions in the last `PR_WINDOW_DAYS` that beat a movement's best e1RM, newest first.
+
+    Against every earlier session of that movement, across blocks, since a
+    record is a record whichever rotation it fell in. A first outing sets the
+    bar rather than counting as a record.
+    """
+    cutoff = (today - timedelta(days=PR_WINDOW_DAYS)).isoformat()
+    best: dict[str, float] = {}
+    prs = []
+    for session in sorted(log.sessions, key=lambda s: s.date):
+        for entry in session.entries:
+            e1rm = _best_e1rm(entry)
+            if not e1rm:
+                continue
+            previous = best.get(entry.exercise)
+            if previous is not None and e1rm > previous and session.date >= cutoff:
+                top = max(entry.sets, key=_e1rm)
+                prs.append(
+                    {
+                        "exercise": entry.exercise,
+                        "date": session.date,
+                        "when": _short_date(session.date),
+                        "e1rm": _kg_label(e1rm),
+                        "previous": _kg_label(previous),
+                        "set": f"{top.reps} x {top.weight:g}kg",
+                    }
+                )
+            best[entry.exercise] = max(e1rm, previous or 0)
+    return list(reversed(prs))
 
 
 @router.get("/insights/fitness", response_class=HTMLResponse, include_in_schema=False)
