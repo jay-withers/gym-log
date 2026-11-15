@@ -155,17 +155,17 @@ def load_garmin_session() -> str | None:
     a first sync (or one that ran before this existed) just falls back to a
     fresh username/password login, same as `login()` does internally.
     """
-    return _load_side(GARMIN_SESSION_BLOB_NAME, ".garmin-session.json")
+    return _load_side(GARMIN_SESSION_BLOB_NAME)
 
 
 def save_garmin_session(token_json: str) -> None:
     """Persist a refreshed Garmin login session, overwriting any previous one."""
-    _save_side(GARMIN_SESSION_BLOB_NAME, ".garmin-session.json", token_json)
+    _save_side(GARMIN_SESSION_BLOB_NAME, token_json)
 
 
 def load_chat() -> str | None:
     """The saved chat conversation as raw JSON, or None if there has never been one."""
-    return _load_side(CHAT_BLOB_NAME, ".chat.json")
+    return _load_side(CHAT_BLOB_NAME)
 
 
 def save_chat(conversation_json: str) -> None:
@@ -174,32 +174,53 @@ def save_chat(conversation_json: str) -> None:
     No ETag: one person, one conversation, and the worst a lost race costs is
     one exchange of chat — not a logged set.
     """
-    _save_side(CHAT_BLOB_NAME, ".chat.json", conversation_json)
+    _save_side(CHAT_BLOB_NAME, conversation_json)
 
 
-def _load_side(name: str, local_suffix: str) -> str | None:
+# The local file each side blob stands in for when no container is configured,
+# as a suffix on the log's own local path.
+_LOCAL_SUFFIXES = {CHAT_BLOB_NAME: ".chat.json", GARMIN_SESSION_BLOB_NAME: ".garmin-session.json"}
+
+
+def load_raw(name: str) -> bytes | None:
+    """A document's bytes exactly as stored, or None if it has never been written.
+
+    For the backup (gymlog.backup), which must copy what is there rather than
+    what this version of the model would write back. Only absence is
+    tolerated, as everywhere else in this module.
+    """
+    blob = _blob(name)
+    if blob is None:
+        path = local_path() if name == BLOB_NAME else _local_side_path(name)
+        return path.read_bytes() if path.exists() else None
+
+    from azure.core.exceptions import ResourceNotFoundError
+
+    try:
+        data: bytes = blob.download_blob().readall()
+    except ResourceNotFoundError:
+        return None
+    return data
+
+
+def _local_side_path(name: str) -> pathlib.Path:
+    return local_path().with_suffix(_LOCAL_SUFFIXES[name])
+
+
+def _load_side(name: str) -> str | None:
     """A small blob beside the log, or None if it has never been written.
 
     Only absence is tolerated; any other storage error propagates, as it does
     for the log itself.
     """
+    raw = load_raw(name)
+    return None if raw is None else raw.decode("utf-8")
+
+
+def _save_side(name: str, text: str) -> None:
     blob = _blob(name)
     if blob is None:
-        path = local_path().with_suffix(local_suffix)
-        return path.read_text(encoding="utf-8") if path.exists() else None
-
-    from azure.core.exceptions import ResourceNotFoundError
-
-    try:
-        return blob.download_blob().readall().decode("utf-8")
-    except ResourceNotFoundError:
-        return None
-
-
-def _save_side(name: str, local_suffix: str, text: str) -> None:
-    blob = _blob(name)
-    if blob is None:
-        path = local_path().with_suffix(local_suffix)
+        path = _local_side_path(name)
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(text, encoding="utf-8")
         tmp.replace(path)

@@ -331,3 +331,28 @@ def test_the_chat_is_stored_apart_from_the_log():
     """Conversation must never land in, or clobber, the training document."""
     store.save_chat('{"messages": []}')
     assert not store.local_path().exists()
+
+
+def test_load_raw_returns_the_blob_exactly_as_stored(blob):
+    """The backup copies bytes, not this version's re-serialisation of them."""
+    blob.content = b'{"blocks": [], "odd spacing":  1}'
+    assert store.load_raw(store.BLOB_NAME) == b'{"blocks": [], "odd spacing":  1}'
+    assert blob.url.endswith("/state/gymlog.json")
+
+
+def test_load_raw_of_a_blob_that_never_existed_is_none(blob):
+    assert store.load_raw(store.CHAT_BLOB_NAME) is None
+
+
+def test_load_raw_does_not_swallow_a_storage_error(blob):
+    blob.download_raises = HttpResponseError("storage is having a day")
+    with pytest.raises(HttpResponseError):
+        store.load_raw(store.BLOB_NAME)
+
+
+def test_load_raw_reads_the_local_files_without_a_container():
+    store.local_path().write_bytes(b"log bytes")
+    store.save_chat('{"chat": 1}')
+    assert store.load_raw(store.BLOB_NAME) == b"log bytes"
+    assert store.load_raw(store.CHAT_BLOB_NAME) == b'{"chat": 1}'
+    assert store.load_raw(store.GARMIN_SESSION_BLOB_NAME) is None

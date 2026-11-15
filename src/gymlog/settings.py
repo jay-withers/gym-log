@@ -87,6 +87,13 @@ class Settings(BaseSettings):
     insight_email_from: str = ""
     public_url: str = ""
 
+    # The nightly off-Azure backup (`gymlog backup`, see backup.py). Only the
+    # backup job is given these. The recipient is the owner's age public key,
+    # whose private half never leaves their password manager; the R2 keys and
+    # the drill key are secrets, resolved by name in backup.py.
+    backup_bucket: str = ""
+    backup_r2_endpoint: str = ""
+    backup_age_recipient: str = ""
     log_level: str = Field(default="INFO")
 
 

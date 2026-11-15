@@ -78,6 +78,11 @@ def load() -> tuple[Message, ...]:
     raw = store.load_chat()
     if raw is None:
         return ()
+    return parse(raw)
+
+
+def parse(raw: str) -> tuple[Message, ...]:
+    """The stored conversation, as `load` reads it and the backup checks it."""
     return tuple(Message.from_json(m) for m in json.loads(raw).get("messages", []))
 
 

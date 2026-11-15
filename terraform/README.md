@@ -20,6 +20,7 @@
 | Name | Source | Version |
 | ---- | ------ | ------- |
 | <a name="module_naming"></a> [naming](#module\_naming) | Azure/naming/azurerm | ~> 0.4 |
+| <a name="module_naming_backup"></a> [naming\_backup](#module\_naming\_backup) | Azure/naming/azurerm | ~> 0.4 |
 | <a name="module_naming_garmin_sync"></a> [naming\_garmin\_sync](#module\_naming\_garmin\_sync) | Azure/naming/azurerm | ~> 0.4 |
 | <a name="module_naming_insight"></a> [naming\_insight](#module\_naming\_insight) | Azure/naming/azurerm | ~> 0.4 |
 
@@ -30,6 +31,7 @@
 | [azurerm_container_app.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/container_app) | resource |
 | [azurerm_container_app_custom_domain.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/container_app_custom_domain) | resource |
 | [azurerm_container_app_environment_managed_certificate.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/container_app_environment_managed_certificate) | resource |
+| [azurerm_container_app_job.backup](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/container_app_job) | resource |
 | [azurerm_container_app_job.garmin_sync](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/container_app_job) | resource |
 | [azurerm_container_app_job.insight](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/container_app_job) | resource |
 | [azurerm_key_vault.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/key_vault) | resource |
@@ -50,6 +52,9 @@
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_backup_age_recipient"></a> [backup\_age\_recipient](#input\_backup\_age\_recipient) | The owner's age public key (`age1...`). Every backup is encrypted to it, and its private half stays offline. Empty leaves the backup job failing until it is set. | `string` | `""` | no |
+| <a name="input_backup_bucket"></a> [backup\_bucket](#input\_backup\_bucket) | The R2 bucket the backup job writes to (the cloudflare repo's `jw-app-backups`). | `string` | `"jw-app-backups"` | no |
+| <a name="input_backup_r2_endpoint"></a> [backup\_r2\_endpoint](#input\_backup\_r2\_endpoint) | The bucket's S3 endpoint, `https://<account id>.eu.r2.cloudflarestorage.com` (the cloudflare repo's `backup_bucket` output). Empty leaves the backup job failing until it is set. | `string` | `""` | no |
 | <a name="input_custom_domain_name"></a> [custom\_domain\_name](#input\_custom\_domain\_name) | Hostname to bind to the app with a free Azure-managed certificate, e.g. `health.jaywithers.uk`. Empty creates neither the certificate nor the binding; the default `*.azurecontainerapps.io` URL always works either way. The CNAME (to that default FQDN, from `terraform output app_url`) and the `asuid.<label>` TXT record (holding `custom_domain_verification_id`, from that output) must already resolve before apply, because Azure validates both during issuance. | `string` | `""` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | Deployment environment. Drives resource naming, and selects which shared platform environment this project deploys onto. | `string` | n/a | yes |
 | <a name="input_insight_email_from"></a> [insight\_email\_from](#input\_insight\_email\_from) | Sender of the weekly insight email, e.g. `Gym log <insights@jaywithers.uk>`. Must be on a domain verified in Resend. The recipient is the Key Vault secret `INSIGHT-EMAIL-TO`, not a variable, so the address stays out of the repository and the state. | `string` | `""` | no |
@@ -65,6 +70,10 @@
 | Name | Description |
 | ---- | ----------- |
 | <a name="output_app_url"></a> [app\_url](#output\_app\_url) | The application's stable HTTPS URL. Bookmark this one; it survives deploys. |
+| <a name="output_backup_age_recipient"></a> [backup\_age\_recipient](#output\_backup\_age\_recipient) | The owner's age public key, which `make deploy` sets on the backup job. |
+| <a name="output_backup_bucket"></a> [backup\_bucket](#output\_backup\_bucket) | The backup job's R2 bucket, which `make deploy` sets on it alongside the image. |
+| <a name="output_backup_r2_endpoint"></a> [backup\_r2\_endpoint](#output\_backup\_r2\_endpoint) | The backup bucket's S3 endpoint, which `make deploy` sets on the backup job. |
+| <a name="output_container_app_job_backup_name"></a> [container\_app\_job\_backup\_name](#output\_container\_app\_job\_backup\_name) | Name of the nightly backup job, which `make deploy` passes to `az containerapp job update`. |
 | <a name="output_container_app_job_garmin_name"></a> [container\_app\_job\_garmin\_name](#output\_container\_app\_job\_garmin\_name) | Name of the daily Garmin sync job, which `make deploy` passes to `az containerapp job update`. |
 | <a name="output_container_app_job_name"></a> [container\_app\_job\_name](#output\_container\_app\_job\_name) | Name of the weekly insight job, which `make deploy` passes to `az containerapp job update`. |
 | <a name="output_container_app_name"></a> [container\_app\_name](#output\_container\_app\_name) | Name of the container app, which `make deploy` passes to `az containerapp update`. |

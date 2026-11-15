@@ -25,12 +25,16 @@ dependencies = [
   # session handling against Garmin Connect's own web endpoints — the first
   # non-stdlib HTTP dependency here, everything else uses urllib directly.
   "garminconnect>=0.2.12",
+  # The nightly off-Azure backup (backup.py): age encryption, and R2 through
+  # its S3 API. Both imported lazily, only by the backup job and its selfcheck.
+  "pyrage>=1.4",
+  "boto3>=1.44",
 ]
 
 [project.optional-dependencies]
 # httpx2, not httpx: starlette's TestClient deprecated the latter, and with
 # `filterwarnings = ["error"]` below that deprecation fails collection outright.
-dev = ["pytest>=8.3", "ruff>=0.8", "httpx2>=0.28", "mypy>=2.4.1"]
+dev = ["pytest>=8.3", "ruff>=0.8", "httpx2>=0.28", "mypy>=2.4.1", "boto3-stubs[s3]>=1.44"]
 
 # What the Dockerfile's ENTRYPOINT resolves to. Terraform sets no `command`, so
 # this name lives in exactly one place.
@@ -82,6 +86,11 @@ plugins = ["pydantic.mypy"]
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true
+
+# pyrage ships no type information.
+[[tool.mypy.overrides]]
+module = ["pyrage", "pyrage.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
