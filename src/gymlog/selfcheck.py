@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from functools import partial
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,14 @@ SECRETS = (
     "GARMIN-PASSWORD",
 )
 
+# backup.py's. Checked only in the job given a bucket, so a missing R2 key
+# fails that job's selfcheck without it reading as a fault in the others.
+BACKUP_SECRETS = (
+    "R2-ACCESS-KEY-ID",
+    "R2-SECRET-ACCESS-KEY",
+    "BACKUP-AGE-DRILL-KEY",
+)
+
 
 def checks() -> list[tuple[str, Callable[[], object]]]:
     from . import store
@@ -40,11 +49,21 @@ def checks() -> list[tuple[str, Callable[[], object]]]:
         if not secret(name):
             raise ValueError("resolved to an empty value")
 
-    return [
+    def presence_checks(names: tuple[str, ...]) -> list[tuple[str, Callable[[], object]]]:
+        return [(f"secret {name}", partial(present, name)) for name in names]
+
+    found: list[tuple[str, Callable[[], object]]] = [
         ("settings", settings),
-        *[(f"secret {name}", lambda name=name: present(name)) for name in SECRETS],
+        *presence_checks(SECRETS),
         ("storage", store.load),
     ]
+    # Only the backup job is given a bucket, so only its selfcheck lists these.
+    if settings().backup_bucket:
+        from . import backup
+
+        found += presence_checks(BACKUP_SECRETS)
+        found.append(("backup bucket", backup.check_bucket))
+    return found
 
 
 def run() -> int:

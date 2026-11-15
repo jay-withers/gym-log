@@ -253,8 +253,8 @@ that tag. Running `make deploy` by hand is for anything else.
 
 **Every deploy is smoke-tested, and a failed one rolls back.** Before deploying,
 the workflow records `make deployed-tag` (the tag on the app now). After it,
-`make smoke` (`scripts/smoke.sh`) checks that the app and both jobs are
-configured with the new tag, that the app's `/healthz` reports it as `version`
+`make smoke` (`scripts/smoke.sh`) checks that the app and every job are
+configured with the new tag (the backup job included), that the app's `/healthz` reports it as `version`
 on its default FQDN (allowing five minutes for a cold start), and that
 `/readyz` answers 200. It then starts one run of each job with its args swapped
 for `gymlog selfcheck`, which loads the settings, resolves every secret the
@@ -306,8 +306,10 @@ Ordering-sensitive:
 3. `make apply`. After this first apply, Terraform changes go through
    `cd-terraform`: it plans on merge and applies when you run it by hand.
 4. `make secrets` and run what it prints to set `APP-PASSCODE`,
-   `DEEPSEEK-API-KEY`, `GARMIN-EMAIL`, `GARMIN-PASSWORD`, `RESEND-API-KEY`
-   and `INSIGHT-EMAIL-TO`. The insight and
+   `DEEPSEEK-API-KEY`, `GARMIN-EMAIL`, `GARMIN-PASSWORD`, `RESEND-API-KEY`,
+   `INSIGHT-EMAIL-TO`, and the backup's `R2-ACCESS-KEY-ID`,
+   `R2-SECRET-ACCESS-KEY` and `BACKUP-AGE-DRILL-KEY` (see
+   [Backups](#backups)). The insight and
    Garmin sync jobs fail at their next scheduled run, rather than at apply
    time, if any of these are skipped — they resolve secrets the same way
    `APP-PASSCODE` is resolved, lazily and at runtime.
@@ -317,6 +319,54 @@ Ordering-sensitive:
 7. Merge something that releases the app, or run `make deploy IMAGE_TAG=<first
    release>`: until then the app serves the placeholder and the jobs do
    nothing.
+
+## Backups
+
+The log is one blob in one LRS storage account. Versioning, soft delete and
+the delete lock cover a bad write or a slip of the hand, but not losing the
+subscription. So the **backup job** (`gymlog backup`, 02:30 UTC daily) copies
+`gymlog.json` and `chat.json` to the cloudflare repo's R2 bucket
+`jw-app-backups`, encrypted with [age](https://age-encryption.org):
+
+- `daily/gym-log/<UTC timestamp>/<name>.age`, kept 30 days. The timestamp
+  is when the copy was taken, so the 02:30 copy holds the log as the day
+  before ended.
+- `monthly/gym-log/<yyyy-mm>/<name>.age`, written by the first successful run
+  in the month, kept a year.
+
+Nothing is overwritten: a rerun adds a copy beside the earlier ones.
+
+Each copy is encrypted to two keys. One is **the owner's**, whose public half
+is `backup_age_recipient` in `environments/dev.tfvars` and whose private half
+lives only in a password manager. The other is a **drill key** in Key Vault
+(`BACKUP-AGE-DRILL-KEY`). After every upload the job downloads the copy,
+decrypts it with the drill key, checks it matches byte for byte and parses
+it. Any failure fails the job, and the platform's job-failure alert fires.
+
+**Setup (once):**
+1. An R2 *Account API token* with **Object Read & Write** on `jw-app-backups`
+   only. Put its two halves in Key Vault as `R2-ACCESS-KEY-ID` and
+   `R2-SECRET-ACCESS-KEY` (`make secrets` prints the commands).
+2. The drill key: `make secrets` prints a command that generates one
+   straight into Key Vault. Nobody needs to see it.
+3. All three must be in Key Vault **before** a release with the backup job
+   deploys. `selfcheck` checks them in every job, so a missing one fails the
+   smoke test and rolls the release back.
+
+**Restoring.** Download the newest copy from the R2 dashboard (or any S3
+client). Then decrypt it with the private key from the password manager,
+saved for the moment to a file outside any repository (never `echo` it on a
+command line, where shell history keeps it):
+
+```bash
+age -d -i ~/backup.key gymlog.json.age > gymlog.json && rm ~/backup.key
+```
+
+`mise exec age@latest -- age …` works where age isn't installed. Before
+uploading the result over a live log, check it reads:
+`LOCAL_STATE_PATH=gymlog.json uv run gymlog show | head`. Then put it back
+with `az storage blob upload --auth-mode login --overwrite` into the
+container `make show` reads, or into a new storage account after a rebuild.
 
 ## CI
 

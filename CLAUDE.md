@@ -218,6 +218,29 @@ every activity it recorded).
 - Stored activities keep the zones they were counted with. Changing the
   maths or the max needs `gymlog garmin-sync --days 90` to recount them.
 
+## The backup job: keep these true
+
+`gymlog backup` (backup.py, main.container-apps-job.backup.tf) copies the log
+and chat to R2, encrypted with age, and proves each copy decrypts and parses.
+README's Backups section covers setup and restoring.
+
+- **Copy bytes, not the model.** `store.load_raw` returns the blob exactly as
+  stored. Round-tripping through `Log` would back up what *this* version
+  writes, and a field it drops would be lost from every copy.
+- **Never back up the Garmin session blob.** It is a login token, and the
+  next sync makes a new one.
+- **Never delete from the bucket here.** R2's lifecycle rules (cloudflare
+  repo) are the only retention. The R2 token is Object Read & Write on that
+  one bucket.
+- **The owner's private key never goes near Azure or CI.** The drill key is
+  separate, and readable only by what can already read the blob.
+- The R2 keys and the drill key are in `selfcheck.BACKUP_SECRETS`, checked
+  only in the job given `BACKUP_BUCKET`. Set them before the first release
+  that has the job, or its selfcheck fails the smoke test and rolls back.
+- **A rollback to a release from before the job** leaves the job running an
+  image with no `backup` subcommand. It fails every night, and the
+  job-failure alert says so, until a release with it deploys again.
+
 ## Commit messages
 
 Conventional Commits, enforced by commitlint at commit-msg time. The

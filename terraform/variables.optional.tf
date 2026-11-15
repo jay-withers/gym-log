@@ -67,3 +67,28 @@ variable "insight_email_from" {
   type        = string
   default     = ""
 }
+
+# --- the nightly off-Azure backup ---------------------------------------------
+
+variable "backup_bucket" {
+  description = "The R2 bucket the backup job writes to (the cloudflare repo's `jw-app-backups`)."
+  type        = string
+  default     = "jw-app-backups"
+}
+
+variable "backup_r2_endpoint" {
+  description = "The bucket's S3 endpoint, `https://<account id>.eu.r2.cloudflarestorage.com` (the cloudflare repo's `backup_bucket` output). Empty leaves the backup job failing until it is set."
+  type        = string
+  default     = ""
+}
+
+variable "backup_age_recipient" {
+  description = "The owner's age public key (`age1...`). Every backup is encrypted to it, and its private half stays offline. Empty leaves the backup job failing until it is set."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.backup_age_recipient == "" || can(regex("^age1[0-9a-z]{58}$", var.backup_age_recipient))
+    error_message = "An age X25519 public key: age1 followed by 58 lowercase letters and digits."
+  }
+}

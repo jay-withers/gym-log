@@ -26,6 +26,26 @@ output "container_app_job_garmin_name" {
   value       = azurerm_container_app_job.garmin_sync.name
 }
 
+output "container_app_job_backup_name" {
+  description = "Name of the nightly backup job, which `make deploy` passes to `az containerapp job update`."
+  value       = azurerm_container_app_job.backup.name
+}
+
+output "backup_bucket" {
+  description = "The backup job's R2 bucket, which `make deploy` sets on it alongside the image."
+  value       = var.backup_bucket
+}
+
+output "backup_r2_endpoint" {
+  description = "The backup bucket's S3 endpoint, which `make deploy` sets on the backup job."
+  value       = var.backup_r2_endpoint
+}
+
+output "backup_age_recipient" {
+  description = "The owner's age public key, which `make deploy` sets on the backup job."
+  value       = var.backup_age_recipient
+}
+
 output "key_vault_name" {
   description = "Key Vault name, for populating APP-PASSCODE with `az keyvault secret set`."
   value       = azurerm_key_vault.this.name

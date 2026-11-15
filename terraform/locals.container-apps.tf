@@ -52,4 +52,12 @@ locals {
     INSIGHT_EMAIL_FROM = var.insight_email_from
     PUBLIC_URL         = local.public_url
   })
+
+  # Only the backup job copies the log off Azure, so only it gets the bucket.
+  # None of these is a secret: the R2 keys and the drill key are in Key Vault.
+  backup_env = merge(local.common_env, {
+    BACKUP_BUCKET        = var.backup_bucket
+    BACKUP_R2_ENDPOINT   = var.backup_r2_endpoint
+    BACKUP_AGE_RECIPIENT = var.backup_age_recipient
+  })
 }
