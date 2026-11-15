@@ -4,7 +4,8 @@
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
 
-{% if glance or steps_chart or sleep_chart or hrv_chart %}
+{% set charts = [steps_chart, sleep_chart, hrv_chart, resting_hr_chart, stress_chart, vo2max_chart, lt_bpm_chart, lt_pace_chart] | select | list %}
+{% if glance or charts %}
 <style>
   .fit-sub { color: var(--dim); font-size: 13px; }
   /* Three gauges across for the values with a scale to sit on (a goal, a
@@ -111,7 +112,7 @@
 </div>
 {% endmacro %}
 
-{% if steps_chart or sleep_chart or hrv_chart %}
+{% if charts %}
 <div class="chips">
   <a class="chip {% if span == 'week' %}on{% endif %}" href="/insights/fitness?span=week">Past week</a>
   <a class="chip {% if span == 'month' %}on{% endif %}" href="/insights/fitness?span=month">4 weeks</a>
@@ -120,6 +121,11 @@
 {% if steps_chart %}{{ weekly_line("Steps", "a day", steps_chart) }}{% endif %}
 {% if sleep_chart %}{{ weekly_line("Sleep", "a night", sleep_chart) }}{% endif %}
 {% if hrv_chart %}{{ weekly_line("Overnight HRV", "a night", hrv_chart, "last night " ~ hrv_status if hrv_status else "") }}{% endif %}
+{% if resting_hr_chart %}{{ weekly_line("Resting HR", "bpm", resting_hr_chart) }}{% endif %}
+{% if stress_chart %}{{ weekly_line("Stress", "avg", stress_chart) }}{% endif %}
+{% if vo2max_chart %}{{ weekly_line("VO2 max", "", vo2max_chart) }}{% endif %}
+{% if lt_bpm_chart %}{{ weekly_line("Lactate threshold HR", "bpm", lt_bpm_chart) }}{% endif %}
+{% if lt_pace_chart %}{{ weekly_line("Lactate threshold pace", "/km", lt_pace_chart, "lower is faster") }}{% endif %}
 
 <p class="last">{% if synced_at %}Garmin last synced {{ synced_at }}{% else %}Never synced yet{% endif %} — <a href="/garmin">sync</a></p>
 {% else %}
