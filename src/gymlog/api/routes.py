@@ -1494,6 +1494,7 @@ def fitness_insights(request: Request, span: str = "week") -> Any:
         {
             "glance": _at_a_glance(log, today),
             "recovery": _recovery(log, today),
+            "trends": _trends(log, today),
             "span": span,
             "steps_chart": _fitness_chart(
                 log, today, span, lambda d: d.steps, _steps_label, _steps_tick, from_zero=True
@@ -2005,6 +2006,98 @@ def _recovery(log: Any, today: date) -> dict[str, Any]:
     else:
         verdict = "Normal"
     return {"verdict": verdict, "signals": signals, "as_of": _short_date(night.date)}
+
+
+# (label, unit, value, label format, higher is better (None: neither),
+#  overnight, read from log.garmin_fitness rather than log.garmin_days)
+TREND_METRICS: tuple[
+    tuple[str, str, Callable[[Any], float], Callable[[float], str], bool | None, bool, bool], ...
+] = (
+    ("Steps", "", lambda d: d.steps, _steps_label, True, False, False),
+    ("Sleep", "", lambda d: d.sleep_seconds / 3600, _hours_label, True, True, False),
+    ("Sleep score", "", lambda d: d.sleep_score, _round_label, True, True, False),
+    ("HRV", "ms", lambda d: d.hrv_ms, _round_label, True, True, False),
+    ("Resting HR", "bpm", lambda d: d.resting_hr, _round_label, False, False, False),
+    ("Max HR", "bpm", lambda d: d.max_hr, _round_label, None, False, False),
+    ("Stress", "", lambda d: d.stress_avg, _round_label, False, False, False),
+    ("Body Battery", "", lambda d: d.body_battery_high, _round_label, True, False, False),
+    ("Readiness", "", lambda d: d.training_readiness, _round_label, True, True, False),
+    ("Intensity", "min", lambda d: d.intensity_minutes, _round_label, True, False, False),
+    ("VO2 max", "", lambda d: d.vo2max, _vo2max_label, True, True, True),
+    ("Weight", "kg", lambda d: d.weight_grams / 1000, _kg_label, None, False, False),
+)
+
+# A change smaller than this, as a fraction of the earlier average, reads as flat.
+TREND_FLAT = 0.01
+
+
+def _trends(log: Any, today: date) -> list[dict[str, Any]]:
+    """Each Garmin metric's latest finished day, and its 7-day and 4-week
+    averages against the 7 days and 4 weeks before them.
+
+    "Yesterday" is yesterday for daily totals, as `_fitness_chart`: today's
+    are half counted. Overnight values (sleep, HRV, readiness) are dated by
+    the morning they end, so last night's is today's record. Zeros are days
+    without a reading and count nowhere. A metric with nothing in the last 4
+    weeks is left out.
+
+    Each change is "better", "worse" or "flat" (under `TREND_FLAT`), or
+    "up"/"down" for a metric with no better direction (max HR, weight).
+    """
+    out = []
+    for label, unit, value, fmt, higher_is_better, overnight, fitness in TREND_METRICS:
+        last_day = today if overnight else today - timedelta(days=1)
+        rows = log.garmin_fitness if fitness else log.garmin_days
+        by_date = {r.date: value(r) for r in rows if r.date <= last_day.isoformat()}
+        month = _trend_period(by_date, last_day, 28, fmt, higher_is_better)
+        if month is None:
+            continue
+        latest = by_date.get(last_day.isoformat()) or 0
+        out.append(
+            {
+                "label": label,
+                "unit": unit,
+                "yesterday": fmt(latest) if latest else "",
+                "week": _trend_period(by_date, last_day, 7, fmt, higher_is_better),
+                "month": month,
+            }
+        )
+    return out
+
+
+def _trend_mean(by_date: dict[str, float], end: date, length: int) -> float | None:
+    """The mean of the non-zero readings in the `length` days ending `end`."""
+    start = (end - timedelta(days=length - 1)).isoformat()
+    values = [v for when, v in by_date.items() if start <= when <= end.isoformat() and v > 0]
+    return statistics.fmean(values) if values else None
+
+
+def _trend_period(
+    by_date: dict[str, float],
+    last_day: date,
+    length: int,
+    fmt: Callable[[float], str],
+    higher_is_better: bool | None,
+) -> dict[str, Any] | None:
+    """The `length` days ending `last_day` against the `length` days before."""
+    current = _trend_mean(by_date, last_day, length)
+    if current is None:
+        return None
+    previous = _trend_mean(by_date, last_day - timedelta(days=length), length)
+    trend = {"value": fmt(current), "change": "", "arrow": "", "pct": ""}
+    if not previous:
+        return trend
+    ratio = (current - previous) / previous
+    if abs(ratio) < TREND_FLAT:
+        trend["change"] = "flat"
+        return trend
+    if higher_is_better is None:
+        trend["change"] = "up" if ratio > 0 else "down"
+    else:
+        trend["change"] = "better" if (ratio > 0) == higher_is_better else "worse"
+    trend["arrow"] = "▲" if ratio > 0 else "▼"
+    trend["pct"] = f"{abs(ratio):.0%}"
+    return trend
 
 
 def _short_date(iso_date: str) -> str:

@@ -6,7 +6,7 @@
 {% from "_weekly_line.html" import weekly_line, weekly_line_styles %}
 
 {% set charts = [steps_chart, sleep_chart, hrv_chart, resting_hr_chart, max_hr_chart, stress_chart, vo2max_chart, lt_bpm_chart, lt_pace_chart, body_battery_chart, readiness_chart, weight_chart] | select | list %}
-{% if glance or charts or recovery or intensity %}
+{% if glance or charts or recovery or intensity or trends %}
 <style>
   .fit-sub { color: var(--dim); font-size: 13px; }
   /* Three gauges across for the values with a scale to sit on (a goal, a
@@ -24,6 +24,14 @@
              padding-top: 12px; border-top: 1px solid var(--line); text-align: center; }
   .glance-val { font-size: 18px; font-weight: 600; }
   .meter { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: 8px; }
+  /* Metric, yesterday, then the two averages: four columns still fit a phone. */
+  .trends { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 10px 6px; align-items: baseline; }
+  .trends .head { color: var(--dim); font-size: 12px; text-align: right; }
+  .trends .name { font-size: 14px; }
+  .trends .num { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .trends .chg { display: block; font-size: 11px; font-weight: 400; color: var(--dim); }
+  .trends .chg.better { color: var(--accent); }
+  .trends .chg.worse { color: var(--warn); }
   .meter span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 </style>
 {{ weekly_line_styles() }}
@@ -95,6 +103,24 @@
       {% if glance.load_ratio %}<div class="gauge-sub">{{ glance.load_level }}</div>{% endif %}
     </div>
   </div>
+</div>
+{% endif %}
+
+{% if trends %}
+<div class="card">
+  <div class="slot">Trends</div>
+  <div class="fit-sub" style="margin-bottom: 10px">averages, against the period before</div>
+  <div class="trends">
+    <div></div><div class="head">Yesterday</div><div class="head">7 days</div><div class="head">4 weeks</div>
+    {% for t in trends %}
+    <div class="name">{{ t.label }}{% if t.unit %} <span class="fit-sub">{{ t.unit }}</span>{% endif %}</div>
+    <div class="num">{{ t.yesterday or "—" }}</div>
+    {% for p in [t.week, t.month] %}
+    <div class="num">{% if p %}{{ p.value }}{% if p.change %}<span class="chg {{ p.change }}">{% if p.arrow %}{{ p.arrow }} {{ p.pct }}{% else %}flat{% endif %}</span>{% endif %}{% else %}—{% endif %}</div>
+    {% endfor %}
+    {% endfor %}
+  </div>
+  <div class="fit-sub" style="margin-top: 10px">Sleep, HRV and readiness are last night's; VO2 max is today's reading.</div>
 </div>
 {% endif %}
 
