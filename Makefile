@@ -10,7 +10,7 @@ IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint test run seed build push deploy deployed-tag smoke url logs import show insight insight-local garmin-sync garmin-sync-local init fmt validate plan apply secrets
+.PHONY: help install lint test typecheck run seed build push deploy deployed-tag smoke url logs import show insight insight-local garmin-sync garmin-sync-local init fmt validate plan apply secrets
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -26,6 +26,9 @@ test: ## Run the test suite
 	# --extra dev: pytest is an extra, not a dependency group, so `uv run` does
 	# not install it. Without this the target only works after `make install`.
 	uv run --extra dev pytest
+
+typecheck: ## Type-check src/ and tests/ with mypy (config in pyproject.toml)
+	uv run --extra dev mypy
 
 lint: ## Run every pre-commit hook against every file
 	pre-commit run --all-files

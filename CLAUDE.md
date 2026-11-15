@@ -152,6 +152,13 @@ deploys green and fails at its first scheduled run.
 one ignore for a deprecation raised inside starlette's own `TestClient` import —
 market-agent carries the identical ignore.
 
+CI gates two more things, both in `test / Test`: `make typecheck` (mypy over
+`src/` and `tests/`, config in `pyproject.toml`) and diff coverage. At least
+80% of the lines a PR changes in `gymlog` must be run by a test. Total coverage
+is reported, never gated, since a floor on it mostly measures how much of the
+Azure SDK path is mocked. Don't meet the diff gate with a test that only
+asserts a mock.
+
 Two things the fixtures exist to guarantee:
 
 - `conftest.py` clears `KEY_VAULT_URI` and `STATE_CONTAINER_URL`. Either one set

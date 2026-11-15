@@ -318,6 +318,7 @@ def test_latest_garmin_fitness_is_the_most_recent_entry():
             garmin_fitness(date="2026-09-15", vo2max=52.0),
         )
     )
+    assert log.latest_garmin_fitness is not None
     assert log.latest_garmin_fitness.vo2max == 52.0
 
 
@@ -332,6 +333,7 @@ def test_latest_garmin_day_is_the_most_recently_synced_one():
             garmin_day(date="2026-09-15", steps=2000),
         )
     )
+    assert log.latest_garmin_day is not None
     assert log.latest_garmin_day.steps == 2000
 
 

@@ -497,7 +497,9 @@ def test_a_start_date_before_the_previous_block_is_not_taken(client):
     assert log.current_block is not None
     assert log.current_block.name == "Renamed"
     assert log.current_block.started == "2026-09-01"
-    assert log.block("2026-07-01").name == "Old block"
+    old = log.block("2026-07-01")
+    assert old is not None
+    assert old.name == "Old block"
 
 
 def test_editing_with_no_block_shows_the_empty_page(client):

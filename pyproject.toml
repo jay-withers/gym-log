@@ -30,7 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 # httpx2, not httpx: starlette's TestClient deprecated the latter, and with
 # `filterwarnings = ["error"]` below that deprecation fails collection outright.
-dev = ["pytest>=8.3", "ruff>=0.8", "httpx2>=0.28"]
+dev = ["pytest>=8.3", "ruff>=0.8", "httpx2>=0.28", "mypy>=2.4.1"]
 
 # What the Dockerfile's ENTRYPOINT resolves to. Terraform sets no `command`, so
 # this name lives in exactly one place.
@@ -65,6 +65,16 @@ extend-immutable-calls = [
 # S607). Everything else under "S" still applies to tests.
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S104", "S105", "S106", "S603", "S607"]
+
+[tool.mypy]
+# `make typecheck` and CI's `typecheck: mypy` both read this. Tests too, so a
+# changed signature can't leave a stale call behind in them. check_untyped_defs
+# so a function without annotations is still checked inside; the pydantic
+# plugin so models' constructors are typed from their fields.
+files = ["src", "tests"]
+check_untyped_defs = true
+warn_unused_ignores = true
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

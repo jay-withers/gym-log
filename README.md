@@ -202,6 +202,7 @@ file, and `settings.py` reads the passcode from the environment before Key Vault
 ```bash
 make install
 make test
+make typecheck    # mypy; CI runs it too
 make seed         # a sample log, shaped exactly like the one in blob storage
 make run          # http://localhost:8000, passcode "local"
 ```
