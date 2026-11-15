@@ -1759,8 +1759,8 @@ def test_fitness_insights_page_shows_weekly_steps_and_sleep(client, seeded):
     )
     login(client)
     page = client.get("/insights/fitness").text
-    assert "VO2 max trend" not in page
-    assert page.count('class="weekly"') == 2
+    # Steps, sleep, and resting HR (the factory's default 55 bpm on every day).
+    assert page.count('class="weekly"') == 3
     assert "8,240 a day · past 7 days" in page
     assert "7h 12m a night" in page
     month = client.get("/insights/fitness?span=month").text
@@ -1818,6 +1818,68 @@ def test_weekly_chart_ticks_round_numbers():
     assert _ticks(0, 8700) == (0, 10000, 5000)
     # Without a floor on the step, a week of sleep within the hour ticks 7.25h.
     assert _ticks(7.1, 7.8, min_step=1) == (7, 8, 1)
+
+
+def test_fitness_insights_page_charts_resting_hr_stress_vo2max_and_lt(client, seeded):
+    today = date.today()
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                garmin_day(
+                    date=(today - timedelta(days=offset)).isoformat(),
+                    resting_hr=52,
+                    stress_avg=31,
+                )
+                for offset in range(14, 0, -1)
+            ],
+            keep_since="2020-01-01",
+            fitness=[
+                garmin_fitness(
+                    date=(today - timedelta(days=offset)).isoformat(),
+                    vo2max=52.3,
+                    lactate_threshold_bpm=165,
+                    lactate_threshold_pace_seconds_per_km=258,
+                )
+                # Today's reading counts: it is the latest, stamped at sync.
+                # 10 days back puts a second calendar week on the month view.
+                for offset in (10, 3, 0)
+            ],
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "52 bpm · past 7 days" in page
+    assert "31 avg · past 7 days" in page
+    assert "VO2 max</div>" in page
+    assert "52.3  · past 7 days" in page
+    assert "165 bpm · past 7 days" in page
+    assert "4:18 /km · past 7 days · lower is faster" in page
+    month = client.get("/insights/fitness?span=month").text
+    assert "4:18 /km · week of" in month
+
+
+def test_fitness_chart_reads_the_records_it_is_given():
+    today = date(2026, 10, 23)
+    log = Log(
+        garmin_fitness=(
+            garmin_fitness(date="2026-10-17", vo2max=50.0),
+            garmin_fitness(date="2026-10-23", vo2max=51.0),
+        )
+    )
+    chart = _fitness_chart(
+        log,
+        today,
+        "week",
+        lambda f: f.vo2max,
+        str,
+        str,
+        overnight=True,
+        records=log.garmin_fitness,
+    )
+    assert [p["value"] for p in chart["points"]] == [50.0, 51.0]
+    # Without `records` it reads `garmin_days`, which is empty here.
+    assert _fitness_chart(log, today, "week", lambda d: d.steps, str, str) == {}
 
 
 def test_fitness_chart_needs_two_points_to_draw_a_line():

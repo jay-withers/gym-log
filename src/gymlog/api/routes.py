@@ -12,7 +12,7 @@ import math
 import pathlib
 import re
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -1251,6 +1251,59 @@ def fitness_insights(request: Request, span: str = "week") -> Any:
                 overnight=True,
             ),
             "hrv_status": _hrv_status(log),
+            "resting_hr_chart": _fitness_chart(
+                log,
+                today,
+                span,
+                lambda d: d.resting_hr,
+                _round_label,
+                _round_label,
+                min_step=1,
+            ),
+            "stress_chart": _fitness_chart(
+                log,
+                today,
+                span,
+                lambda d: d.stress_avg,
+                _round_label,
+                _round_label,
+                from_zero=True,
+            ),
+            # Garmin's latest reading, stamped with the day the sync ran (see
+            # `GarminFitness`), so today's is as complete as it gets: overnight.
+            "vo2max_chart": _fitness_chart(
+                log,
+                today,
+                span,
+                lambda f: f.vo2max,
+                _vo2max_label,
+                _vo2max_label,
+                min_step=1,
+                overnight=True,
+                records=log.garmin_fitness,
+            ),
+            "lt_bpm_chart": _fitness_chart(
+                log,
+                today,
+                span,
+                lambda f: f.lactate_threshold_bpm,
+                _round_label,
+                _round_label,
+                min_step=1,
+                overnight=True,
+                records=log.garmin_fitness,
+            ),
+            "lt_pace_chart": _fitness_chart(
+                log,
+                today,
+                span,
+                lambda f: f.lactate_threshold_pace_seconds_per_km,
+                _pace_value_label,
+                _pace_value_label,
+                min_step=5,
+                overnight=True,
+                records=log.garmin_fitness,
+            ),
             "synced_at": _format_synced_at(log.garmin_synced_at),
         },
     )
@@ -1340,6 +1393,7 @@ def _fitness_chart(
     from_zero: bool = False,
     min_step: float = 0,
     overnight: bool = False,
+    records: Iterable[Any] | None = None,
 ) -> dict[str, Any]:
     """A daily Garmin value as a line chart: a point a day for the past week,
     or a weekly average for the last 4 calendar weeks (`span` "month").
@@ -1353,9 +1407,13 @@ def _fitness_chart(
 
     The headline is the average over everything plotted for the week view
     (one day alone says little), and the latest week's for the month view.
+
+    `records` is anything dated by an ISO `date`, `log.garmin_days` unless
+    given: VO2max and the lactate threshold live in `log.garmin_fitness`.
     """
     last_day = today if overnight else today - timedelta(days=1)
-    by_date = {d.date: value(d) for d in log.garmin_days if d.date <= last_day.isoformat()}
+    rows = log.garmin_days if records is None else records
+    by_date = {d.date: value(d) for d in rows if d.date <= last_day.isoformat()}
 
     def mean(start: date, end: date) -> float | None:
         values = [
@@ -1489,6 +1547,19 @@ def _hours_tick(hours: float) -> str:
 
 def _ms_label(ms: float) -> str:
     return f"{round(ms)}ms"
+
+
+def _round_label(value: float) -> str:
+    return f"{round(value)}"
+
+
+def _vo2max_label(vo2max: float) -> str:
+    return f"{vo2max:.1f}".removesuffix(".0")
+
+
+def _pace_value_label(seconds_per_km: float) -> str:
+    """ "4:18" from a pace in seconds per km; `_pace_label` without the unit."""
+    return _pace_label(round(seconds_per_km)).removesuffix(" /km")
 
 
 def _hrv_status(log: Any) -> str:
