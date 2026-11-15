@@ -3,6 +3,7 @@
 {% block subtitle %}Fitness Insights{% endblock %}
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
+{% from "_weekly_line.html" import weekly_line, weekly_line_styles %}
 
 {% set charts = [steps_chart, sleep_chart, hrv_chart, resting_hr_chart, stress_chart, vo2max_chart, lt_bpm_chart, lt_pace_chart, body_battery_chart, readiness_chart, weight_chart] | select | list %}
 {% if glance or charts or recovery or intensity %}
@@ -24,16 +25,8 @@
   .glance-val { font-size: 18px; font-weight: 600; }
   .meter { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: 8px; }
   .meter span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
-  .weekly { display: block; width: 100%; height: auto; margin-top: 8px; overflow: visible; }
-  .weekly .grid { stroke: var(--line); stroke-width: 1; }
-  .weekly .axis { fill: var(--dim); font-size: 10px; }
-  .weekly .trace { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-  /* The ring in the card's colour keeps each dot distinct where it sits on the line. */
-  .weekly .dot { fill: var(--accent); stroke: var(--card); stroke-width: 2; }
-  .weekly .hit { fill: transparent; }
-  .weekly .point:focus { outline: none; }
-  .weekly .point:focus-visible .dot, .weekly .point:hover .dot { stroke: var(--text); }
 </style>
+{{ weekly_line_styles() }}
 
 {# A semicircle, filled to `pct` of its length. pathLength lets the fill be
    a plain percentage whatever the radius; nothing is drawn at 0, where a
@@ -113,34 +106,6 @@
 </div>
 {% endif %}
 
-{# One measure per chart, never two on one axis: steps and hours share no
-   scale. Every point is a focusable target with a native tooltip; the
-   headline is the one value written out, in the subtitle rather than beside
-   the line, where there is no room for it at phone width. #}
-{% macro weekly_line(title, unit, chart, note="") %}
-<div class="card">
-  <div class="slot">{{ title }}</div>
-  <div class="fit-sub">{{ chart.headline }} {{ unit }} · {{ chart.period }}{% if note %} · {{ note }}{% endif %}</div>
-  <svg class="weekly" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img"
-       aria-label="{{ title }}: {% for p in chart.points %}{{ p.when }} {{ p.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
-    {% for g in chart.grid %}
-    <line class="grid" x1="{{ chart.left }}" x2="{{ chart.right }}" y1="{{ g.y }}" y2="{{ g.y }}"/>
-    <text class="axis" x="{{ chart.left - 6 }}" y="{{ g.y }}" text-anchor="end" dominant-baseline="middle">{{ g.label }}</text>
-    {% endfor %}
-    <path class="trace" d="{{ chart.path }}"/>
-    {% for p in chart.points %}
-    <g class="point" tabindex="0">
-      <title>{{ p.when }}: {{ p.label }} {{ unit }}</title>
-      <circle class="hit" cx="{{ p.x }}" cy="{{ p.y }}" r="14"/>
-      <circle class="dot" cx="{{ p.x }}" cy="{{ p.y }}" r="4"/>
-    </g>
-    {% endfor %}
-    {% for t in chart.ticks %}
-    <text class="axis" x="{{ t.x }}" y="{{ chart.height - 4 }}" text-anchor="middle">{{ t.label }}</text>
-    {% endfor %}
-  </svg>
-</div>
-{% endmacro %}
 
 {% if charts %}
 <div class="chips">

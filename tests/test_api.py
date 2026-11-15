@@ -2373,3 +2373,171 @@ def test_fitness_insights_page_shows_intensity_and_new_trend_charts(client, seed
     assert "80 peak · past 7 days" in page
     assert "Training readiness" in page
     assert "80.5 kg · past 7 days" in page
+
+
+# --- strength insights --------------------------------------------------------
+
+
+def _strength_log(today: date) -> Log:
+    """A block started three weeks back: squats climbing, flyes stalled."""
+    started = (today - timedelta(weeks=2, days=today.weekday())).isoformat()
+    squat = exercise(slot="legs", name="Back Squat", rep_low=6, rep_high=8, increment=5)
+    flyes = exercise(slot="chest", name="Cable Flyes", rep_low=10, rep_high=12)
+
+    def day(offset: int) -> str:
+        return (today - timedelta(days=offset)).isoformat()
+
+    return Log(
+        slots=("chest", "legs"),
+        blocks=(block(started, squat, flyes, started=started),),
+        sessions=(
+            # An older block's squat: a heavier best, so the first squat in
+            # this block is not a record.
+            session("2026-01-05", "old", "A", entry("Back Squat", "legs", (5, 120.0))),
+            session(
+                day(14),
+                started,
+                "A",
+                entry("Back Squat", "legs", (8, 100.0), (6, 100.0)),
+                entry("Cable Flyes", "chest", (12, 10.0)),
+            ),
+            session(
+                day(7),
+                started,
+                "A",
+                entry("Back Squat", "legs", (8, 105.0)),
+                entry("Cable Flyes", "chest", (10, 12.5)),
+            ),
+            session(
+                day(0),
+                started,
+                "A",
+                entry("Back Squat", "legs", (8, 120.0)),
+                # Below the bottom of the range: the session screen's stall.
+                entry("Cable Flyes", "chest", (8, 12.5)),
+            ),
+        ),
+    )
+
+
+def test_e1rm_is_epley_and_zero_for_an_unloaded_set():
+    from gymlog.api.routes import _e1rm
+
+    assert _e1rm(SetLog(reps=8, weight=105.0)) == pytest.approx(133.0)
+    assert _e1rm(SetLog(reps=10, weight=0.0)) == 0.0
+
+
+def test_e1rm_by_exercise_is_the_current_block_only_in_slot_order():
+    from gymlog.api.routes import _e1rm_by_exercise
+
+    log = _strength_log(date(2026, 10, 23))
+    by_exercise = _e1rm_by_exercise(log, log.current_block)
+    assert list(by_exercise) == ["Cable Flyes", "Back Squat"]
+    # The old block's 120kg x 5 is not on this block's line.
+    assert [round(p["e1rm"], 1) for p in by_exercise["Back Squat"]] == [126.7, 133.0, 152.0]
+
+
+def test_e1rm_never_joins_two_movements_sharing_a_slot():
+    from gymlog.api.routes import _e1rm_by_exercise
+
+    started = "2026-10-05"
+    log = Log(
+        blocks=(block(started),),
+        sessions=(
+            session("2026-10-06", started, "A", entry("Squat", "legs", (5, 100.0))),
+            session("2026-10-08", started, "B", entry("Step Ups", "legs", (8, 20.0))),
+        ),
+    )
+    assert set(_e1rm_by_exercise(log, log.current_block)) == {"Squat", "Step Ups"}
+
+
+def test_volume_is_reps_times_weight_per_calendar_week():
+    from gymlog.api.routes import _volume_chart
+
+    today = date(2026, 10, 23)
+    chart = _volume_chart(_strength_log(today), today)
+    # This week: 8 x 120 + 8 x 12.5.
+    assert chart["headline"] == "1,060"
+    assert chart["period"] == "this week"
+    assert _volume_chart(Log(), today) == {}
+
+
+def test_adherence_counts_this_blocks_sessions_against_its_days():
+    from gymlog.api.routes import _adherence
+
+    today = date(2026, 10, 23)
+    log = _strength_log(today)
+    # Week 3 of the block, one day a week: 3 expected, 3 done.
+    assert _adherence(log, log.current_block, today) == {
+        "done": 3,
+        "expected": 3,
+        "pct": 100,
+        "this_week": 1,
+        "per_week": 1,
+    }
+    assert _adherence(Log(), None, today) == {}
+
+
+def test_stalled_uses_the_session_screens_rule():
+    from gymlog.api.routes import _stalled
+
+    log = _strength_log(date(2026, 10, 23))
+    stalled = _stalled(log, log.current_block)
+    assert [s["exercise"] for s in stalled] == ["Cable Flyes"]
+    assert "below 10" in stalled[0]["reason"]
+
+
+def test_recent_prs_beat_every_earlier_session_across_blocks():
+    from gymlog.api.routes import _recent_prs
+
+    today = date(2026, 10, 23)
+    prs = _recent_prs(_strength_log(today), today)
+    # Squat: 126.7 (below the old block's 140) then 133 (still below), then 152.
+    # Flyes: 14 then 16.7 (a record), then 15.8 (not).
+    assert [(p["exercise"], p["e1rm"]) for p in prs] == [
+        ("Back Squat", "152"),
+        ("Cable Flyes", "16.7"),
+    ]
+    assert prs[0]["previous"] == "140"
+    assert prs[0]["set"] == "8 x 120kg"
+
+
+def test_strength_insights_page(client):
+    today = date.today()
+    store.save(_strength_log(today))
+    login(client)
+    page = client.get("/insights/strength").text
+    assert "3 <span" in page and "of 3 so far" in page
+    assert 'class="chip on" href="/insights/strength?exercise=Cable%20Flyes"' in page
+    assert "Stalled" in page
+    assert "/achievements/new?title=PR%3A%20Back%20Squat%208%20x%20120kg" in page
+    squat = client.get("/insights/strength?exercise=Back%20Squat").text
+    assert "+20% since the first session" in squat
+    # An unknown movement falls back to the first one rather than erroring.
+    assert (
+        'class="chip on" href="/insights/strength?exercise=Cable%20Flyes"'
+        in client.get("/insights/strength?exercise=nope").text
+    )
+    assert 'href="/insights/strength"' in client.get("/insights").text
+
+
+def test_strength_insights_page_before_any_session_shows_adherence_only(client, seeded):
+    login(client)
+    page = client.get("/insights/strength").text
+    # The seeded block is long past its 8 weeks: expected stops at 8 sessions.
+    assert "0 <span" in page and "of 8 so far" in page
+    assert "No new bests in the last 30 days" in page
+    assert "Estimated 1RM" not in page
+
+
+def test_strength_insights_page_is_empty_before_any_block(client):
+    store.save(Log())
+    login(client)
+    assert "Nothing logged yet" in client.get("/insights/strength").text
+
+
+def test_new_achievement_form_takes_a_prefill(client, seeded):
+    login(client)
+    page = client.get("/achievements/new?title=PR%3A%20Squat&when=2026-10-20").text
+    assert 'value="PR: Squat"' in page
+    assert 'value="2026-10-20"' in page
