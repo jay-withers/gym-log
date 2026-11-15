@@ -273,6 +273,7 @@ def _garmin_days(now: date) -> tuple[GarminDay, ...]:
             date=(now - timedelta(days=offset)).isoformat(),
             steps=[9200, 4100, 11300, 7600, 6200, 10500, 5300][weekday] + drift,
             resting_hr=55,
+            max_hr=[148, 121, 171, 132, 158, 117, 176][weekday],
             sleep_seconds=[27000, 24600, 29400, 25200, 26100, 28200, 23400][weekday] + drift * 2,
             sleep_score=[82, 71, 88, 74, 77, 85, 66][weekday],
             stress_avg=[28, 41, 24, 35, 31, 26, 44][weekday],

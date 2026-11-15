@@ -1488,6 +1488,15 @@ def fitness_insights(request: Request, span: str = "week") -> Any:
                 _round_label,
                 min_step=1,
             ),
+            "max_hr_chart": _fitness_chart(
+                log,
+                today,
+                span,
+                lambda d: d.max_hr,
+                _round_label,
+                _round_label,
+                min_step=1,
+            ),
             "stress_chart": _fitness_chart(
                 log,
                 today,
@@ -1600,6 +1609,7 @@ def _at_a_glance(log: Any, today: date) -> dict[str, Any]:
         "steps_goal": steps_goal,
         "steps_pct": _gauge_pct(day.steps if day else 0, steps_goal),
         "resting_hr": day.resting_hr if day else 0,
+        "max_hr": day.max_hr if day else 0,
         "sleep_hours": (night.sleep_seconds // 3600) if night else 0,
         "sleep_minutes": ((night.sleep_seconds % 3600) // 60) if night else 0,
         "sleep_score": night.sleep_score if night else 0,

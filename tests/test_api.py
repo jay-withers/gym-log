@@ -2289,6 +2289,31 @@ def test_recovery_card_is_hidden_without_last_night(client, seeded):
     assert "recovery-verdict" not in client.get("/insights/fitness").text
 
 
+def test_fitness_insights_page_charts_max_hr_and_shows_it_beside_resting(client, seeded):
+    today = date.today()
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                garmin_day(
+                    date=(today - timedelta(days=offset)).isoformat(),
+                    resting_hr=52,
+                    max_hr=168,
+                )
+                for offset in range(14, -1, -1)
+            ],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert "Max HR" in page
+    assert "168 bpm · past 7 days" in page
+    assert "bpm · max 168" in page
+    days = client.get("/garmin?view=days").text
+    assert "max HR 168" in days
+
+
 def test_fitness_insights_glance_shows_body_battery_readiness_and_load(client, seeded):
     today = date.today()
     store.update(

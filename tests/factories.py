@@ -162,6 +162,7 @@ def garmin_day(
     training_readiness: int = 0,
     training_readiness_level: str = "",
     weight_grams: int = 0,
+    max_hr: int = 0,
 ) -> GarminDay:
     return GarminDay(
         date=date,
@@ -179,6 +180,7 @@ def garmin_day(
         training_readiness=training_readiness,
         training_readiness_level=training_readiness_level,
         weight_grams=weight_grams,
+        max_hr=max_hr,
     )
 
 
