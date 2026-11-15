@@ -70,11 +70,18 @@ extend-immutable-calls = [
 # `make typecheck` and CI's `typecheck: mypy` both read this. Tests too, so a
 # changed signature can't leave a stale call behind in them. check_untyped_defs
 # so a function without annotations is still checked inside; the pydantic
-# plugin so models' constructors are typed from their fields.
+# plugin so a model built with a field it doesn't have is caught.
 files = ["src", "tests"]
 check_untyped_defs = true
 warn_unused_ignores = true
 plugins = ["pydantic.mypy"]
+
+# init_forbid_extra makes the plugin reject an unknown field, and init_typed
+# checks each field's type at the call, rather than leaving it to pydantic's
+# runtime validation.
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
