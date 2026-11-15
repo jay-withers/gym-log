@@ -39,7 +39,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 
 # Brings /app/.venv/bin on PATH and WORKDIR /app.
-FROM ghcr.io/jay-withers/dev-containers/python-app:v0.21.14@sha256:674a9f8d97746f7af7bc32b435edc92b221828d126cb0f4f34feb97f2362bbde
+FROM ghcr.io/jay-withers/dev-containers/python-app:v0.21.15@sha256:5086c09ff1240f6600883c9158c2de26ec97f32e6cd1dba41c6694e99331f165
 
 # This label is what connects the pushed package to this repository, and that
 # connection is what gives a workflow's GITHUB_TOKEN write access to it. Without
