@@ -15,6 +15,7 @@ from gymlog.api.routes import (
     _fitness_chart,
     _hours_label,
     _hours_tick,
+    _recovery,
     _steps_label,
     _steps_tick,
     _ticks,
@@ -2158,3 +2159,131 @@ def test_request_values_cannot_forge_log_lines():
 
     assert _loggable("Squat\r\nINFO forged") == "SquatINFO forged"
     assert _loggable("2026-10-14") == "2026-10-14"
+
+
+def _baseline_days(today: date, days: int = 14, **fields) -> list:
+    """`days` nights before today alternating around a mean, so the band is real."""
+    hrv, resting_hr, sleep_score = (
+        fields.get("hrv_ms", 60),
+        fields.get("resting_hr", 50),
+        fields.get("sleep_score", 80),
+    )
+    return [
+        garmin_day(
+            date=(today - timedelta(days=offset)).isoformat(),
+            hrv_ms=hrv + (3 if offset % 2 else -3),
+            resting_hr=resting_hr + (2 if offset % 2 else -2),
+            sleep_score=sleep_score + (5 if offset % 2 else -5),
+        )
+        for offset in range(days, 0, -1)
+    ]
+
+
+def test_recovery_reads_last_night_against_the_previous_month():
+    today = date(2026, 10, 23)
+    log = Log(
+        garmin_days=tuple(
+            [
+                *_baseline_days(today),
+                garmin_day(date="2026-10-23", hrv_ms=70, resting_hr=51, sleep_score=60),
+            ]
+        )
+    )
+    card = _recovery(log, today)
+    by_label = {s["label"]: s for s in card["signals"]}
+    assert by_label["HRV"]["state"] == "better"
+    assert by_label["HRV"]["normal"] == "57-63"
+    assert by_label["Resting HR"]["state"] == "normal"
+    assert by_label["Sleep score"]["state"] == "worse"
+    assert card["verdict"] == "Normal"
+    assert card["as_of"] == "23 Oct"
+
+
+def test_recovery_high_resting_hr_and_low_hrv_say_take_it_easy():
+    today = date(2026, 10, 23)
+    log = Log(
+        garmin_days=tuple(
+            [
+                *_baseline_days(today),
+                garmin_day(date="2026-10-23", hrv_ms=45, resting_hr=58, sleep_score=80),
+            ]
+        )
+    )
+    card = _recovery(log, today)
+    assert [s["state"] for s in card["signals"]] == ["worse", "worse", "normal"]
+    assert card["verdict"] == "Take it easy"
+
+
+def test_recovery_better_and_nothing_worse_is_recovered():
+    today = date(2026, 10, 23)
+    log = Log(
+        garmin_days=tuple(
+            [
+                *_baseline_days(today),
+                garmin_day(date="2026-10-23", hrv_ms=60, resting_hr=45, sleep_score=80),
+            ]
+        )
+    )
+    assert _recovery(log, today)["verdict"] == "Recovered"
+
+
+def test_recovery_needs_last_night_and_a_week_of_baseline():
+    today = date(2026, 10, 23)
+    # No reading dated today: nothing to judge.
+    assert _recovery(Log(garmin_days=tuple(_baseline_days(today))), today) == {}
+    # Six nights is not enough of a baseline for any signal.
+    short = [*_baseline_days(today, days=6), garmin_day(date="2026-10-23", hrv_ms=60)]
+    assert _recovery(Log(garmin_days=tuple(short)), today) == {}
+
+
+def test_recovery_ignores_unworn_nights_and_older_than_a_month():
+    today = date(2026, 10, 23)
+    days = [
+        # 31 days back: outside the baseline, would otherwise drag the mean.
+        garmin_day(date="2026-09-22", hrv_ms=200),
+        *_baseline_days(today, hrv_ms=60),
+        # An unworn night reads 0 and is not a reading.
+        garmin_day(date="2026-10-22", hrv_ms=0, resting_hr=0, sleep_score=0),
+        garmin_day(date="2026-10-23", hrv_ms=60, resting_hr=50, sleep_score=80),
+    ]
+    card = _recovery(Log(garmin_days=tuple(days)), today)
+    assert {s["label"]: s["normal"] for s in card["signals"]}["HRV"] == "57-63"
+    assert card["verdict"] == "Normal"
+
+
+def test_recovery_band_is_at_least_one_either_side():
+    today = date(2026, 10, 23)
+    days = [
+        garmin_day(date=(today - timedelta(days=offset)).isoformat(), resting_hr=50)
+        for offset in range(10, 0, -1)
+    ] + [garmin_day(date=today.isoformat(), resting_hr=51)]
+    card = _recovery(Log(garmin_days=tuple(days)), today)
+    assert card["signals"] == [
+        {"label": "Resting HR", "value": 51, "unit": "bpm", "state": "normal", "normal": "49-51"}
+    ]
+
+
+def test_recovery_card_shows_on_fitness_and_strength_pages(client, seeded):
+    today = date.today()
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                *_baseline_days(today),
+                garmin_day(date=today.isoformat(), hrv_ms=45, resting_hr=58, sleep_score=80),
+            ],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    fitness = client.get("/insights/fitness").text
+    assert 'class="recovery-verdict take-it-easy">Take it easy<' in fitness
+    assert fitness.index("Recovery") < fitness.index("At a glance")
+    assert "normal 57-63" in fitness
+    assert "Take it easy" in client.get("/strength").text
+
+
+def test_recovery_card_is_hidden_without_last_night(client, seeded):
+    login(client)
+    assert "recovery-verdict" not in client.get("/strength").text
+    assert "recovery-verdict" not in client.get("/insights/fitness").text

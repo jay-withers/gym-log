@@ -1,0 +1,30 @@
+{# Last night against your own 30-day normal; see `routes._recovery`. Shared
+   by the fitness page and the strength page, where it informs whether to
+   push today. Renders nothing without a `recovery`. #}
+{% if recovery %}
+<style>
+  .recovery-verdict { font-size: 18px; font-weight: 600; margin: 4px 0 10px; }
+  .recovery-verdict.take-it-easy { color: var(--warn); }
+  .recovery-verdict.recovered { color: var(--accent); }
+  .recovery-rows { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+  .recovery-val { font-size: 18px; font-weight: 600; }
+  .recovery-sub { color: var(--dim); font-size: 12px; margin-top: 2px; }
+  .recovery-state.better { color: var(--accent); }
+  .recovery-state.worse { color: var(--warn); }
+</style>
+<div class="card">
+  <div class="slot">Recovery</div>
+  <div class="recovery-verdict {{ recovery.verdict | lower | replace(' ', '-') }}">{{ recovery.verdict }}</div>
+  <div class="recovery-rows">
+    {% for s in recovery.signals %}
+    <div>
+      <div class="slot">{{ s.label }}</div>
+      <div class="recovery-val">{{ s.value }}{% if s.unit %} <span class="recovery-sub">{{ s.unit }}</span>{% endif %}</div>
+      <div class="recovery-sub recovery-state {{ s.state }}">{{ s.state }}</div>
+      <div class="recovery-sub">normal {{ s.normal }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="recovery-sub" style="margin-top: 10px">last night, {{ recovery.as_of }}, against your previous 30 days</div>
+</div>
+{% endif %}

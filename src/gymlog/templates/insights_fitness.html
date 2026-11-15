@@ -5,7 +5,7 @@
 {% block body %}
 
 {% set charts = [steps_chart, sleep_chart, hrv_chart, resting_hr_chart, stress_chart, vo2max_chart, lt_bpm_chart, lt_pace_chart] | select | list %}
-{% if glance or charts %}
+{% if glance or charts or recovery %}
 <style>
   .fit-sub { color: var(--dim); font-size: 13px; }
   /* Three gauges across for the values with a scale to sit on (a goal, a
@@ -49,6 +49,8 @@
   <div class="gauge-sub">{{ sub or "&nbsp;" | safe }}</div>
 </div>
 {% endmacro %}
+
+{% include "_recovery.html" %}
 
 {% if glance %}
 <div class="card">

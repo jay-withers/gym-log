@@ -11,6 +11,7 @@ import logging
 import math
 import pathlib
 import re
+import statistics
 import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import replace
@@ -187,6 +188,7 @@ def strength_index(request: Request) -> Any:
             "recent": sorted(log.sessions, key=lambda s: s.date, reverse=True)[:8],
             "slots": log.slots,
             "loose_days": LOOSE_DAYS,
+            "recovery": _recovery(log, today),
         },
     )
 
@@ -1226,6 +1228,7 @@ def fitness_insights(request: Request, span: str = "week") -> Any:
         "insights_fitness.html",
         {
             "glance": _at_a_glance(log, today),
+            "recovery": _recovery(log, today),
             "span": span,
             "steps_chart": _fitness_chart(
                 log, today, span, lambda d: d.steps, _steps_label, _steps_tick, from_zero=True
@@ -1566,6 +1569,82 @@ def _hrv_status(log: Any) -> str:
     """Garmin's verdict on the latest night with an HRV reading, e.g. "Balanced"."""
     nights = [d for d in log.garmin_days if d.hrv_ms]
     return nights[-1].hrv_status.replace("_", " ").title() if nights else ""
+
+
+# How far back the recovery card's "normal" reaches, and how many readings in
+# that window it needs before a band means anything.
+RECOVERY_BASELINE_DAYS = 30
+RECOVERY_MIN_READINGS = 7
+
+# (label, GarminDay field, unit, whether higher is better)
+RECOVERY_SIGNALS = (
+    ("HRV", "hrv_ms", "ms", True),
+    ("Resting HR", "resting_hr", "bpm", False),
+    ("Sleep score", "sleep_score", "", True),
+)
+
+
+def _recovery(log: Any, today: date) -> dict[str, Any]:
+    """Last night's HRV, resting HR and sleep score against your own normal.
+
+    "Normal" is the mean plus or minus one standard deviation of the previous
+    `RECOVERY_BASELINE_DAYS` days, not counting today and ignoring zeros
+    (unworn nights). Today's `GarminDay` is the one to judge: Garmin dates
+    sleep and HRV by the morning they end, and a morning sync already has
+    today's resting HR. A signal without a reading today, or with fewer than
+    `RECOVERY_MIN_READINGS` behind it, is left out; with none left the card
+    is hidden.
+
+    The band is at least 1 wide either side, so a month of identical whole
+    numbers doesn't call a one-beat change abnormal.
+
+    Each signal is "better", "worse" or "normal" rather than above/below,
+    since a high resting HR is the bad direction. The verdict: two or more
+    worse is "Take it easy", one is "Normal", none with at least one better
+    is "Recovered".
+    """
+    night = next((d for d in log.garmin_days if d.date == today.isoformat()), None)
+    if night is None:
+        return {}
+    since = (today - timedelta(days=RECOVERY_BASELINE_DAYS)).isoformat()
+    history = [d for d in log.garmin_days if since <= d.date < today.isoformat()]
+
+    signals = []
+    for label, field, unit, higher_is_better in RECOVERY_SIGNALS:
+        value = getattr(night, field)
+        past = [getattr(d, field) for d in history if getattr(d, field)]
+        if not value or len(past) < RECOVERY_MIN_READINGS:
+            continue
+        mean = statistics.fmean(past)
+        band = max(statistics.pstdev(past), 1)
+        low, high = mean - band, mean + band
+        if low <= value <= high:
+            state = "normal"
+        elif (value > high) == higher_is_better:
+            state = "better"
+        else:
+            state = "worse"
+        signals.append(
+            {
+                "label": label,
+                "value": value,
+                "unit": unit,
+                "state": state,
+                "normal": f"{round(low)}-{round(high)}",
+            }
+        )
+    if not signals:
+        return {}
+
+    worse = sum(s["state"] == "worse" for s in signals)
+    better = sum(s["state"] == "better" for s in signals)
+    if worse >= 2:
+        verdict = "Take it easy"
+    elif worse == 0 and better:
+        verdict = "Recovered"
+    else:
+        verdict = "Normal"
+    return {"verdict": verdict, "signals": signals, "as_of": _short_date(night.date)}
 
 
 def _short_date(iso_date: str) -> str:
