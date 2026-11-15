@@ -19,6 +19,7 @@ from gymlog.api.routes import (
     _steps_label,
     _steps_tick,
     _ticks,
+    _trends,
 )
 from gymlog.model import Block, Day, Log, SetLog
 
@@ -2590,3 +2591,88 @@ def test_new_achievement_form_takes_a_prefill(client, seeded):
     page = client.get("/achievements/new?title=PR%3A%20Squat&when=2026-10-20").text
     assert 'value="PR: Squat"' in page
     assert 'value="2026-10-20"' in page
+
+
+def _trend_row(log: Log, today: date, label: str) -> dict:
+    return next(t for t in _trends(log, today) if t["label"] == label)
+
+
+def test_trends_show_yesterday_and_both_averages_against_the_period_before():
+    today = date(2026, 10, 23)
+    # 8000 steps a day for the 4 weeks before last, then 10000 a day since.
+    log = Log(
+        garmin_days=tuple(
+            garmin_day(
+                date=(today - timedelta(days=offset)).isoformat(),
+                steps=10000 if offset <= 28 else 8000,
+            )
+            for offset in range(56, -1, -1)
+        )
+    )
+    steps = _trend_row(log, today, "Steps")
+    assert steps["yesterday"] == "10,000"
+    # The week before was 10000 too: flat. The 4 weeks before were 8000.
+    assert steps["week"] == {"value": "10,000", "change": "flat", "arrow": "", "pct": ""}
+    assert steps["month"] == {"value": "10,000", "change": "better", "arrow": "▲", "pct": "25%"}
+
+
+def test_trends_count_today_only_for_overnight_values():
+    today = date(2026, 10, 23)
+    log = Log(
+        garmin_days=(
+            garmin_day(date="2026-10-22", steps=9000, sleep_seconds=25200),
+            # This morning's sync: last night's sleep is done, today's steps are not.
+            garmin_day(date="2026-10-23", steps=300, sleep_seconds=28800),
+        )
+    )
+    assert _trend_row(log, today, "Steps")["yesterday"] == "9,000"
+    assert _trend_row(log, today, "Sleep")["yesterday"] == "8h 0m"
+
+
+def test_trends_a_rise_in_resting_hr_is_worse_and_in_weight_just_up():
+    today = date(2026, 10, 23)
+    log = Log(
+        garmin_days=tuple(
+            garmin_day(
+                date=(today - timedelta(days=offset)).isoformat(),
+                resting_hr=60 if offset <= 7 else 50,
+                weight_grams=82000 if offset <= 7 else 80000,
+            )
+            for offset in range(14, 0, -1)
+        )
+    )
+    assert _trend_row(log, today, "Resting HR")["week"]["change"] == "worse"
+    weight = _trend_row(log, today, "Weight")
+    assert (weight["week"]["change"], weight["week"]["arrow"]) == ("up", "▲")
+    assert weight["yesterday"] == "82"
+
+
+def test_trends_leave_out_metrics_without_readings_and_gaps_are_not_zero():
+    today = date(2026, 10, 23)
+    log = Log(garmin_days=(garmin_day(date="2026-10-20", hrv_ms=0, steps=7000),))
+    labels = [t["label"] for t in _trends(log, today)]
+    assert "HRV" not in labels
+    steps = _trend_row(log, today, "Steps")
+    # No reading yesterday, and no earlier period to compare with.
+    assert steps["yesterday"] == ""
+    assert steps["week"] == {"value": "7,000", "change": "", "arrow": "", "pct": ""}
+    assert _trends(Log(), today) == []
+
+
+def test_fitness_insights_page_shows_the_trends_card(client, seeded):
+    today = date.today()
+    store.update(
+        lambda current: current.with_garmin_sync(
+            activities=[],
+            days=[
+                garmin_day(date=(today - timedelta(days=offset)).isoformat(), max_hr=170)
+                for offset in range(14, 0, -1)
+            ],
+            keep_since="2020-01-01",
+        )
+    )
+    login(client)
+    page = client.get("/insights/fitness").text
+    assert '<div class="slot">Trends</div>' in page
+    assert ">Yesterday<" in page
+    assert '<div class="name">Max HR <span class="fit-sub">bpm</span></div>' in page
