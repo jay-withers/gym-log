@@ -18,7 +18,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Form, Request, status
+from fastapi import APIRouter, Form, Request, Response, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -131,6 +131,39 @@ def login(request: Request, passcode: str = Form(default="")) -> Any:
     return response
 
 
+# The Android home-screen icons, rendered by scripts/render-icons.py and
+# committed. PNG because Android Chrome builds the installed app from a raster
+# icon, and with none at all it would not offer to install. The maskable one is
+# full-bleed with the glyph inside the middle 80%, because the launcher crops it
+# to its own shape. Read once at import: three small files.
+ICON_DIR = PACKAGE_DIR / "icons"
+# (filename, sizes, purpose) for each icon, which the manifest and route share.
+PNG_ICONS = (
+    ("icon-192.png", "192x192", "any"),
+    ("icon-512.png", "512x512", "any"),
+    ("icon-maskable-512.png", "512x512", "maskable"),
+)
+PNG_BYTES = {name: (ICON_DIR / name).read_bytes() for name, _, _ in PNG_ICONS}
+# A week: the icon changes about never.
+ICON_HEADERS = {"Cache-Control": "public, max-age=604800"}
+
+
+@public.get("/icons/{name}", include_in_schema=False)
+def png_icon(name: str) -> Response:
+    """A home-screen icon. Public like the manifest: the install starts on the
+    login page, before any cookie exists."""
+    content = PNG_BYTES.get(name)
+    if content is None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    return Response(content=content, media_type="image/png", headers=ICON_HEADERS)
+
+
+@public.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    """Browsers ask for this by name; the small icon beats a 404 in the logs."""
+    return png_icon("icon-192.png")
+
+
 @public.get("/manifest.json", include_in_schema=False)
 def manifest() -> JSONResponse:
     """What lets the phone install this to the home screen.
@@ -145,13 +178,20 @@ def manifest() -> JSONResponse:
     """
     return JSONResponse(
         {
+            # `id` pins the installed app's identity apart from `start_url`, so
+            # moving the start page later updates the app rather than forking it.
+            "id": "/",
             "name": "Health",
             "short_name": "Health",
             "start_url": "/strength",
+            "scope": "/",
             "display": "standalone",
             "background_color": "#101014",
             "theme_color": "#101014",
-            "icons": [],
+            "icons": [
+                {"src": f"/icons/{name}", "type": "image/png", "sizes": sizes, "purpose": purpose}
+                for name, sizes, purpose in PNG_ICONS
+            ],
         }
     )
 
