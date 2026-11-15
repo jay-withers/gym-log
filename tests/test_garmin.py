@@ -705,6 +705,16 @@ def test_a_day_carries_body_battery_and_intensity_minutes_from_the_summary(
     assert day.intensity_minutes == 50
 
 
+def test_a_day_carries_max_heart_rate_from_the_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    day, _fitness = _one_day(
+        monkeypatch,
+        summaries={"2026-09-15": {"restingHeartRate": 52, "maxHeartRate": 174}},
+    )
+    assert (day.resting_hr, day.max_hr) == (52, 174)
+
+
 def test_a_day_takes_the_latest_training_readiness_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

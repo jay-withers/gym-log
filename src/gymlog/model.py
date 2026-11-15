@@ -508,6 +508,8 @@ class GarminDay:
     training_readiness_level: str = ""
     # The day's last weigh-in, in grams as Garmin keeps it; 0 on days without one.
     weight_grams: int = 0
+    # The day's highest heart rate, from the same summary as resting_hr.
+    max_hr: int = 0
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -526,6 +528,7 @@ class GarminDay:
             "training_readiness": self.training_readiness,
             "training_readiness_level": self.training_readiness_level,
             "weight_grams": self.weight_grams,
+            "max_hr": self.max_hr,
         }
 
     @classmethod
@@ -546,6 +549,7 @@ class GarminDay:
             training_readiness=int(payload.get("training_readiness", 0) or 0),
             training_readiness_level=str(payload.get("training_readiness_level", "") or ""),
             weight_grams=int(payload.get("weight_grams", 0) or 0),
+            max_hr=int(payload.get("max_hr", 0) or 0),
         )
 
 

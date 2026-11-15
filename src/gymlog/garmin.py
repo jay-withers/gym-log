@@ -290,6 +290,7 @@ def _day(client: Any, cdate: str) -> GarminDay:
     steps = 0
     steps_goal = 0
     resting_hr = 0
+    max_hr = 0
     body_battery_high = 0
     body_battery_low = 0
     intensity_minutes = 0
@@ -298,6 +299,7 @@ def _day(client: Any, cdate: str) -> GarminDay:
         steps = int(summary.get("totalSteps") or 0)
         steps_goal = int(summary.get("dailyStepGoal") or 0)
         resting_hr = int(summary.get("restingHeartRate") or 0)
+        max_hr = int(summary.get("maxHeartRate") or 0)
         # Body Battery and intensity minutes ride on the same summary, not
         # calls of their own. Vigorous minutes count double, as Garmin's own
         # weekly goal counts them.
@@ -382,6 +384,7 @@ def _day(client: Any, cdate: str) -> GarminDay:
         training_readiness=training_readiness,
         training_readiness_level=training_readiness_level,
         weight_grams=weight_grams,
+        max_hr=max_hr,
     )
 
 

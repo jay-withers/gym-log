@@ -5,7 +5,7 @@
 {% block body %}
 {% from "_weekly_line.html" import weekly_line, weekly_line_styles %}
 
-{% set charts = [steps_chart, sleep_chart, hrv_chart, resting_hr_chart, stress_chart, vo2max_chart, lt_bpm_chart, lt_pace_chart, body_battery_chart, readiness_chart, weight_chart] | select | list %}
+{% set charts = [steps_chart, sleep_chart, hrv_chart, resting_hr_chart, max_hr_chart, stress_chart, vo2max_chart, lt_bpm_chart, lt_pace_chart, body_battery_chart, readiness_chart, weight_chart] | select | list %}
 {% if glance or charts or recovery or intensity %}
 <style>
   .fit-sub { color: var(--dim); font-size: 13px; }
@@ -64,7 +64,7 @@
     <div>
       <div class="slot">Resting HR</div>
       <div class="glance-val">{{ glance.resting_hr or "—" }}</div>
-      {% if glance.resting_hr %}<div class="gauge-sub">bpm</div>{% endif %}
+      {% if glance.resting_hr %}<div class="gauge-sub">bpm{% if glance.max_hr %} · max {{ glance.max_hr }}{% endif %}</div>{% endif %}
     </div>
     <div>
       <div class="slot">VO2 max</div>
@@ -117,6 +117,7 @@
 {% if sleep_chart %}{{ weekly_line("Sleep", "a night", sleep_chart) }}{% endif %}
 {% if hrv_chart %}{{ weekly_line("Overnight HRV", "a night", hrv_chart, "last night " ~ hrv_status if hrv_status else "") }}{% endif %}
 {% if resting_hr_chart %}{{ weekly_line("Resting HR", "bpm", resting_hr_chart) }}{% endif %}
+{% if max_hr_chart %}{{ weekly_line("Max HR", "bpm", max_hr_chart) }}{% endif %}
 {% if stress_chart %}{{ weekly_line("Stress", "avg", stress_chart) }}{% endif %}
 {% if vo2max_chart %}{{ weekly_line("VO2 max", "", vo2max_chart) }}{% endif %}
 {% if lt_bpm_chart %}{{ weekly_line("Lactate threshold HR", "bpm", lt_bpm_chart) }}{% endif %}
