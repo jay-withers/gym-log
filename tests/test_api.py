@@ -152,6 +152,30 @@ def test_the_manifest_is_not_gated(client):
     assert response.json()["display"] == "standalone"
 
 
+def test_the_manifest_names_android_icons(client):
+    """With no icon Android Chrome does not offer to install at all; it wants a
+    raster one of at least 192px and a separate maskable one for the launcher."""
+    icons = client.get("/manifest.json").json()["icons"]
+    assert {(i["sizes"], i["purpose"]) for i in icons} == {
+        ("192x192", "any"),
+        ("512x512", "any"),
+        ("512x512", "maskable"),
+    }
+    assert all(i["type"] == "image/png" for i in icons)
+
+
+def test_the_icons_are_not_gated(client):
+    for icon in client.get("/manifest.json").json()["icons"]:
+        response = client.get(icon["src"])
+        assert response.status_code == 200, icon["src"]
+        assert response.headers["content-type"] == "image/png"
+        assert response.content.startswith(b"\x89PNG")
+
+
+def test_an_unknown_icon_is_a_404(client):
+    assert client.get("/icons/nope.png").status_code == 404
+
+
 def test_the_manifest_starts_at_strength_not_the_home_menu(client):
     """The phone icon exists for the twice-a-week fast path of logging a set."""
     assert client.get("/manifest.json").json()["start_url"] == "/strength"
