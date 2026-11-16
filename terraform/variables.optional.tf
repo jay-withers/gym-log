@@ -71,9 +71,9 @@ variable "insight_email_from" {
 # --- the nightly off-Azure backup ---------------------------------------------
 
 variable "backup_bucket" {
-  description = "The R2 bucket the backup job writes to (the cloudflare repo's `jw-app-backups`)."
+  description = "The R2 bucket the backup job writes to (the cloudflare repo's `jw-app-backups`). Empty turns the backup job's selfcheck checks off, and its runs fail as not configured."
   type        = string
-  default     = "jw-app-backups"
+  default     = ""
 }
 
 variable "backup_r2_endpoint" {

@@ -58,10 +58,17 @@ def checks() -> list[tuple[str, Callable[[], object]]]:
         ("storage", store.load),
     ]
     # Only the backup job is given a bucket, so only its selfcheck lists these.
-    if settings().backup_bucket:
+    # Settings that don't load are the "settings" check's failure to report, not
+    # a reason for this list to raise.
+    try:
+        backup_job = bool(settings().backup_bucket)
+    except Exception:
+        backup_job = False
+    if backup_job:
         from . import backup
 
         found += presence_checks(BACKUP_SECRETS)
+        found.append(("backup settings and keys", backup.keys))
         found.append(("backup bucket", backup.check_bucket))
     return found
 

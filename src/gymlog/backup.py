@@ -5,10 +5,11 @@ delete and the delete lock cover a bad write or a slip of the hand; they do
 nothing if the subscription itself is disabled or lost. So once a day this job
 reads each document *exactly as stored*, encrypts it with age, and puts it in
 Cloudflare R2 (the `cloudflare` repo's `jw-app-backups` bucket) under
-`daily/gym-log/<UTC timestamp>/`. The first run in a month that finds no
-`monthly/gym-log/<yyyy-mm>/` copy writes one there too, so a run that fails on
-the 1st doesn't leave the month without one. R2's lifecycle rules are the only
-retention; nothing here deletes.
+`daily/gym-log/<UTC timestamp>/`. The first run in a month whose daily copy
+verifies, and that finds no `monthly/gym-log/<yyyy-mm>/` copy, writes one
+there too: a run that fails on the 1st doesn't leave the month without one,
+and a bad copy never takes the month's slot. R2's lifecycle rules are the
+only retention; nothing here deletes.
 
 **Nothing is ever overwritten.** Every key carries the moment it was taken
 (and a monthly copy is only written where none exists), so a rerun or a
@@ -115,8 +116,13 @@ def check_bucket(client: Any | None = None) -> None:
     client.list_objects_v2(Bucket=settings().backup_bucket, Prefix=f"daily/{APP}/", MaxKeys=1)
 
 
-def run(client: Any | None = None, now: datetime | None = None) -> int:
-    """Back up every document and verify each copy. 0 when all is well, else 1."""
+def keys() -> tuple[list[Any], Any]:
+    """The recipients every copy is encrypted to, and the drill identity.
+
+    Raises ValueError, naming what is wrong but never a key, when the backup
+    settings are missing or a key doesn't parse. selfcheck calls it too, so a
+    deploy that would fail every nightly run fails its smoke test instead.
+    """
     from pyrage import x25519
 
     from .settings import secret, settings
@@ -132,11 +138,28 @@ def run(client: Any | None = None, now: datetime | None = None) -> int:
         if not value
     ]
     if missing:
-        logger.error("backup: not configured, %s unset", ", ".join(missing))
-        return 1
+        raise ValueError(f"not configured, {', '.join(missing)} unset")
+    try:
+        recipient = x25519.Recipient.from_str(config.backup_age_recipient)
+    except Exception:
+        raise ValueError("BACKUP_AGE_RECIPIENT is not an age public key") from None
+    try:
+        drill = x25519.Identity.from_str(secret("BACKUP-AGE-DRILL-KEY").strip())
+    except Exception:
+        raise ValueError("BACKUP-AGE-DRILL-KEY is not an age secret key") from None
+    return [recipient, drill.to_public()], drill
 
-    drill = x25519.Identity.from_str(secret("BACKUP-AGE-DRILL-KEY").strip())
-    recipients = [x25519.Recipient.from_str(config.backup_age_recipient), drill.to_public()]
+
+def run(client: Any | None = None, now: datetime | None = None) -> int:
+    """Back up every document and verify each copy. 0 when all is well, else 1."""
+    from .settings import settings
+
+    try:
+        recipients, drill = keys()
+    except ValueError as exc:
+        logger.error("backup: %s", exc)
+        return 1
+    config = settings()
     client = client or r2_client()
     now = now or datetime.now(UTC)
 
@@ -158,7 +181,7 @@ def run(client: Any | None = None, now: datetime | None = None) -> int:
 def _back_up(
     client: Any, bucket: str, doc: Document, recipients: list[Any], drill: Any, now: datetime
 ) -> int:
-    """Copy one document to every key it is due and verify each. Returns the failures."""
+    """Copy one document daily (and monthly, if due) and verify each. Returns the failures."""
     import pyrage
 
     raw = store.load_raw(doc.name)
@@ -169,32 +192,39 @@ def _back_up(
         logger.info("backup: skip %s: never written", doc.name)
         return 0
 
-    due = [daily_key(doc.name, now)]
-    monthly = monthly_key(doc.name, now)
-    if not _exists(client, bucket, monthly):
-        due.append(monthly)
-
     sealed = pyrage.encrypt(raw, recipients)
-    failed = 0
-    for key in due:
-        try:
-            client.put_object(Bucket=bucket, Key=key, Body=sealed)
-            body = client.get_object(Bucket=bucket, Key=key)["Body"].read()
-            restored = pyrage.decrypt(body, [drill])
-            if restored != raw:
-                raise ValueError("the decrypted copy differs from the document")
-            doc.validate(restored)
-        except Exception as exc:
-            failed += 1
-            logger.error(
-                "backup: FAIL %s -> %s: %s: %s",
-                doc.name,
-                key,
-                type(exc).__name__,
-                str(exc)[:300],
-            )
-        else:
-            logger.info(
-                "backup: ok %s -> %s (%d bytes, restored and parsed)", doc.name, key, len(raw)
-            )
-    return failed
+    if not _copy(client, bucket, doc, daily_key(doc.name, now), sealed, raw, drill):
+        return 1
+
+    monthly = monthly_key(doc.name, now)
+    try:
+        if _exists(client, bucket, monthly):
+            return 0
+    except Exception as exc:
+        logger.error(
+            "backup: FAIL %s -> %s: %s: %s", doc.name, monthly, type(exc).__name__, str(exc)[:300]
+        )
+        return 1
+    return 0 if _copy(client, bucket, doc, monthly, sealed, raw, drill) else 1
+
+
+def _copy(
+    client: Any, bucket: str, doc: Document, key: str, sealed: bytes, raw: bytes, drill: Any
+) -> bool:
+    """Upload one copy, then download, decrypt, compare and parse it. True if it restores."""
+    import pyrage
+
+    try:
+        client.put_object(Bucket=bucket, Key=key, Body=sealed)
+        body = client.get_object(Bucket=bucket, Key=key)["Body"].read()
+        restored = pyrage.decrypt(body, [drill])
+        if restored != raw:
+            raise ValueError("the decrypted copy differs from the document")
+        doc.validate(restored)
+    except Exception as exc:
+        logger.error(
+            "backup: FAIL %s -> %s: %s: %s", doc.name, key, type(exc).__name__, str(exc)[:300]
+        )
+        return False
+    logger.info("backup: ok %s -> %s (%d bytes, restored and parsed)", doc.name, key, len(raw))
+    return True
