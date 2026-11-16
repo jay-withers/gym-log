@@ -64,7 +64,7 @@ repos:
   # config, including the rule selection, lives in pyproject.toml — ruff walks
   # up from each file to find it, so nothing needs pointing at it from here.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: c0f278f1254ccc8fb09676bcdb8d847e7db493e5 # frozen: v0.17.4
+    rev: ef6cf06c079dd6b299dfc720b0f14400c9d168e1 # frozen: v0.17.5
     hooks:
       - id: ruff-check
         args: [--fix]
@@ -121,7 +121,7 @@ repos:
         exclude: \.terraform/.*$
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
-    rev: 4c4437d784e93cacb1f05f1d7bc28e4354fafd20 # frozen: v1.109.4
+    rev: b9e409b0fee34ee0eee7e6f6a407061f15032926 # frozen: v1.109.5
     hooks:
       - id: terraform_fmt
 
