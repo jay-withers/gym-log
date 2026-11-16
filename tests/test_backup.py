@@ -175,6 +175,45 @@ def test_a_copy_that_comes_back_different_fails(configured, r2, a_log, caplog):
     assert "differs" in caplog.text
 
 
+def test_a_bad_copy_never_takes_the_months_slot(configured, r2, a_log):
+    """The monthly copy comes only from a daily copy that restored."""
+    good = store.load_raw(store.BLOB_NAME)
+    assert good is not None
+    store.local_path().write_bytes(b"{not json")
+    assert backup.run(client=r2, now=datetime(2026, 12, 1, 2, 30, tzinfo=UTC)) == 1
+    assert "monthly/gym-log/2026-12/gymlog.json.age" not in r2.objects
+
+    store.local_path().write_bytes(good)
+    assert backup.run(client=r2, now=datetime(2026, 12, 2, 2, 30, tzinfo=UTC)) == 0
+    monthly = r2.objects["monthly/gym-log/2026-12/gymlog.json.age"]
+    assert pyrage.decrypt(monthly, [OWNER]) == good
+
+
+def test_a_failed_monthly_lookup_still_keeps_the_daily(configured, r2, a_log, monkeypatch, caplog):
+    def broken(**_: object) -> None:
+        raise ConnectionError("R2 is having a day")
+
+    monkeypatch.setattr(r2, "list_objects_v2", broken)
+    with caplog.at_level(logging.INFO):
+        assert backup.run(client=r2, now=MID_MONTH) == 1
+    assert DAILY in r2.objects
+    assert f"FAIL gymlog.json -> {MONTHLY}: ConnectionError" in caplog.text
+
+
+def test_keys_rejects_a_malformed_drill_key_without_echoing_it(configured, monkeypatch):
+    monkeypatch.setenv("BACKUP_AGE_DRILL_KEY", "AGE-SECRET-KEY-NOTAKEY")
+    with pytest.raises(ValueError, match="BACKUP-AGE-DRILL-KEY is not") as raised:
+        backup.keys()
+    assert "NOTAKEY" not in str(raised.value)
+
+
+def test_keys_rejects_a_malformed_recipient(configured, monkeypatch):
+    monkeypatch.setenv("BACKUP_AGE_RECIPIENT", "age1nope")
+    settings_module.settings.cache_clear()
+    with pytest.raises(ValueError, match="BACKUP_AGE_RECIPIENT is not"):
+        backup.keys()
+
+
 def test_a_corrupt_log_is_still_copied_then_fails(configured, r2, caplog):
     store.local_path().write_bytes(b"{not json")
     with caplog.at_level(logging.INFO):

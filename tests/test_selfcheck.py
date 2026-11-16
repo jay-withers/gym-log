@@ -17,8 +17,14 @@ from gymlog.cli import main
 
 @pytest.fixture
 def secrets_set(monkeypatch):
+    from pyrage import x25519
+
     for name in (*selfcheck.SECRETS, *selfcheck.BACKUP_SECRETS):
         monkeypatch.setenv(name.replace("-", "_"), f"value-of-{name}")
+    # What the backup job's own settings check parses.
+    monkeypatch.setenv("BACKUP_AGE_DRILL_KEY", str(x25519.Identity.generate()))
+    monkeypatch.setenv("BACKUP_R2_ENDPOINT", "https://acc.eu.r2.cloudflarestorage.com")
+    monkeypatch.setenv("BACKUP_AGE_RECIPIENT", str(x25519.Identity.generate().to_public()))
 
 
 @pytest.fixture
@@ -68,6 +74,38 @@ def test_the_backup_job_also_checks_its_bucket(secrets_set, storage_ok, monkeypa
         assert selfcheck.run() == 0
     assert calls == ["listed"]
     assert "ok backup bucket" in caplog.text
+    assert "ok backup settings and keys" in caplog.text
+
+
+def test_the_backup_job_fails_on_an_unset_endpoint(secrets_set, storage_ok, monkeypatch, caplog):
+    from gymlog import backup
+
+    monkeypatch.setenv("BACKUP_BUCKET", "test-backups")
+    monkeypatch.delenv("BACKUP_R2_ENDPOINT")
+    monkeypatch.setattr(backup, "check_bucket", lambda: None)
+    with caplog.at_level(logging.INFO):
+        assert selfcheck.run() == 1
+    assert "FAIL backup settings and keys: ValueError: not configured, BACKUP_R2_ENDPOINT" in (
+        caplog.text
+    )
+
+
+def test_settings_that_dont_load_are_reported_not_raised(
+    secrets_set, storage_ok, monkeypatch, caplog
+):
+    from functools import cache
+
+    from gymlog import settings as settings_module
+
+    # Cached like the real one, so the suite's teardown can clear it.
+    @cache
+    def broken() -> None:
+        raise ValueError("bad setting")
+
+    monkeypatch.setattr(settings_module, "settings", broken)
+    with caplog.at_level(logging.INFO):
+        assert selfcheck.run() == 1
+    assert "FAIL settings: ValueError: bad setting" in caplog.text
 
 
 def test_the_backup_job_fails_without_its_r2_keys(secrets_set, storage_ok, monkeypatch, caplog):
