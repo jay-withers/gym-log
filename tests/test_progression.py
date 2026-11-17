@@ -7,6 +7,10 @@ injury and one that never moves is the spreadsheet again. Tested from literals.
 
 from __future__ import annotations
 
+from hypothesis import given
+from hypothesis import strategies as st
+
+from gymlog.model import Exercise
 from gymlog.progression import suggest
 
 from .factories import entry, exercise
@@ -112,3 +116,117 @@ def test_weight_label_does_not_show_a_trailing_zero():
     got = suggest(exercise(increment=2.5), entry("x", "chest", (12, 52.5), (12, 52.5), (12, 52.5)))
     assert got is not None
     assert got.weight_label == "55"
+
+
+# --- properties -----------------------------------------------------------------
+#
+# The examples above pin the rule's three branches. These hold for any range,
+# any increment and any session: the guarantees a lifter relies on without
+# reading the code.
+
+
+# Whatever the form accepts, to the gram, up to a tonne.
+GRAMS = st.integers(min_value=0, max_value=1_000_000).map(lambda grams: grams / 1000)
+WEIGHTS = GRAMS
+
+
+@st.composite
+def exercises(draw: st.DrawFn) -> Exercise:
+    """A tracked movement with a valid range, as the block form guarantees."""
+    low = draw(st.integers(min_value=1, max_value=30))
+    return exercise(
+        rep_low=low,
+        rep_high=draw(st.integers(min_value=low, max_value=40)),
+        # Typed freely into the block form: 0.1 is as possible as 2.5.
+        increment=draw(GRAMS.filter(lambda kg: 0 < kg <= 20)),
+    )
+
+
+SETS = st.lists(st.tuples(st.integers(min_value=0, max_value=50), WEIGHTS), min_size=1, max_size=6)
+
+
+@given(exercises(), SETS)
+def test_reps_always_land_inside_the_range(ex: Exercise, sets: list[tuple[int, float]]):
+    got = suggest(ex, entry("Cable Flyes", "chest", *sets))
+    assert got is not None
+    assert ex.rep_low <= got.reps <= ex.rep_high
+
+
+@given(exercises(), SETS)
+def test_load_only_ever_holds_or_goes_up_by_one_increment(
+    ex: Exercise, sets: list[tuple[int, float]]
+):
+    """Never a drop, and never a jump bigger than the movement's own step."""
+    heaviest = max(w for _, w in sets)
+    got = suggest(ex, entry("Cable Flyes", "chest", *sets))
+    assert got is not None
+    assert got.weight in (heaviest, round(heaviest + ex.increment, 3))
+
+
+@given(exercises(), SETS)
+def test_load_goes_up_exactly_when_every_set_tops_the_range(
+    ex: Exercise, sets: list[tuple[int, float]]
+):
+    weakest = min(r for r, _ in sets)
+    got = suggest(ex, entry("Cable Flyes", "chest", *sets))
+    assert got is not None
+    assert (got.weight > max(w for _, w in sets)) == (weakest >= ex.rep_high)
+    assert got.stalled == (weakest < ex.rep_low)
+
+
+@given(exercises(), SETS, st.data())
+def test_a_better_session_never_earns_a_worse_suggestion(
+    ex: Exercise, sets: list[tuple[int, float]], data: st.DataObject
+):
+    """Same weights, at least as many reps on every set: at least as far along."""
+    better = [(r + data.draw(st.integers(min_value=0, max_value=10)), w) for r, w in sets]
+    worse_got = suggest(ex, entry("Cable Flyes", "chest", *sets))
+    better_got = suggest(ex, entry("Cable Flyes", "chest", *better))
+    assert worse_got is not None and better_got is not None
+    assert better_got.weight >= worse_got.weight
+    if better_got.weight == worse_got.weight:
+        assert better_got.reps >= worse_got.reps
+
+
+@given(exercises(), SETS)
+def test_doing_what_it_says_always_leads_to_more_load(ex: Exercise, sets: list[tuple[int, float]]):
+    """From any session, following every suggestion exactly reaches the next
+    increment: never a loop, wherever it starts (stalled, mid-range, mixed sets).
+
+    It takes at most one session per rep in the range, plus the one that
+    starts it, which is the promise of double progression: climb the reps,
+    then the weight.
+    """
+    start = max(w for _, w in sets)
+    got = suggest(ex, entry("Cable Flyes", "chest", *sets))
+    for _ in range(ex.rep_high - ex.rep_low + 2):
+        assert got is not None
+        if got.weight > start:
+            assert got.weight == round(start + ex.increment, 3)
+            return
+        got = suggest(ex, entry("Cable Flyes", "chest", *[(got.reps, got.weight)] * 3))
+    raise AssertionError(f"still at {start}kg after following every suggestion")
+
+
+@given(exercises(), SETS)
+def test_the_label_reads_back_as_the_weight(ex: Exercise, sets: list[tuple[int, float]]):
+    """The screen shows `weight_label`; what it shows must be the number used,
+    after an increment as much as on a held weight."""
+    got = suggest(ex, entry("Cable Flyes", "chest", *sets))
+    assert got is not None
+    assert float(got.weight_label) == got.weight
+
+
+# Found by review: 7.6 + 0.1 is 7.699999999999999 in floats, shown as "7.7".
+def test_an_increment_lands_on_the_number_it_shows():
+    got = suggest(exercise(increment=0.1), entry("Cable Flyes", "chest", (12, 7.6), (12, 7.6)))
+    assert got is not None
+    assert got.weight == 7.7
+    assert got.weight_label == "7.7"
+
+
+def test_a_heavy_weight_keeps_its_grams():
+    """`:g` alone would show 1002.125 as 1002.12."""
+    got = suggest(exercise(seed_weight=1002.125))
+    assert got is not None
+    assert got.weight_label == "1002.125"

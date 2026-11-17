@@ -7,11 +7,14 @@ from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from hypothesis import given
+from hypothesis import strategies as st
 
 from gymlog import chat, store
 from gymlog import settings as settings_module
 from gymlog.api.main import create_app
 from gymlog.api.routes import (
+    _chosen_range,
     _fitness_chart,
     _hours_label,
     _hours_tick,
@@ -2678,3 +2681,23 @@ def test_fitness_insights_page_shows_the_trends_card(client, seeded):
     assert '<div class="slot">Trends</div>' in page
     assert ">Yesterday<" in page
     assert '<div class="name">Max HR <span class="fit-sub">bpm</span></div>' in page
+
+
+# Anything can be posted: the inputs' `min` is advice. Whatever arrives, the
+# range that reaches `progression.suggest` must be one it can climb.
+FIELD = st.none() | st.text(max_size=6) | st.integers(min_value=-50, max_value=60).map(str)
+
+
+@given(low=FIELD, high=FIELD, outgoing_low=st.integers(1, 30), span=st.integers(0, 10))
+def test_any_posted_rep_range_is_one_progression_can_climb(
+    low: str | None, high: str | None, outgoing_low: int, span: int
+):
+    outgoing = exercise(rep_low=outgoing_low, rep_high=outgoing_low + span)
+    form = {"rep_low_A_0": low, "rep_high_A_0": high}
+    got_low, got_high = _chosen_range(form, "A", 0, outgoing)
+    assert 1 <= got_low <= got_high
+    # A usable typed number is never dropped for the outgoing one: it is in
+    # the range, either where it was typed or transposed.
+    for typed in (low, high):
+        if typed is not None and typed.strip().lstrip("-").isdigit() and int(typed) > 0:
+            assert int(typed) in (got_low, got_high)
