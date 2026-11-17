@@ -49,10 +49,10 @@ Differences from repo-agent worth knowing before copying anything between them:
 | `make deploy` | `az containerapp job update` | `az containerapp update` |
 | Naming module | two instances | one — nothing parses the app's name |
 
-**The platform's job-failure alert does not cover this app.** It splits on
-`JobName_s` and watches jobs only, so a crash-looping container app raises
-nothing. If that matters later it is a tenant-side log alert here, not a change
-in the platform repo.
+**The platform's workload-crashed alert covers this app.** It started as
+job-only, but since 2026-09-22 it matches `ContainerAppName_s` as well as
+`JobName_s`, so a crash-looping container app here raises it like a failed job
+does. Nothing tenant-side is needed.
 
 ## The `command` decision — do not undo this
 
