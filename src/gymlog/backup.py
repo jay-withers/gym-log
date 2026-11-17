@@ -120,7 +120,8 @@ def keys() -> tuple[list[Any], Any]:
     """The recipients every copy is encrypted to, and the drill identity.
 
     Raises ValueError, naming what is wrong but never a key, when the backup
-    settings are missing or a key doesn't parse. selfcheck calls it too, so a
+    settings are missing or a key doesn't parse; a Key Vault error resolving
+    the drill key propagates as itself. selfcheck calls it too, so a
     deploy that would fail every nightly run fails its smoke test instead.
     """
     from pyrage import x25519
@@ -143,8 +144,11 @@ def keys() -> tuple[list[Any], Any]:
         recipient = x25519.Recipient.from_str(config.backup_age_recipient)
     except Exception:
         raise ValueError("BACKUP_AGE_RECIPIENT is not an age public key") from None
+    # Resolved outside the parse's try, so a Key Vault error (no access, not
+    # set, unreachable) is reported as itself, not as a malformed key.
+    drill_key = secret("BACKUP-AGE-DRILL-KEY").strip()
     try:
-        drill = x25519.Identity.from_str(secret("BACKUP-AGE-DRILL-KEY").strip())
+        drill = x25519.Identity.from_str(drill_key)
     except Exception:
         raise ValueError("BACKUP-AGE-DRILL-KEY is not an age secret key") from None
     return [recipient, drill.to_public()], drill
@@ -156,11 +160,16 @@ def run(client: Any | None = None, now: datetime | None = None) -> int:
 
     try:
         recipients, drill = keys()
+        client = client or r2_client()
     except ValueError as exc:
         logger.error("backup: %s", exc)
         return 1
+    except Exception as exc:
+        # Key Vault or the R2 client: logged like every other failure, so the
+        # job's log says what went wrong rather than ending in a traceback.
+        logger.error("backup: FAIL setup: %s: %s", type(exc).__name__, str(exc)[:300])
+        return 1
     config = settings()
-    client = client or r2_client()
     now = now or datetime.now(UTC)
 
     failed = 0
