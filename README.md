@@ -101,7 +101,10 @@ Six sections that are not derived from sets and reps:
   entry can be deleted individually. When Garmin data has been synced, the
   prompt includes the last 7 days of cardio activity and recovery (steps,
   resting heart rate, sleep) alongside the lift log, so the summary can speak
-  to the whole week rather than just the barbell work.
+  to the whole week rather than just the barbell work. The scheduled run
+  (Sundays at 20:00 UTC) also emails the insight through Resend to
+  `INSIGHT-EMAIL-TO`; the button doesn't, since whoever pressed it is already
+  looking at the result.
   **HR Zone Insights** (`/insights/hr-zones`) is a read-only summary — a
   segmented bar plus minutes and percentage per zone, this week and over the
   last 30 days — computed from whatever Garmin sync (below) has synced; it
@@ -189,10 +192,23 @@ platform whose entire design is that nothing bills while idle.
 
 ## Using it
 
-`make url` prints the address. It is stable across deploys — it comes from the
-app name and the shared environment, not from the revision — so bookmark it and
-add it to the phone's home screen, where the manifest opens it without browser
-chrome.
+The app is at `https://health.jaywithers.uk`, a custom domain with an
+Azure-managed certificate (`custom_domain_name` in `environments/dev.tfvars`).
+Its CNAME and `asuid` TXT records are the `health` entry in
+[jay-withers/cloudflare](https://github.com/jay-withers/cloudflare), DNS only,
+and both must resolve before an apply that binds it. `make url` prints the
+default `*.azurecontainerapps.io` address, which keeps working. Add it to the
+phone's home screen, where the manifest opens it without browser chrome.
+
+Against the deployed app (`az login`):
+
+```bash
+make show          # the training log as JSON
+make logs          # tail the app's logs
+make insight       # generate a weekly insight against the real log
+make garmin-sync   # sync the last 7 days from Garmin into the real log (DAYS=N to widen)
+make secrets       # print the az commands that set the Key Vault secrets
+```
 
 ## Local development
 
@@ -220,6 +236,9 @@ replaces an existing one (make cannot take `--force` as a target argument).
 
 It writes to the local file only, and **refuses outright when
 `STATE_CONTAINER_URL` is set** — invented sessions must never reach the real log.
+
+`make garmin-sync-local` does the same for Garmin, with `GARMIN_EMAIL` and
+`GARMIN_PASSWORD` in the environment.
 
 `make insight-local` regenerates the weekly insight against that same local
 file — set `DEEPSEEK_API_KEY` in the environment first, since there is no Key
@@ -373,8 +392,17 @@ container `make show` reads, or into a new storage account after a rebuild.
 Every workflow is a thin caller of a reusable workflow in
 [jay-withers/workflows](https://github.com/jay-withers/workflows), pinned by
 commit SHA with the tag as a comment. Required checks are set in `github-repos`,
-not here: `pre-commit / Pre-commit`, `test / Test`, `terraform / Terraform` and
-`container-build`. Read them off `gh pr checks` rather than inferring them.
+not here: `pre-commit / Pre-commit`, `test / Test`, `terraform / Terraform`,
+`terraform-plan` and `container-build`. Read them off `gh pr checks` rather
+than inferring them. `test / Test` includes mypy and diff coverage (at least 80%
+of the lines a PR changes in `gymlog` must be run by a test). `ci-codeql` scans
+the workflows, and code scanning is on, so a new high or critical alert blocks
+the merge.
+
+`cd-tag` → `cd-publish` releases on every merge and deploys when app files
+changed (see [Deploying](#deploying)). `schedule-drift` plans dev nightly and
+records drift in the platform's `OpsEvents_CL` table; `manual-terraform-unlock`
+releases a stuck state lock.
 
 `ci-container-build`'s **`container-build`** gate is a required check. The
 workflow runs on every pull request; a `changes` job decides whether the image
