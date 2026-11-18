@@ -139,12 +139,23 @@ The whole `env` map is ignored rather than `IMAGE_TAG`'s entry, because indexing
 into a map-driven `dynamic` block by position would silently shift if
 `common_env` gained or lost a key.
 
-## The smoke test is shared — copy, don't diverge
+## The smoke test lives in jay-withers/workflows
 
-`scripts/smoke.sh` is shared verbatim with finances, career, repo-agent and
-security-testing, and `make smoke`/`make deployed-tag` follow the same shape
-in each. The shared `container-apps-deploy.yml` runs them around every deploy
-and rolls back on failure. `/healthz` must keep reporting `version` from
+`make smoke` fetches `scripts/smoke.sh` from
+[jay-withers/workflows](https://github.com/jay-withers/workflows) at the
+commit `cd-publish.yml` pins `container-apps-deploy.yml` to, so CI and a local
+run use the same version and Renovate's bump of that pin moves it. There is
+no copy here: change it there. `make smoke`/`make deployed-tag` keep the same
+shape in every app repo, and `container-apps-deploy.yml` runs them around
+every deploy and rolls back on failure.
+
+`browser-check: true` in `cd-publish.yml` adds a Chromium load of the app's
+`/` on its default FQDN (the login page, unauthenticated): a broken template
+or a CSP block in the deployed app rolls the release back. It never signs in,
+so the passcode never reaches CI.
+
+`/healthz` and `/readyz` come from `appkit.health` (`api/main.py`'s `_ready`
+is gym-log's readiness read). `/healthz` must keep reporting `version` from
 `IMAGE_TAG`: without it, the smoke test can only infer the new revision is
 serving from `latestReadyRevisionName`, a weaker check meant for rolling back
 to images from before `version` existed.

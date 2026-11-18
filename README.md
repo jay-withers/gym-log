@@ -273,13 +273,15 @@ that tag. Running `make deploy` by hand is for anything else.
 
 **Every deploy is smoke-tested, and a failed one rolls back.** Before deploying,
 the workflow records `make deployed-tag` (the tag on the app now). After it,
-`make smoke` (`scripts/smoke.sh`) checks that the app and every job are
+`make smoke` (jay-withers/workflows' `scripts/smoke.sh`, fetched at the pinned
+commit) checks that the app and every job are
 configured with the new tag (the backup job included), that the app's `/healthz` reports it as `version`
 on its default FQDN (allowing five minutes for a cold start), and that
 `/readyz` answers 200. It then starts one run of each job with its args swapped
 for `gymlog selfcheck`, which loads the settings, resolves every secret the
 jobs read and reads the log, sending and writing nothing, and waits for both
-runs to succeed. If the deploy or the smoke test fails, the workflow
+runs to succeed. Finally it loads the app's home page in Chromium and fails on
+any console error, so a broken template or a CSP block can't go live. If the deploy or the smoke test fails, the workflow
 redeploys the recorded tag, smoke-tests that, and fails the run, so a
 `deploy-failed` issue says whether dev is back on the old version. Rolling back
 moves the image only: a release must not change the blob's shape in a way the

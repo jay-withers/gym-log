@@ -80,7 +80,10 @@ jobs:
       id-token: write
       contents: read
       issues: write # the deploy-failed issue
-    uses: jay-withers/workflows/.github/workflows/container-apps-deploy.yml@801fec3f77ffca7b2124bd0aa24be37b60bda7ac # v1.28.4
+    uses: jay-withers/workflows/.github/workflows/container-apps-deploy.yml@b62ee5b1bb9038ec8b9827ec3c93c818c8d0da5b # v1.30.0
     with:
       version: ${{ inputs.version }}
+      # Load the home page (the login page) in Chromium during the smoke
+      # test: a broken template or a CSP block rolls the release back.
+      browser-check: true
       verify-images: ghcr.io/${{ github.repository }}/gymlog
