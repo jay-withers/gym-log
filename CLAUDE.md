@@ -69,8 +69,8 @@ defines it.
 
 The modules career, finances and gym-log used to copy from one another now
 come from [jay-withers/appkit](https://github.com/jay-withers/appkit), pinned
-by tag in `pyproject.toml` (`git+https`; the builder image carries git for
-it). Bump the tag by hand with `uv lock`: Renovate isn't known to track it yet.
+by tag in `pyproject.toml`'s `[tool.uv.sources]` (the builder image carries
+git for it). Renovate raises the bump, `uv lock` included, like any other.
 
 - `appkit.headers`: security headers and the CSP nonce (`api/main.py`).
 - `appkit.passcode`: the gate. `api/deps.py` only names the cookie.

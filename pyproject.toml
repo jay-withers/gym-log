@@ -10,9 +10,8 @@ requires-python = ">=3.12"
 dependencies = [
   # Shared with career, finances and gym-log: security headers, the passcode
   # gate, secret resolution, the backup and selfcheck (jay-withers/appkit).
-  # A git tag (the builder image carries git for it). Bump it by hand, with
-  # `uv lock`, when appkit releases: Renovate isn't known to track it yet.
-  "appkit[azure,backup] @ git+https://github.com/jay-withers/appkit@v0.1.0",
+  # Installed from a git tag, set in [tool.uv.sources] below.
+  "appkit[azure,backup]",
   "pydantic>=2.9",
   "pydantic-settings>=2.5",
   "python-dotenv>=1.0",
@@ -57,9 +56,12 @@ gymlog = "gymlog.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# appkit is a git reference (a tag), which hatchling refuses by default.
-[tool.hatch.metadata]
-allow-direct-references = true
+# appkit comes from a git tag (the builder image carries git for it). Set
+# here rather than as `appkit @ git+...` in dependencies: Renovate reads a
+# uv git source's tag and raises the bump with `uv lock`, but skips a
+# PEP 508 direct reference.
+[tool.uv.sources]
+appkit = { git = "https://github.com/jay-withers/appkit", tag = "v0.1.0" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gymlog"]
