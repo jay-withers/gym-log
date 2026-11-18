@@ -34,7 +34,14 @@ dependencies = [
 [project.optional-dependencies]
 # httpx2, not httpx: starlette's TestClient deprecated the latter, and with
 # `filterwarnings = ["error"]` below that deprecation fails collection outright.
-dev = ["pytest>=8.3", "ruff>=0.8", "httpx2>=0.28", "mypy>=2.4.1", "boto3-stubs[s3]>=1.44"]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "httpx2>=0.28",
+    "mypy>=2.4.1",
+    "boto3-stubs[s3]>=1.44",
+    "hypothesis>=6.140",
+]
 
 # What the Dockerfile's ENTRYPOINT resolves to. Terraform sets no `command`, so
 # this name lives in exactly one place.

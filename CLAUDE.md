@@ -168,6 +168,21 @@ Two things the fixtures exist to guarantee:
   an http client accepts it and then never sends it back — every gated request
   would 303 and the cause would look like a bug in the gate.
 
+**The progression rule has Hypothesis property tests** (the `# --- properties`
+block in `test_progression.py`, and the posted-rep-range one in `test_api.py`):
+reps land in the range, load holds or rises by exactly one increment, a better
+session never earns a worse suggestion, and following every suggestion always
+reaches the next increment. Weights and increments are generated to the gram,
+because the block form takes any typed number: that is how 7.6 + 0.1 showing
+as 7.7 but being 7.699999… was caught, and why a suggestion is rounded to the
+gram. A change to `progression.py` must keep them passing; a counter-example
+Hypothesis finds becomes an `@example` (or a plain test) beside the property.
+`conftest.py` loads the `dev` profile locally (100 random examples) and, under
+`CI=true`, Hypothesis' own derandomized `ci` profile raised to 1000 examples,
+so a required check never fails on one run's draw. Both have no deadline and
+the function-scoped-fixture check off (`fake_secrets` is autouse), so **a
+property test takes no fixtures**.
+
 `pytest-cov` is deliberately not declared; the shared CI workflow injects it.
 `extras: dev` matters in CI: pytest is an extra, not a dependency group, and
 `uv run` installs groups but not extras.

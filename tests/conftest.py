@@ -7,11 +7,37 @@ account, however a developer's own environment happens to be configured.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 
 import pytest
+from hypothesis import HealthCheck, settings
 
 from gymlog import settings as settings_module
+
+# Property tests (adapted from finances' conftest). `make test` locally runs
+# Hypothesis' default 100 examples; CI (CI=true) runs 1000. No deadline: a
+# shared runner's pauses would read as a flaky failure. The
+# function-scoped-fixture check is off because `fake_secrets` is autouse, so
+# every @given test would trip it; that is only safe while **a property test
+# takes no fixtures**, since one instance would be shared by all its examples.
+settings.register_profile(
+    "dev", deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture]
+)
+# Built on Hypothesis' own `ci` profile rather than replacing it: that one is
+# derandomized (the same examples every run, so a required check can't fail on
+# one PR's draw and pass on its re-run) and prints a blob to reproduce a failure.
+_builtin_ci = settings.get_profile("ci")
+settings.register_profile(
+    "ci",
+    parent=_builtin_ci,
+    max_examples=1000,
+    suppress_health_check=[
+        *_builtin_ci.suppress_health_check,
+        HealthCheck.function_scoped_fixture,
+    ],
+)
+settings.load_profile("ci" if os.environ.get("CI", "").lower() in {"true", "1"} else "dev")
 
 
 @pytest.fixture(autouse=True)

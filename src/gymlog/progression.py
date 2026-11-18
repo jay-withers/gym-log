@@ -43,8 +43,12 @@ class Suggestion:
 
     @property
     def weight_label(self) -> str:
-        """`7.5` not `7.5000000001`, and `55` not `55.0`."""
-        return f"{self.weight:g}"
+        """`7.5` not `7.5000000001`, and `55` not `55.0`.
+
+        To the gram, and never in exponent form: `:g` alone keeps six
+        significant figures, so 1002.125 would read as 1002.12.
+        """
+        return f"{round(self.weight, 3):.12g}"
 
 
 def suggest(
@@ -69,13 +73,13 @@ def suggest(
     weakest = min(reps)
 
     if weakest >= exercise.rep_high:
+        # To the gram: an increment typed as 0.1 makes 7.6 + 0.1 come out as
+        # 7.699999..., which the screen would show as 7.7 and then disagree with.
+        heavier = round(weight + exercise.increment, 3)
         return Suggestion(
-            weight=weight + exercise.increment,
+            weight=heavier,
             reps=exercise.rep_low,
-            reason=(
-                f"{exercise.rep_high}+ on every set at {weight:g}kg "
-                f"— up to {weight + exercise.increment:g}kg"
-            ),
+            reason=(f"{exercise.rep_high}+ on every set at {weight:g}kg — up to {heavier:g}kg"),
             last=last,
             last_date=last_date,
         )
