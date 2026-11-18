@@ -193,6 +193,24 @@ so a required check never fails on one run's draw. Both have no deadline and
 the function-scoped-fixture check off (`fake_secrets` is autouse), so **a
 property test takes no fixtures**.
 
+**Browser tests live in `tests/e2e/`** (Playwright, through
+`appkit.testing`): the real app under uvicorn on a free port, against a log
+`gymlog seed` writes to a temp dir, driven by Chromium. They sign in, open
+every screen in `PAGES`, log a set and add a goal, each checked after a
+reload. An autouse fixture fails any journey that leaves a console error, and
+a CSP block is one, so **an inline script without its nonce fails here**
+even where `test_headers.py` can't see it. Add a new screen to `PAGES`.
+
+- The server is session-scoped, so it starts before the per-test
+  `fake_secrets`: its `env` sets `STATE_CONTAINER_URL`, `KEY_VAULT_URI` and
+  the rest to empty itself (empty, not removed, or `Settings` would read a
+  developer's `.env` instead). Keep that list in step with `fake_secrets`.
+- Journeys share one log. Make what a test writes unique (the goal title is),
+  rather than assuming an empty slate.
+- Locally they skip without Chromium (`make e2e` installs it). Under CI they
+  fail instead: ci-python's `playwright: true` installs it inside
+  `test / Test`, so a broken install can't pass as skipped.
+
 `pytest-cov` is deliberately not declared; the shared CI workflow injects it.
 `extras: dev` matters in CI: pytest is an extra, not a dependency group, and
 `uv run` installs groups but not extras.
