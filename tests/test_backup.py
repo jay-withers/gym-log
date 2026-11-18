@@ -301,7 +301,7 @@ def test_an_r2_client_that_cannot_be_built_is_logged_not_raised(
     def no_client() -> None:
         raise RuntimeError("R2-ACCESS-KEY-ID is not set")
 
-    monkeypatch.setattr(backup, "r2_client", no_client)
+    monkeypatch.setattr(backup.JOB, "r2_client", no_client)
     with caplog.at_level(logging.INFO):
         assert backup.run(now=MID_MONTH) == 1
     assert "FAIL setup: RuntimeError: R2-ACCESS-KEY-ID is not set" in caplog.text

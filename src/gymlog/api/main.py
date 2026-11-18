@@ -19,12 +19,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
+from appkit import headers
 from fastapi import Depends, FastAPI, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..settings import secret, settings
-from . import deps, headers, routes
+from . import deps, routes
 
 logger = logging.getLogger(__name__)
 

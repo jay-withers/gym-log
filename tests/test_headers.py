@@ -6,11 +6,11 @@ import re
 from pathlib import Path
 
 import pytest
+from appkit import headers
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import gymlog
-from gymlog.api import headers
 from gymlog.api.main import create_app
 
 

@@ -69,7 +69,7 @@ def test_the_backup_job_also_checks_its_bucket(secrets_set, storage_ok, monkeypa
 
     calls = []
     monkeypatch.setenv("BACKUP_BUCKET", "test-backups")
-    monkeypatch.setattr(backup, "check_bucket", lambda: calls.append("listed"))
+    monkeypatch.setattr(backup.JOB, "check_bucket", lambda: calls.append("listed"))
     with caplog.at_level(logging.INFO):
         assert selfcheck.run() == 0
     assert calls == ["listed"]
@@ -82,7 +82,7 @@ def test_the_backup_job_fails_on_an_unset_endpoint(secrets_set, storage_ok, monk
 
     monkeypatch.setenv("BACKUP_BUCKET", "test-backups")
     monkeypatch.delenv("BACKUP_R2_ENDPOINT")
-    monkeypatch.setattr(backup, "check_bucket", lambda: None)
+    monkeypatch.setattr(backup.JOB, "check_bucket", lambda: None)
     with caplog.at_level(logging.INFO):
         assert selfcheck.run() == 1
     assert "FAIL backup settings and keys: ValueError: not configured, BACKUP_R2_ENDPOINT" in (
@@ -112,7 +112,7 @@ def test_the_backup_job_fails_without_its_r2_keys(secrets_set, storage_ok, monke
     from gymlog import backup
 
     monkeypatch.setenv("BACKUP_BUCKET", "test-backups")
-    monkeypatch.setattr(backup, "check_bucket", lambda: None)
+    monkeypatch.setattr(backup.JOB, "check_bucket", lambda: None)
     monkeypatch.delenv("R2_SECRET_ACCESS_KEY")
     with caplog.at_level(logging.INFO):
         assert selfcheck.run() == 1

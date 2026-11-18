@@ -8,6 +8,11 @@ requires-python = ">=3.12"
 # model, the store and the progression rule, so splitting them would mean three
 # builds of near-identical layers.
 dependencies = [
+  # Shared with career, finances and gym-log: security headers, the passcode
+  # gate, secret resolution, the backup and selfcheck (jay-withers/appkit).
+  # A git tag (the builder image carries git for it). Bump it by hand, with
+  # `uv lock`, when appkit releases: Renovate isn't known to track it yet.
+  "appkit[azure,backup] @ git+https://github.com/jay-withers/appkit@v0.1.0",
   "pydantic>=2.9",
   "pydantic-settings>=2.5",
   "python-dotenv>=1.0",
@@ -51,6 +56,10 @@ gymlog = "gymlog.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# appkit is a git reference (a tag), which hatchling refuses by default.
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gymlog"]

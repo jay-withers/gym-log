@@ -38,6 +38,25 @@ wheels = [
 ]
 
 [[package]]
+name = "appkit"
+version = "0.0.0"
+source = { git = "https://github.com/jay-withers/appkit?rev=v0.1.0#9ecc01bf2900c8280c5083a59c9edfee0926a477" }
+dependencies = [
+    { name = "fastapi" },
+]
+
+[package.optional-dependencies]
+azure = [
+    { name = "azure-identity" },
+    { name = "azure-keyvault-secrets" },
+    { name = "python-dotenv" },
+]
+backup = [
+    { name = "boto3" },
+    { name = "pyrage" },
+]
+
+[[package]]
 name = "asgiref"
 version = "3.13.0"
 source = { registry = "https://pypi.org/simple" }
@@ -664,6 +683,7 @@ name = "gymlog"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "appkit", extra = ["azure", "backup"] },
     { name = "azure-identity" },
     { name = "azure-keyvault-secrets" },
     { name = "azure-monitor-opentelemetry" },
@@ -692,6 +712,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "appkit", extras = ["azure", "backup"], git = "https://github.com/jay-withers/appkit?rev=v0.1.0" },
     { name = "azure-identity", specifier = ">=1.19" },
     { name = "azure-keyvault-secrets", specifier = ">=4.9" },
     { name = "azure-monitor-opentelemetry", specifier = ">=1.6" },

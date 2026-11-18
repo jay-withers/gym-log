@@ -17,11 +17,12 @@ job starts needing one.
 
 from __future__ import annotations
 
-import logging
-from collections.abc import Callable
-from functools import partial
+from appkit import selfcheck as kit
 
-logger = logging.getLogger(__name__)
+# backup.py's (appkit's R2 keys and drill key). Checked only in the job given a
+# bucket, so a missing R2 key fails that job's selfcheck without it reading as a
+# fault in the others.
+from appkit.backup import SECRETS as BACKUP_SECRETS
 
 # insights.py, mailer.py (the insight job) and garmin.py (the garmin job).
 SECRETS = (
@@ -32,59 +33,20 @@ SECRETS = (
     "GARMIN-PASSWORD",
 )
 
-# backup.py's. Checked only in the job given a bucket, so a missing R2 key
-# fails that job's selfcheck without it reading as a fault in the others.
-BACKUP_SECRETS = (
-    "R2-ACCESS-KEY-ID",
-    "R2-SECRET-ACCESS-KEY",
-    "BACKUP-AGE-DRILL-KEY",
-)
+__all__ = ["BACKUP_SECRETS", "SECRETS", "checks", "run"]
 
 
-def checks() -> list[tuple[str, Callable[[], object]]]:
-    from . import store
+def checks() -> list[kit.Check]:
+    from . import backup, store
     from .settings import secret, settings
 
-    def present(name: str) -> None:
-        if not secret(name):
-            raise ValueError("resolved to an empty value")
-
-    def presence_checks(names: tuple[str, ...]) -> list[tuple[str, Callable[[], object]]]:
-        return [(f"secret {name}", partial(present, name)) for name in names]
-
-    found: list[tuple[str, Callable[[], object]]] = [
+    return [
         ("settings", settings),
-        *presence_checks(SECRETS),
+        *kit.secret_checks(SECRETS, secret),
         ("storage", store.load),
+        *kit.backup_checks(backup.JOB),
     ]
-    # Only the backup job is given a bucket, so only its selfcheck lists these.
-    # Settings that don't load are the "settings" check's failure to report, not
-    # a reason for this list to raise.
-    try:
-        backup_job = bool(settings().backup_bucket)
-    except Exception:
-        backup_job = False
-    if backup_job:
-        from . import backup
-
-        found += presence_checks(BACKUP_SECRETS)
-        found.append(("backup settings and keys", backup.keys))
-        found.append(("backup bucket", backup.check_bucket))
-    return found
 
 
 def run() -> int:
-    failed = 0
-    for label, check in checks():
-        try:
-            check()
-        except Exception as exc:
-            failed += 1
-            logger.error("selfcheck: FAIL %s: %s: %s", label, type(exc).__name__, str(exc)[:300])
-        else:
-            logger.info("selfcheck: ok %s", label)
-    if failed:
-        logger.error("selfcheck: %d check(s) failed", failed)
-        return 1
-    logger.info("selfcheck: all checks passed")
-    return 0
+    return kit.run(checks())
