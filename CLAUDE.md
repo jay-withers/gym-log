@@ -65,16 +65,26 @@ script and every workload crash-looped on `executable file not found`. Two
 sources of truth for one string, only one of them versioned with the code that
 defines it.
 
-## The copied-modules tripwire has fired
+## Shared code comes from appkit
 
-`settings.py`, `telemetry.py` and `cli.py` are copied from `repo-agent`, which
-copied them from `market-agent`. Each carries a header saying so.
+The modules career, finances and gym-log used to copy from one another now
+come from [jay-withers/appkit](https://github.com/jay-withers/appkit), pinned
+by tag in `pyproject.toml` (`git+https`; the builder image carries git for
+it). Bump the tag by hand with `uv lock`: Renovate isn't known to track it yet.
 
-repo-agent's rule is: *"a third consumer appears, **or** the same bug gets fixed
-twice"* is the tripwire for extracting a shared library. **This is the third
-consumer, so it has fired.** The decision taken was to copy once more and extract
-when a bug is next fixed twice, rather than to block this project on building and
-publishing a library. Re-copy rather than diverge; fix bugs in all three.
+- `appkit.headers`: security headers and the CSP nonce (`api/main.py`).
+- `appkit.passcode`: the gate. `api/deps.py` only names the cookie.
+- `appkit.keyvault`: secret resolution. `settings.py` keeps `Settings` and the
+  cached `secret`/`optional_secret`/`credential` wrappers the tests clear.
+- `appkit.backup` and `appkit.selfcheck`: the job and the check loop.
+  `backup.py` and `selfcheck.py` keep what is gym-log's (the documents, the
+  secrets).
+
+**Fix a bug in those in appkit, with its regression test there**, then bump the
+pin here. appkit's loggers are not `gymlog`, so their lines reach Log Analytics
+as console logs, not App Insights traces, which keeps telemetry's one-logger
+export rule. `telemetry.py` and `cli.py` are
+still copied from repo-agent, each with a header saying so.
 
 ## Storage: the inversion from repo-agent
 

@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from gymlog import chat, store
@@ -2688,6 +2688,8 @@ def test_fitness_insights_page_shows_the_trends_card(client, seeded):
 FIELD = st.none() | st.text(max_size=6) | st.integers(min_value=-50, max_value=60).map(str)
 
 
+# "²" is a digit to str.isdigit but not to int(): the oracle below once raised on it.
+@example(low=None, high="\u00b2", outgoing_low=1, span=0)
 @given(low=FIELD, high=FIELD, outgoing_low=st.integers(1, 30), span=st.integers(0, 10))
 def test_any_posted_rep_range_is_one_progression_can_climb(
     low: str | None, high: str | None, outgoing_low: int, span: int
@@ -2699,5 +2701,8 @@ def test_any_posted_rep_range_is_one_progression_can_climb(
     # A usable typed number is never dropped for the outgoing one: it is in
     # the range, either where it was typed or transposed.
     for typed in (low, high):
-        if typed is not None and typed.strip().lstrip("-").isdigit() and int(typed) > 0:
+        if typed is None:
+            continue
+        digits = typed.strip().lstrip("-")
+        if digits.isascii() and digits.isdigit() and int(typed) > 0:
             assert int(typed) in (got_low, got_high)
