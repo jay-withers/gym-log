@@ -40,7 +40,7 @@ wheels = [
 [[package]]
 name = "appkit"
 version = "0.0.0"
-source = { git = "https://github.com/jay-withers/appkit?rev=v0.1.0#9ecc01bf2900c8280c5083a59c9edfee0926a477" }
+source = { git = "https://github.com/jay-withers/appkit?tag=v0.1.0#9ecc01bf2900c8280c5083a59c9edfee0926a477" }
 dependencies = [
     { name = "fastapi" },
 ]
@@ -712,7 +712,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "appkit", extras = ["azure", "backup"], git = "https://github.com/jay-withers/appkit?rev=v0.1.0" },
+    { name = "appkit", extras = ["azure", "backup"], git = "https://github.com/jay-withers/appkit?tag=v0.1.0" },
     { name = "azure-identity", specifier = ">=1.19" },
     { name = "azure-keyvault-secrets", specifier = ">=4.9" },
     { name = "azure-monitor-opentelemetry", specifier = ">=1.6" },
