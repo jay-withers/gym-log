@@ -50,10 +50,13 @@ def test_the_wrong_passcode_is_refused_and_the_right_one_lets_you_in(
 ) -> None:
     page.goto("/login")
     page.fill('input[name="passcode"]', "not-it")
-    page.click('form[action="/login"] [type="submit"]')
+    # The refusal is a 401, which Chromium logs as a failed resource load.
+    # Waited for: the message is delivered asynchronously, and one landing
+    # after the clear below would fail the test in the console check.
+    with page.expect_console_message(lambda message: "401" in message.text):
+        page.click('form[action="/login"] [type="submit"]')
     expect(page.locator(".reason")).to_have_text("That is not it.")
     assert page.url.endswith("/login")
-    # The refusal is a 401, which Chromium logs as a failed resource load.
     assert all(
         error.startswith("Failed to load resource") and "401" in error for error in console_errors
     ), console_errors
