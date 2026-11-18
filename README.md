@@ -219,6 +219,7 @@ file, and `settings.py` reads the passcode from the environment before Key Vault
 make install
 make test
 make typecheck    # mypy; CI runs it too
+make e2e          # installs Chromium, then the browser tests in tests/e2e/
 make seed         # a sample log, shaped exactly like the one in blob storage
 make run          # http://localhost:8000, passcode "local"
 ```
@@ -395,7 +396,8 @@ commit SHA with the tag as a comment. Required checks are set in `github-repos`,
 not here: `pre-commit / Pre-commit`, `test / Test`, `terraform / Terraform`,
 `terraform-plan` and `container-build`. Read them off `gh pr checks` rather
 than inferring them. `test / Test` includes mypy and diff coverage (at least 80%
-of the lines a PR changes in `gymlog` must be run by a test). `ci-codeql` scans
+of the lines a PR changes in `gymlog` must be run by a test) and the browser
+tests in `tests/e2e/`, against a Chromium the workflow installs. `ci-codeql` scans
 the workflows, and code scanning is on, so a new high or critical alert blocks
 the merge.
 

@@ -11,7 +11,7 @@ dependencies = [
   # Shared with career, finances and gym-log: security headers, the passcode
   # gate, secret resolution, the backup and selfcheck (jay-withers/appkit).
   # Installed from a git tag, set in [tool.uv.sources] below.
-  "appkit[azure,backup]",
+  "appkit[azure,backup,web]",
   "pydantic>=2.9",
   "pydantic-settings>=2.5",
   "python-dotenv>=1.0",
@@ -45,6 +45,8 @@ dev = [
     "mypy>=2.4.1",
     "boto3-stubs[s3]>=1.44",
     "hypothesis>=6.140",
+    # Browser tests in tests/e2e/: pytest-playwright and appkit.testing.
+    "appkit[e2e]",
 ]
 
 # What the Dockerfile's ENTRYPOINT resolves to. Terraform sets no `command`, so
@@ -61,7 +63,7 @@ build-backend = "hatchling.build"
 # uv git source's tag and raises the bump with `uv lock`, but skips a
 # PEP 508 direct reference.
 [tool.uv.sources]
-appkit = { git = "https://github.com/jay-withers/appkit", tag = "v0.1.0" }
+appkit = { git = "https://github.com/jay-withers/appkit", tag = "v0.3.0" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gymlog"]

@@ -31,10 +31,11 @@ jobs:
     # python-version matches the python:3.14 base in the Dockerfile, so a pass
     # here is a pass on the interpreter Container Apps runs.
     #
-    # Deliberately not path filtered: the suite takes under a second, and a
-    # required check skipped by a path filter never reports, which blocks a pull
-    # request rather than passing it.
-    uses: jay-withers/workflows/.github/workflows/python.yml@801fec3f77ffca7b2124bd0aa24be37b60bda7ac # v1.28.4
+    # Deliberately not path filtered: a required check skipped by a path filter
+    # never reports, which blocks a pull request rather than passing it. The
+    # browser tests (`playwright: true`) add about a minute, mostly the
+    # Chromium and apt install.
+    uses: jay-withers/workflows/.github/workflows/python.yml@a50f010c3052f2d14a9f3a49ed54b9576429dcd6 # v1.29.0
     with:
       # The package is at the repository root; there is one deliverable and no
       # apps/ nesting to point at.
@@ -49,5 +50,7 @@ jobs:
       coverage-pr-comment: true
       diff-coverage: "80"
       typecheck: mypy
+      # Chromium for tests/e2e/, in this same job: no new required check.
+      playwright: true
       # No `postgres` input: this project has no database. That is the whole
       # reason the shared platform carries none.

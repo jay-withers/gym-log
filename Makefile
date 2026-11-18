@@ -10,7 +10,7 @@ IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint test typecheck run seed build push deploy deployed-tag smoke url logs import show insight insight-local garmin-sync garmin-sync-local init fmt validate plan apply secrets
+.PHONY: help install lint test e2e typecheck run seed build push deploy deployed-tag smoke url logs import show insight insight-local garmin-sync garmin-sync-local init fmt validate plan apply secrets
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -26,6 +26,13 @@ test: ## Run the test suite
 	# --extra dev: pytest is an extra, not a dependency group, so `uv run` does
 	# not install it. Without this the target only works after `make install`.
 	uv run --extra dev pytest
+
+# tests/e2e/ skips without Chromium (and fails under CI, which installs it).
+# This installs it, then runs only the browser tests. `--with-deps` is left to
+# CI: it needs root for apt.
+e2e: ## Install Playwright's Chromium and run the browser tests in tests/e2e/
+	uv run --extra dev playwright install chromium
+	uv run --extra dev pytest tests/e2e
 
 typecheck: ## Type-check src/ and tests/ with mypy (config in pyproject.toml)
 	uv run --extra dev mypy
