@@ -14,13 +14,12 @@ that reaches the log.
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from appkit import headers
-from fastapi import Depends, FastAPI, Response, status
+from appkit import headers, health
+from fastapi import Depends, FastAPI, status
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -44,6 +43,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
+def _ready() -> None:
+    """Readiness: the cheapest read that proves storage is reachable."""
+    from .. import store
+
+    store.load()
+
+
 def create_app() -> FastAPI:
     cfg = settings()
     app = FastAPI(
@@ -59,31 +65,9 @@ def create_app() -> FastAPI:
 
     headers.install(app)
 
-    @app.get("/healthz", include_in_schema=False)
-    def healthz() -> dict[str, str]:
-        """Liveness. Deliberately does not touch storage — see the module docstring.
-
-        `version` is the image tag `make deploy` set, which `make smoke` checks to
-        prove the new revision is the one serving.
-        """
-        return {
-            "status": "ok",
-            "environment": cfg.environment,
-            "version": os.environ.get("IMAGE_TAG", "unknown"),
-        }
-
-    @app.get("/readyz", include_in_schema=False)
-    def readyz(response: Response) -> dict[str, Any]:
-        """Readiness: can this replica actually serve a request?"""
-        from .. import store
-
-        try:
-            store.load()
-        except Exception as exc:
-            logger.warning("readiness check failed: %s", exc)
-            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-            return {"status": "unavailable", "storage": False}
-        return {"status": "ok", "storage": True}
+    # /healthz from memory (reporting IMAGE_TAG as `version` for the smoke
+    # test), /readyz through a real read of storage: see the module docstring.
+    health.install(app, environment=cfg.environment, ready=_ready)
 
     # Login is the one route outside the gate, for obvious reasons.
     app.include_router(routes.public)
