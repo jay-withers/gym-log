@@ -632,6 +632,17 @@ def test_the_target_line_shows_the_range(client, seeded):
     assert "10\u201312 reps" in card
 
 
+def test_the_target_line_leaves_out_per_set_reps(client):
+    """The range and the rest are the target; a `per set 10/12/12` beside them was noise."""
+    store.save(Log(blocks=(block("2026-09-01", exercise(rep_targets=(10, 12, 12))),)))
+    login(client)
+    card = _card(client.get("/session/A").text, "Cable Flyes")
+    assert "10\u201312 reps" in card
+    assert "60s rest" in card
+    assert "per set" not in card
+    assert "10/12/12" not in card
+
+
 def test_falling_short_still_shows_on_the_stripped_card(client, seeded):
     """Losing the reason line must not lose the one warning that mattered.
 

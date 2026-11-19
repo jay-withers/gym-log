@@ -126,7 +126,7 @@ def test_it_has_what_every_fitness_card_needs(log):
 
 
 def test_per_set_targets_are_present_and_not_uniform(log):
-    """Both shapes, so `· per set` is exercised as well as the plain range."""
+    """Both shapes, so the stored per-set shape survives seeding as well as the plain range."""
     exercises = [e for day in log.current_block.days.values() for e in day.exercises]
     assert any(len(set(e.rep_targets)) > 1 for e in exercises)
     assert any(len(set(e.rep_targets)) == 1 for e in exercises)
