@@ -7,7 +7,7 @@ field the deployed app would find missing, and the local run finds it missing
 too rather than quietly rendering something the real document never contains.
 
 The block mirrors Gym_3.xlsx in structure rather than copying it: two days,
-seven slots, a rep range beside a per-set target, a finisher with no load. The
+seven slots, per-set targets inside a rep range, a finisher with no load. The
 sessions are invented, and are chosen to put the session screen into every state
 it has rather than to look like anyone's actual training:
 

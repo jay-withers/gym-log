@@ -539,8 +539,7 @@ async def rotate(request: Request) -> Any:
                     rep_high=rep_high,
                     # Per-set targets describe the range they were written for —
                     # `10/12/12` inside 10-12. Carrying them into a range that
-                    # has moved would put the old numbers in the session
-                    # placeholders and contradict the target printed above them.
+                    # has moved would leave numbers the new range contradicts.
                     rep_targets=(
                         exercise.rep_targets
                         if (rep_low, rep_high) == (exercise.rep_low, exercise.rep_high)
