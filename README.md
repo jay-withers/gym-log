@@ -73,9 +73,8 @@ saved on its own, before any sets, without starting a session.
 
 The lift log itself — block/day, session logging, history, block rotation —
 now lives under `/strength` rather than at the root. `/` is a light home page
-linking to it and to the sections below; the installed-to-home-screen phone
-icon still opens straight to `/strength`, since that is the twice-a-week fast
-path this app exists for.
+linking to it and to the sections below, and it is where the
+installed-to-home-screen phone icon opens.
 
 Six sections that are not derived from sets and reps:
 

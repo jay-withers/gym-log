@@ -180,9 +180,12 @@ def test_an_unknown_icon_is_a_404(client):
     assert client.get("/icons/nope.png").status_code == 404
 
 
-def test_the_manifest_starts_at_strength_not_the_home_menu(client):
-    """The phone icon exists for the twice-a-week fast path of logging a set."""
-    assert client.get("/manifest.json").json()["start_url"] == "/strength"
+def test_the_manifest_starts_at_the_home_page(client):
+    """Opening the installed app lands on the home page, not one section of it.
+    `id` stays `/` so the change updates the installed app rather than forking it."""
+    manifest = client.get("/manifest.json").json()
+    assert manifest["start_url"] == "/"
+    assert manifest["id"] == "/"
 
 
 def test_home_links_to_every_section(client, seeded):
