@@ -2556,6 +2556,21 @@ def test_stalled_uses_the_session_screens_rule():
     assert "below 10" in stalled[0]["reason"]
 
 
+def test_a_movement_on_both_days_stalls_once():
+    """One movement has one last outing: listed once, not once per day."""
+    from dataclasses import replace
+
+    from gymlog.api.routes import _stalled
+
+    log = _strength_log(date(2026, 10, 23))
+    current = log.current_block
+    assert current is not None
+    day = current.days["A"]
+    both_days = replace(current, days={"A": day, "B": replace(day, label="Thur")})
+    stalled = _stalled(log, both_days)
+    assert [s["exercise"] for s in stalled] == ["Cable Flyes"]
+
+
 def test_recent_prs_beat_every_earlier_session_across_blocks():
     from gymlog.api.routes import _recent_prs
 
@@ -2571,23 +2586,55 @@ def test_recent_prs_beat_every_earlier_session_across_blocks():
     assert prs[0]["set"] == "8 x 120kg"
 
 
-def test_strength_insights_page(client):
+def test_strength_insights_page_is_a_tile_per_section(client):
     today = date.today()
     store.save(_strength_log(today))
     login(client)
     page = client.get("/insights/strength").text
     assert "3 <span" in page and "of 3 so far" in page
-    assert 'class="chip on" href="/insights/strength?exercise=Cable%20Flyes"' in page
-    assert "Stalled" in page
-    assert "/achievements/new?title=PR%3A%20Back%20Squat%208%20x%20120kg" in page
-    squat = client.get("/insights/strength?exercise=Back%20Squat").text
+    for section in ("e1rm", "volume", "stalled", "records"):
+        assert f'class="tile" href="/insights/strength/{section}"' in page
+    # Each tile leads with its number: two movements, one stall, two records.
+    for stat, label in (("2", "Estimated 1RM"), ("1", "Stalled"), ("2", "Records")):
+        assert re.search(rf'<span class="stat">{stat}</span>\s*<span>{label}</span>', page)
+    # The detail lives behind the tiles, not on the index.
+    assert "Epley" not in page and "/achievements/new" not in page
+    assert 'href="/insights/strength"' in client.get("/insights").text
+
+
+def test_strength_e1rm_page_switches_movement_in_place(client):
+    today = date.today()
+    store.save(_strength_log(today))
+    login(client)
+    page = client.get("/insights/strength/e1rm").text
+    assert 'href="/insights/strength"' in page  # back to the tiles
+    # Switching movement replaces the history entry (base.html's handler).
+    assert '<div class="chips" data-replace>' in page
+    assert 'class="chip on" href="/insights/strength/e1rm?exercise=Cable%20Flyes"' in page
+    squat = client.get("/insights/strength/e1rm?exercise=Back%20Squat").text
     assert "+20% since the first session" in squat
     # An unknown movement falls back to the first one rather than erroring.
     assert (
-        'class="chip on" href="/insights/strength?exercise=Cable%20Flyes"'
-        in client.get("/insights/strength?exercise=nope").text
+        'class="chip on" href="/insights/strength/e1rm?exercise=Cable%20Flyes"'
+        in client.get("/insights/strength/e1rm?exercise=nope").text
     )
-    assert 'href="/insights/strength"' in client.get("/insights").text
+
+
+def test_strength_section_pages_show_their_detail(client):
+    today = date.today()
+    store.save(_strength_log(today))
+    login(client)
+    assert '<svg class="weekly"' in client.get("/insights/strength/volume").text
+    stalled = client.get("/insights/strength/stalled").text
+    assert 'class="reason stalled"' in stalled
+    records = client.get("/insights/strength/records").text
+    assert "/achievements/new?title=PR%3A%20Back%20Squat%208%20x%20120kg" in records
+
+
+def test_an_unknown_strength_section_is_a_404(client):
+    store.save(_strength_log(date.today()))
+    login(client)
+    assert client.get("/insights/strength/nope").status_code == 404
 
 
 def test_strength_insights_page_before_any_session_shows_adherence_only(client, seeded):
@@ -2595,14 +2642,17 @@ def test_strength_insights_page_before_any_session_shows_adherence_only(client, 
     page = client.get("/insights/strength").text
     # The seeded block is long past its 8 weeks: expected stops at 8 sessions.
     assert "0 <span" in page and "of 8 so far" in page
-    assert "No new bests in the last 30 days" in page
-    assert "Estimated 1RM" not in page
+    assert "nothing loaded yet" in page and "nothing stalled" in page
+    assert "No new bests in the last 30 days" in client.get("/insights/strength/records").text
+    assert "No loaded sets this block yet" in client.get("/insights/strength/e1rm").text
+    assert "Nothing stalled" in client.get("/insights/strength/stalled").text
 
 
 def test_strength_insights_page_is_empty_before_any_block(client):
     store.save(Log())
     login(client)
     assert "Nothing logged yet" in client.get("/insights/strength").text
+    assert "No sets in the last 4 weeks" in client.get("/insights/strength/volume").text
 
 
 def test_new_achievement_form_takes_a_prefill(client, seeded):
