@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from appkit import headers, health
+from appkit.integrity import IntegrityError
 from fastapi import Depends, FastAPI, status
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -87,6 +88,24 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": str(exc)},
+        )
+
+    @app.exception_handler(routes.InvalidInput)
+    async def _invalid(_request: Any, exc: routes.InvalidInput) -> JSONResponse:
+        """A posted value refused before anything was written."""
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": str(exc)}
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def _broken(_request: Any, exc: IntegrityError) -> JSONResponse:
+        """A change `store.save` refused because the log would break one of its
+        rules: a route bug the form checks missed. Nothing was written. The
+        detail names dates and positions, never exercises or loads."""
+        logger.error("write refused: %s", exc)
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={"detail": f"Not saved: {exc}"},
         )
 
     @app.exception_handler(routes.GarminSyncFailed)

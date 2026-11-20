@@ -305,3 +305,44 @@ def test_an_r2_client_that_cannot_be_built_is_logged_not_raised(
     with caplog.at_level(logging.INFO):
         assert backup.run(now=MID_MONTH) == 1
     assert "FAIL setup: RuntimeError: R2-ACCESS-KEY-ID is not set" in caplog.text
+
+
+def test_a_log_that_breaks_a_rule_keeps_both_copies_then_fails(configured, r2, caplog):
+    """Copy first, judge second: the month's slot is not lost to a bad set."""
+    from .factories import block, entry, session
+
+    bad = Log(
+        blocks=(block("2026-09-01"),),
+        sessions=(session("2026-09-15", "2026-09-01", "A", entry("Row", "back", (-1, 50.0))),),
+    )
+    raw = bad.to_json().encode("utf-8")
+    store.local_path().write_bytes(raw)
+    with caplog.at_level(logging.INFO):
+        assert backup.run(client=r2, now=MID_MONTH) == 1
+    assert {DAILY, MONTHLY} <= set(r2.objects)
+    assert pyrage.decrypt(r2.objects[MONTHLY], [OWNER]) == raw
+    assert "integrity: FAIL" in caplog.text
+    assert "negative reps" in caplog.text
+
+
+def test_a_good_log_logs_its_integrity_pass(configured, r2, a_log, caplog):
+    with caplog.at_level(logging.INFO):
+        assert backup.run(client=r2, now=MID_MONTH) == 0
+    assert "integrity: ok gymlog.json" in caplog.text
+
+
+def test_a_log_that_does_not_read_after_the_copy_fails(configured, r2, a_log, monkeypatch, caplog):
+    real = store.load_raw
+    reads = {"n": 0}
+
+    def flaky(name: str) -> bytes | None:
+        if name == store.BLOB_NAME:
+            reads["n"] += 1
+            if reads["n"] > 1:
+                raise ConnectionError("blob down")
+        return real(name)
+
+    monkeypatch.setattr(store, "load_raw", flaky)
+    with caplog.at_level(logging.INFO):
+        assert backup.run(client=r2, now=MID_MONTH) == 1
+    assert "integrity: not checked, the log did not read: ConnectionError" in caplog.text

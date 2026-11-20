@@ -356,3 +356,50 @@ def test_load_raw_reads_the_local_files_without_a_container():
     assert store.load_raw(store.BLOB_NAME) == b"log bytes"
     assert store.load_raw(store.CHAT_BLOB_NAME) == b'{"chat": 1}'
     assert store.load_raw(store.GARMIN_SESSION_BLOB_NAME) is None
+
+
+# --- the integrity guard --------------------------------------------------------
+
+
+def _broken() -> Log:
+    return Log(
+        blocks=(block("2026-09-01"),),
+        sessions=(session("2026-09-15", "2026-09-01", "A", entry("Row", "back", (-1, 50.0))),),
+    )
+
+
+def test_a_broken_log_is_refused_and_the_local_file_is_untouched():
+    from appkit.integrity import IntegrityError
+
+    store.save(Log(blocks=(block("2026-09-01"),)))
+    before = store.local_path().read_bytes()
+    with pytest.raises(IntegrityError, match="negative reps"):
+        store.save(_broken())
+    assert store.local_path().read_bytes() == before
+
+
+def test_a_broken_log_is_never_sent_to_the_blob(blob):
+    from appkit.integrity import IntegrityError
+
+    with pytest.raises(IntegrityError):
+        store.save(_broken(), etag='"read"')
+    assert blob.uploads == []
+
+
+def test_a_violation_already_stored_does_not_block_the_next_session():
+    """Otherwise one old bad set makes the log read-only, the fix included."""
+    store.local_path().write_text(_broken().to_json(), encoding="utf-8")
+    store.update(lambda log: log.with_entry("2026-09-18", "2026-09-01", "A", entry("Squat")))
+    assert len(store.load()[0].sessions) == 2
+
+
+def test_a_change_that_adds_a_violation_is_still_refused():
+    from appkit.integrity import IntegrityError
+
+    store.local_path().write_text(_broken().to_json(), encoding="utf-8")
+    with pytest.raises(IntegrityError, match="2026-09-18"):
+        store.update(
+            lambda log: log.with_entry(
+                "2026-09-18", "2026-09-01", "A", entry("Squat", "legs", (5, -1.0))
+            )
+        )

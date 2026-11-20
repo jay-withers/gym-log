@@ -41,11 +41,15 @@ a backup would only leak, and the next sync makes a new one.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
+from datetime import datetime
+from typing import Any
 
+from appkit import integrity as kit
 from appkit.backup import Backup, Document
 
-from . import store
+from . import integrity, store
 from .model import Log
 from .settings import secret, settings
 
@@ -80,7 +84,33 @@ JOB = Backup(
     secret=secret,
 )
 
-run = JOB.run
+logger = logging.getLogger(__name__)
+
+
+def run(client: Any | None = None, now: datetime | None = None) -> int:
+    """Back up, then check the log's rules and round trip: 1 if either fails.
+
+    Judged after the daily and any monthly copy are in R2 (copy first, judge
+    second), so a log that went bad fires the job-failure alert with every copy
+    safe, and never costs the month its monthly copy. This is the daily
+    integrity check; the selfcheck is the per-deploy one.
+    """
+    failed = JOB.run(client=client, now=now)
+    try:
+        raw = store.load_raw(store.BLOB_NAME)
+    except Exception as exc:
+        logger.error("integrity: not checked, the log did not read: %s", type(exc).__name__)
+        return 1
+    if raw is None:
+        return failed
+    found = kit.problems(raw, integrity.parse, integrity.dump, integrity.check_parsed)
+    if found:
+        logger.error("integrity: FAIL %s", kit.IntegrityError(found))
+        return 1
+    logger.info("integrity: ok %s", store.BLOB_NAME)
+    return failed
+
+
 keys = JOB.keys
 check_bucket = JOB.check_bucket
 r2_client = JOB.r2_client

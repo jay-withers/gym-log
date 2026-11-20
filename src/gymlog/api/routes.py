@@ -74,6 +74,47 @@ class ConflictResponse(Exception):
     """Raised when a write lost its race twice. Handled in main.create_app."""
 
 
+class InvalidInput(Exception):
+    """A posted value that would record something wrong. Handled in
+    main.create_app as a 422 with the message, so whoever typed it sees it was
+    not recorded rather than a session that silently grew a bad set."""
+
+
+# What a set may hold before it is refused as a typo. Not judgements of what is
+# realistic: wide enough that nothing real is ever turned away, narrow enough
+# to catch an extra digit or a weight typed into the reps box.
+MAX_REPS = 100
+MAX_LOAD_KG = 500.0
+
+
+def _set(reps: int, weight: float) -> SetLog:
+    """A set from posted numbers, refusing the impossible and the absurd.
+
+    `_float` accepts "nan" and "inf" (Python's float does), which would store a
+    load that breaks every chart and suggestion built on it.
+    """
+    if not 0 <= reps <= MAX_REPS:
+        raise InvalidInput(f"Reps must be between 0 and {MAX_REPS}. Nothing was saved.")
+    if not math.isfinite(weight) or not 0 <= weight <= MAX_LOAD_KG:
+        raise InvalidInput(f"Load must be between 0 and {MAX_LOAD_KG:g} kg. Nothing was saved.")
+    return SetLog(reps=reps, weight=weight)
+
+
+def _session_date(value: Any) -> str:
+    """The posted session date, as YYYY-MM-DD; today when none was posted.
+
+    Was stored as typed: free text would have sorted into the history wherever
+    it landed and never matched a date-keyed lookup again.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return _today().isoformat()
+    try:
+        return date.fromisoformat(raw).isoformat()
+    except ValueError as exc:
+        raise InvalidInput("That date isn't a date (YYYY-MM-DD). Nothing was saved.") from exc
+
+
 class GarminSyncFailed(Exception):
     """Raised when a manual Garmin sync errors out. Handled in main.create_app.
 
@@ -304,7 +345,7 @@ async def log_extra_exercise(request: Request, day: str) -> Any:
         # prescribed card.
         return RedirectResponse(f"/session/{day}", status_code=status.HTTP_303_SEE_OTHER)
 
-    when = str(form.get("date") or _today().isoformat())
+    when = _session_date(form.get("date"))
     sets = []
     for position in range(3):
         reps = _int(form.get(f"reps_{position}"))
@@ -313,7 +354,7 @@ async def log_extra_exercise(request: Request, day: str) -> Any:
         # Unlike a prescribed exercise, weight is optional here: a manually
         # added set is as likely to be pull-ups or a plank as a loaded lift,
         # and a blank weight is bodyweight, not a set that was not performed.
-        sets.append(SetLog(reps=reps, weight=_float(form.get(f"weight_{position}")) or 0.0))
+        sets.append(_set(reps, _float(form.get(f"weight_{position}")) or 0.0))
 
     if not sets:
         return RedirectResponse(f"/session/{day}", status_code=status.HTTP_303_SEE_OTHER)
@@ -359,7 +400,7 @@ async def log_exercise(request: Request, day: str, index: int) -> Any:
 
     exercise = exercises[index]
     form = await request.form()
-    when = str(form.get("date") or _today().isoformat())
+    when = _session_date(form.get("date"))
     entry = _entry(exercise, index, form)
     # The card always posts its note box, prefilled with the current note, so
     # whatever arrives is the new note — including blank, which clears it.
@@ -438,7 +479,7 @@ def _entry(exercise: Exercise, index: int, form: Any) -> Entry | None:
         weight = _float(form.get(f"weight_{index}_{position}"))
         if reps is None or weight is None:
             continue
-        sets.append(SetLog(reps=reps, weight=weight))
+        sets.append(_set(reps, weight))
 
     if not sets:
         return None

@@ -38,13 +38,20 @@ __all__ = ["BACKUP_SECRETS", "SECRETS", "checks", "run"]
 
 
 def checks() -> list[kit.Check]:
-    from . import backup, store
+    from . import backup, integrity, store
     from .settings import secret, settings
 
     return [
         ("settings", settings),
         *kit.secret_checks(SECRETS, secret),
         ("storage", store.load),
+        *kit.integrity_checks(
+            store.BLOB_NAME,
+            lambda: store.load_raw(store.BLOB_NAME),
+            integrity.parse,
+            integrity.dump,
+            integrity.check_parsed,
+        ),
         *kit.backup_checks(backup.JOB),
     ]
 
