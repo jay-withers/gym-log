@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · Strength Insights · Health{% endblock %}
+{% block subtitle %}{{ heading }}{% endblock %}
+{% block back %}<a class="back" href="/insights/strength"><span class="arrow">&larr;</span> Strength Insights</a>{% endblock %}
+{% block body %}
+{% from "_weekly_line.html" import weekly_line, weekly_line_styles %}
+<style>
+  .fit-sub { color: var(--dim); font-size: 13px; }
+  .up { color: var(--accent); }
+  .down { color: var(--warn); }
+</style>
+{{ weekly_line_styles() }}
+
+{% if section == "e1rm" %}
+{% if e1rm %}
+{# `data-replace`: switching movement swaps this page in place in the
+   history, so Back leaves the page instead of stepping through every
+   movement looked at (base.html). #}
+<div class="chips" data-replace>
+  {% for name in e1rm %}
+  <a class="chip {% if name == exercise %}on{% endif %}" href="/insights/strength/e1rm?exercise={{ name | urlencode }}">{{ name }}</a>
+  {% endfor %}
+</div>
+{% if e1rm_chart %}
+{{ weekly_line(exercise, "kg", e1rm_chart,
+               ("+" if e1rm_chart.change_pct > 0 else "") ~ e1rm_chart.change_pct ~ "% since the first session") }}
+{% else %}
+<p class="last">One session of {{ exercise }} so far; the line starts with the second.</p>
+{% endif %}
+<table>
+  <tr><th>Movement</th><th>Slot</th><th>e1RM</th><th>Change</th></tr>
+  {% for name, points in e1rm.items() %}
+  {% set change = ((points[-1].e1rm - points[0].e1rm) / points[0].e1rm * 100) | round | int %}
+  <tr>
+    <td>{{ name }}</td>
+    <td>{{ points[-1].slot }}</td>
+    <td>{{ "%.1f" | format(points[-1].e1rm) }}</td>
+    <td class="{{ 'up' if change > 0 else 'down' if change < 0 else '' }}">{{ "+" if change > 0 else "" }}{{ change }}%</td>
+  </tr>
+  {% endfor %}
+</table>
+<p class="last">Epley estimate from each session's best set: weight × (1 + reps / 30).</p>
+{% else %}
+<p class="last">No loaded sets this block yet.</p>
+{% endif %}
+
+{% elif section == "volume" %}
+{% if volume_chart %}
+{{ weekly_line("Weekly volume", "kg", volume_chart, "reps × weight, every set") }}
+{% else %}
+<p class="last">No sets in the last 4 weeks.</p>
+{% endif %}
+
+{% elif section == "stalled" %}
+{% for s in stalled %}
+<div class="card">
+  <div class="slot">{{ s.slot }} · {{ s.date }}</div>
+  <div>{{ s.exercise }}</div>
+  <div class="reason stalled">{{ s.reason }}</div>
+</div>
+{% else %}
+<p class="last">Nothing stalled: every movement's last outing reached its range.</p>
+{% endfor %}
+
+{% elif section == "records" %}
+<h2 class="slot">Last 30 days</h2>
+{% for pr in prs %}
+<div class="card">
+  <div class="slot">{{ pr.when }}</div>
+  <div>{{ pr.exercise }}: {{ pr.set }}</div>
+  <div class="fit-sub">e1RM {{ pr.e1rm }} kg, up from {{ pr.previous }} ·
+    <a href="/achievements/new?title={{ ('PR: ' ~ pr.exercise ~ ' ' ~ pr.set) | urlencode }}&amp;when={{ pr.date }}">log as an achievement</a></div>
+</div>
+{% else %}
+<p class="last">No new bests in the last 30 days.</p>
+{% endfor %}
+{% endif %}
+{% endblock %}

@@ -3,18 +3,18 @@
 {% block subtitle %}Strength Insights{% endblock %}
 {% block back %}<a class="back" href="/insights"><span class="arrow">&larr;</span> Insights</a>{% endblock %}
 {% block body %}
-{% from "_weekly_line.html" import weekly_line, weekly_line_styles %}
 
-{% if adherence or e1rm or volume_chart or prs %}
+{% if adherence or e1rm or volume_chart or stalled or prs %}
 <style>
   .fit-sub { color: var(--dim); font-size: 13px; }
   .big { font-size: 24px; font-weight: 600; }
   .meter { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: 8px; }
   .meter span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
-  .up { color: var(--accent); }
-  .down { color: var(--warn); }
+  /* A tile here leads with its number, so the answer is on the tile and the
+     tap is only for the detail behind it. */
+  .tile .stat { font-size: 26px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .tile .note { color: var(--dim); font-weight: 400; font-size: 12px; }
 </style>
-{{ weekly_line_styles() }}
 
 {% if adherence %}
 <div class="card">
@@ -25,60 +25,28 @@
 </div>
 {% endif %}
 
-{% if e1rm %}
-<h2 class="slot" style="margin-top:24px">Estimated 1RM this block</h2>
-<div class="chips">
-  {% for name in e1rm %}
-  <a class="chip {% if name == exercise %}on{% endif %}" href="/insights/strength?exercise={{ name | urlencode }}">{{ name }}</a>
-  {% endfor %}
+<div class="tiles" style="margin-top:16px">
+  <a class="tile" href="/insights/strength/e1rm">
+    <span class="stat">{{ e1rm | length if e1rm else "–" }}</span>
+    <span>{{ sections.e1rm }}</span>
+    <span class="note">{{ "movements this block" if e1rm else "nothing loaded yet" }}</span>
+  </a>
+  <a class="tile" href="/insights/strength/volume">
+    <span class="stat">{{ volume_chart.headline if volume_chart else "–" }}</span>
+    <span>{{ sections.volume }}</span>
+    <span class="note">{{ "kg this week" if volume_chart else "no sets in 4 weeks" }}</span>
+  </a>
+  <a class="tile" href="/insights/strength/stalled">
+    <span class="stat">{{ stalled | length }}</span>
+    <span>{{ sections.stalled }}</span>
+    <span class="note">{{ "short of their range" if stalled else "nothing stalled" }}</span>
+  </a>
+  <a class="tile" href="/insights/strength/records">
+    <span class="stat">{{ prs | length }}</span>
+    <span>{{ sections.records }}</span>
+    <span class="note">new bests, last 30 days</span>
+  </a>
 </div>
-{% if e1rm_chart %}
-{{ weekly_line(exercise, "kg", e1rm_chart,
-               ("+" if e1rm_chart.change_pct > 0 else "") ~ e1rm_chart.change_pct ~ "% since the first session") }}
-{% else %}
-<p class="last">One session of {{ exercise }} so far; the line starts with the second.</p>
-{% endif %}
-<table>
-  <tr><th>Movement</th><th>Slot</th><th>e1RM</th><th>Change</th></tr>
-  {% for name, points in e1rm.items() %}
-  {% set change = ((points[-1].e1rm - points[0].e1rm) / points[0].e1rm * 100) | round | int %}
-  <tr>
-    <td>{{ name }}</td>
-    <td>{{ points[-1].slot }}</td>
-    <td>{{ "%.1f" | format(points[-1].e1rm) }}</td>
-    <td class="{{ 'up' if change > 0 else 'down' if change < 0 else '' }}">{{ "+" if change > 0 else "" }}{{ change }}%</td>
-  </tr>
-  {% endfor %}
-</table>
-<p class="last">Epley estimate from each session's best set: weight × (1 + reps / 30).</p>
-{% endif %}
-
-{% if volume_chart %}{{ weekly_line("Weekly volume", "kg", volume_chart, "reps × weight, every set") }}{% endif %}
-
-{% if stalled %}
-<h2 class="slot" style="margin-top:24px">Stalled</h2>
-{% for s in stalled %}
-<div class="card">
-  <div class="slot">{{ s.slot }} · {{ s.date }}</div>
-  <div>{{ s.exercise }}</div>
-  <div class="reason stalled">{{ s.reason }}</div>
-</div>
-{% endfor %}
-{% endif %}
-
-<h2 class="slot" style="margin-top:24px">Records, last 30 days</h2>
-{% if prs %}
-{% for pr in prs %}
-<div class="card">
-  <div class="slot">{{ pr.when }}</div>
-  <div>{{ pr.exercise }}: {{ pr.set }}</div>
-  <div class="fit-sub">e1RM {{ pr.e1rm }} kg, up from {{ pr.previous }} ·
-    <a href="/achievements/new?title={{ ('PR: ' ~ pr.exercise ~ ' ' ~ pr.set) | urlencode }}&amp;when={{ pr.date }}">log as an achievement</a></div>
-</div>
-{% endfor %}
-{% else %}
-<p class="last">No new bests in the last 30 days.</p>
-{% endif %}
 
 {% else %}
 <p class="last">Nothing logged yet. Insights start with the first session.</p>
