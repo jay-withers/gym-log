@@ -16,7 +16,7 @@
 # separately, a Renovate "non-major" bump moved the runtime from 3.12 to 3.14
 # and left the builder on 3.12; the resulting image had no site-packages on
 # sys.path at all and died with a bare "No module named".
-FROM ghcr.io/jay-withers/dev-containers/python-app-builder:v0.23.5@sha256:aa6e8f2065b3d9c6cfd9433ccd919ce513e420bf9dd1625aba24cf662b5681f0 AS builder
+FROM ghcr.io/jay-withers/dev-containers/python-app-builder:v0.23.6@sha256:83d73f7f5d02417198215678e21457de89cc4b441ccdc5c9a16625a23270f7c9 AS builder
 
 # python-app already sets this; restated because the relative COPYs below
 # depend on it, and hadolint cannot see a WORKDIR set by the parent image.
@@ -39,7 +39,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 
 # Brings /app/.venv/bin on PATH and WORKDIR /app.
-FROM ghcr.io/jay-withers/dev-containers/python-app:v0.23.5@sha256:b9af7d2fc4d70e3d245c4e5623e12ec7b3b03bda628bb470838e2a6c71477cf3
+FROM ghcr.io/jay-withers/dev-containers/python-app:v0.23.6@sha256:f9a1d29cb82cfa4284eaac7dc0063e2c05e19f6edaf6a5a9eb0e2d87b30e476a
 
 # This label is what connects the pushed package to this repository, and that
 # connection is what gives a workflow's GITHUB_TOKEN write access to it. Without
