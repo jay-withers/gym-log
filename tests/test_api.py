@@ -2631,14 +2631,6 @@ def test_strength_section_pages_show_their_detail(client):
     assert "/achievements/new?title=PR%3A%20Back%20Squat%208%20x%20120kg" in records
 
 
-def test_a_link_from_before_the_tiles_opens_that_movement(client):
-    store.save(_strength_log(date.today()))
-    login(client)
-    response = client.get("/insights/strength?exercise=Back%20Squat", follow_redirects=False)
-    assert response.status_code == 303
-    assert response.headers["location"] == "/insights/strength/e1rm?exercise=Back%20Squat"
-
-
 def test_an_unknown_strength_section_is_a_404(client):
     store.save(_strength_log(date.today()))
     login(client)

@@ -17,7 +17,6 @@ from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
-from urllib.parse import quote
 
 from fastapi import APIRouter, Form, Request, Response, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -1284,13 +1283,7 @@ def _strength_context(log: Any, today: date) -> dict[str, Any]:
 
 
 @router.get("/insights/strength", response_class=HTMLResponse, include_in_schema=False)
-def strength_insights(request: Request, exercise: str = "") -> Any:
-    if exercise:
-        # A link from before the tiles, when the movements' chart lived here.
-        return RedirectResponse(
-            f"/insights/strength/e1rm?exercise={quote(exercise)}",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
+def strength_insights(request: Request) -> Any:
     log, _etag = store.load()
     return templates.TemplateResponse(
         request,
