@@ -40,7 +40,7 @@ wheels = [
 [[package]]
 name = "appkit"
 version = "0.0.0"
-source = { git = "https://github.com/jay-withers/appkit?tag=v0.6.0#4471a9baef9ce1ff21fabb910be762cf83113ba0" }
+source = { git = "https://github.com/jay-withers/appkit?tag=v0.7.0#cc11092ba8d69075874ba3c58cb6756601d92371" }
 
 [package.optional-dependencies]
 azure = [
@@ -783,8 +783,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "appkit", extras = ["azure", "backup", "web"], git = "https://github.com/jay-withers/appkit?tag=v0.6.0" },
-    { name = "appkit", extras = ["e2e"], marker = "extra == 'dev'", git = "https://github.com/jay-withers/appkit?tag=v0.6.0" },
+    { name = "appkit", extras = ["azure", "backup", "web"], git = "https://github.com/jay-withers/appkit?tag=v0.7.0" },
+    { name = "appkit", extras = ["e2e"], marker = "extra == 'dev'", git = "https://github.com/jay-withers/appkit?tag=v0.7.0" },
     { name = "azure-identity", specifier = ">=1.19" },
     { name = "azure-keyvault-secrets", specifier = ">=4.9" },
     { name = "azure-monitor-opentelemetry", specifier = ">=1.6" },

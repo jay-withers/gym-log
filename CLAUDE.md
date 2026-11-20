@@ -100,6 +100,24 @@ present a year of training as a blank slate and then overwrite it with the next
 session. So reads raise, writes raise, and the only tolerated absence is a blob
 that has never existed.
 
+**`integrity.check` is the log's rules**, because `Log.from_json` forgives
+everything: no negative reps or load, no load that isn't a finite number, no
+session date that doesn't parse, one session per date and day, one entry per
+exercise in it, no duplicate ids or Garmin dates. `store.update` refuses a change
+that adds a problem (an old one is tolerated, so the log never goes read-only),
+the deploy selfcheck runs appkit's round trip against the live log (will this
+release drop a stored value?) but not the rules, which a deploy can't affect,
+and the nightly backup judges the copied log's rules and round trip. Only the
+impossible is a rule; the absurd (over `MAX_REPS`, over `MAX_LOAD_KG`) is
+refused at the form in `api/routes.py`, so an old typo doesn't fail the backup
+every night. **A new rule should hold for the live log**, or the backup fails
+nightly until the data is fixed.
+Problems name a date, a day and positions, never an exercise or a load: they
+reach Log Analytics. The round trip keeps the stored `schema` stamp
+(`integrity.parse`/`dump`), so bumping `SCHEMA_VERSION` alone is not a reported
+loss. A reader that reshapes stored fields still is: that needs the new shape
+written before a release depends on reading it.
+
 For the same reason the storage account carries `prevent_destroy = true`, which
 repo-agent's deliberately does not. `terraform destroy` fails until that block is
 removed by hand. That friction is the point: it is the one resource here whose

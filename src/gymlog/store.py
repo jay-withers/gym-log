@@ -26,9 +26,12 @@ from __future__ import annotations
 
 import logging
 import pathlib
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from typing import Any
 
+from appkit.integrity import IntegrityError
+
+from . import integrity
 from .model import Log
 from .settings import credential, settings
 
@@ -76,13 +79,22 @@ def load() -> tuple[Log, str | None]:
     return Log.from_json(raw.decode("utf-8")), etag
 
 
-def save(log: Log, etag: str | None = None) -> str | None:
+def save(log: Log, etag: str | None = None, *, tolerated: Collection[str] = ()) -> str | None:
     """Write the log, refusing to clobber a document that moved underneath us.
 
     `etag` is the value from the `load()` that produced this log. None means
     "this must be a create", which is what stops two first-runs racing and one
     of them winning silently.
+
+    A log that breaks one of `integrity.check`'s rules is refused with
+    `IntegrityError` before anything is sent. `tolerated` are problems the stored
+    log already had (`update` passes them), so one old violation can't make every
+    later session fail to save.
     """
+    problems = [p for p in integrity.check(log) if p not in tolerated]
+    if problems:
+        raise IntegrityError(problems)
+
     blob = _blob()
     if blob is None:
         _save_local(log)
@@ -117,9 +129,10 @@ def update(change: Callable[[Log], Log]) -> Log:
     """
     for attempt in (1, 2):
         log, etag = load()
+        already = integrity.check(log)
         updated = change(log)
         try:
-            save(updated, etag)
+            save(updated, etag, tolerated=already)
         except ConflictError:
             if attempt == 2:
                 raise

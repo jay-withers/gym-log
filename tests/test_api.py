@@ -2770,3 +2770,94 @@ def test_any_posted_rep_range_is_one_progression_can_climb(
         digits = typed.strip().lstrip("-")
         if digits.isascii() and digits.isdigit() and int(typed) > 0:
             assert int(typed) in (got_low, got_high)
+
+
+# --- refused input ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("reps", "weight", "detail"),
+    [
+        ("-1", "7.5", "Reps must be between 0 and 100"),
+        ("101", "7.5", "Reps must be between 0 and 100"),
+        ("12", "-2.5", "Load must be between 0 and 500 kg"),
+        ("12", "501", "Load must be between 0 and 500 kg"),
+        ("12", "nan", "Load must be between 0 and 500 kg"),
+        ("12", "inf", "Load must be between 0 and 500 kg"),
+    ],
+)
+def test_an_impossible_or_absurd_set_is_refused_and_nothing_written(
+    client, seeded, reps, weight, detail
+):
+    login(client)
+    before = store.load_raw(store.BLOB_NAME)
+    response = client.post(
+        "/session/A/0", data={"date": "2026-09-15", "reps_0_0": reps, "weight_0_0": weight}
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith(detail)
+    assert store.load_raw(store.BLOB_NAME) == before
+
+
+def test_the_limits_themselves_are_accepted(client, seeded):
+    login(client)
+    response = client.post(
+        "/session/A/0", data={"date": "2026-09-15", "reps_0_0": "100", "weight_0_0": "500"}
+    )
+    assert response.status_code == 303
+
+
+def test_an_extra_exercise_with_an_absurd_set_is_refused(client, seeded):
+    login(client)
+    before = store.load_raw(store.BLOB_NAME)
+    response = client.post(
+        "/session/manual/extra",
+        data={"name": "Plank", "slot": "core", "reps_0": "1000", "date": "2026-09-15"},
+    )
+    assert response.status_code == 422
+    assert store.load_raw(store.BLOB_NAME) == before
+
+
+@pytest.mark.parametrize("path", ["/session/A/0", "/session/manual/extra"])
+def test_a_date_that_isnt_a_date_is_refused(client, seeded, path):
+    """Was stored as typed, sorting free text into the history."""
+    login(client)
+    before = store.load_raw(store.BLOB_NAME)
+    response = client.post(
+        path,
+        data={
+            "date": "next tuesday",
+            "name": "Plank",
+            "slot": "core",
+            "reps_0": "10",
+            "reps_0_0": "12",
+            "weight_0_0": "7.5",
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("That date isn't a date")
+    assert store.load_raw(store.BLOB_NAME) == before
+
+
+def test_a_write_the_store_refuses_is_a_422(client, seeded, monkeypatch):
+    """The backstop: a route bug the form checks missed is refused at save."""
+    login(client)
+    monkeypatch.setattr(
+        "gymlog.integrity.check",
+        lambda log: ["sessions (date 2026-09-15, day A): recorded 2 times"] if log.sessions else [],
+    )
+    response = client.post(
+        "/session/A/0", data={"date": "2026-09-15", "reps_0_0": "12", "weight_0_0": "7.5"}
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("Not saved: 1 problem(s): sessions (date")
+
+
+def test_the_form_stops_the_same_typos_before_they_are_sent(client, seeded):
+    """The browser's limits match the server's, so a typo rarely reaches a 422."""
+    from gymlog.api.routes import MAX_LOAD_KG, MAX_REPS
+
+    login(client)
+    page = client.get("/session/A").text
+    assert f'min="0" max="{MAX_REPS}"' in page
+    assert f'min="0" max="{MAX_LOAD_KG:g}"' in page

@@ -128,3 +128,52 @@ def test_other_jobs_need_neither_the_bucket_nor_the_backup_keys(
         assert selfcheck.run() == 0
     assert "backup bucket" not in caplog.text
     assert "R2-" not in caplog.text
+
+
+# --- integrity -----------------------------------------------------------------
+
+
+def _write(payload: str) -> None:
+    store.local_path().write_text(payload, encoding="utf-8")
+
+
+def test_a_stored_rule_violation_does_not_fail_the_deploy(secrets_set, storage_ok, caplog):
+    """A deploy can't change the data; one old bad set mustn't block every
+    release. The nightly backup reports it instead."""
+    from gymlog.model import Log
+
+    from .factories import block, entry, session
+
+    bad = Log(
+        blocks=(block("2026-09-01"),),
+        sessions=(session("2026-09-15", "2026-09-01", "A", entry("Row", "back", (-1, 50.0))),),
+    )
+    _write(bad.to_json())
+    with caplog.at_level(logging.INFO):
+        assert selfcheck.run() == 0
+    assert "selfcheck: ok integrity gymlog.json" in caplog.text
+
+
+def test_a_stored_field_this_release_would_drop_fails(secrets_set, storage_ok, caplog):
+    import json
+
+    from gymlog.model import Log
+
+    payload = json.loads(Log().to_json())
+    payload["bodyweight_kg"] = 82.5  # a field from some other release
+    _write(json.dumps(payload))
+    with caplog.at_level(logging.INFO):
+        assert selfcheck.run() == 1
+    assert "$.bodyweight_kg: dropped" in caplog.text
+    assert "82.5" not in caplog.text
+
+
+def test_a_good_stored_log_passes(secrets_set, storage_ok, caplog):
+    from datetime import date
+
+    from gymlog import seed
+
+    _write(seed.sample_log(date(2026, 9, 20)).to_json())
+    with caplog.at_level(logging.INFO):
+        assert selfcheck.run() == 0
+    assert "selfcheck: ok integrity gymlog.json" in caplog.text

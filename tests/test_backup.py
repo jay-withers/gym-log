@@ -305,3 +305,56 @@ def test_an_r2_client_that_cannot_be_built_is_logged_not_raised(
     with caplog.at_level(logging.INFO):
         assert backup.run(now=MID_MONTH) == 1
     assert "FAIL setup: RuntimeError: R2-ACCESS-KEY-ID is not set" in caplog.text
+
+
+def test_a_log_that_breaks_a_rule_keeps_both_copies_then_fails(configured, r2, caplog):
+    """Copy first, judge second: the month's slot is not lost to a bad set."""
+    from .factories import block, entry, session
+
+    bad = Log(
+        blocks=(block("2026-09-01"),),
+        sessions=(session("2026-09-15", "2026-09-01", "A", entry("Row", "back", (-1, 50.0))),),
+    )
+    raw = bad.to_json().encode("utf-8")
+    store.local_path().write_bytes(raw)
+    with caplog.at_level(logging.INFO):
+        assert backup.run(client=r2, now=MID_MONTH) == 1
+    assert {DAILY, MONTHLY} <= set(r2.objects)
+    assert pyrage.decrypt(r2.objects[MONTHLY], [OWNER]) == raw
+    assert "integrity: FAIL" in caplog.text
+    assert "negative reps" in caplog.text
+
+
+def test_a_good_log_logs_its_integrity_pass(configured, r2, a_log, caplog):
+    with caplog.at_level(logging.INFO):
+        assert backup.run(client=r2, now=MID_MONTH) == 0
+    assert "integrity: ok gymlog.json" in caplog.text
+
+
+def test_the_verdict_is_on_the_bytes_copied_not_a_later_read(configured, r2, monkeypatch, caplog):
+    """A session saved after the copy must not change what the night reports."""
+    from .factories import block, entry, session
+
+    bad = Log(
+        blocks=(block("2026-09-01"),),
+        sessions=(session("2026-09-15", "2026-09-01", "A", entry("Row", "back", (-1, 50.0))),),
+    )
+    store.local_path().write_bytes(bad.to_json().encode("utf-8"))
+    real_run = backup.JOB.run
+
+    def run_then_fix(**kwargs: Any) -> int:
+        failed = real_run(**kwargs)
+        store.local_path().write_bytes(Log().to_json().encode("utf-8"))
+        return failed
+
+    monkeypatch.setattr(backup.JOB, "run", run_then_fix)
+    with caplog.at_level(logging.INFO):
+        assert backup.run(client=r2, now=MID_MONTH) == 1
+    assert "negative reps" in caplog.text
+
+
+def test_nothing_read_means_nothing_judged(configured, r2, caplog):
+    """A missing log fails the backup itself; there's nothing to judge."""
+    with caplog.at_level(logging.INFO):
+        assert backup.run(client=r2, now=MID_MONTH) == 1
+    assert "integrity:" not in caplog.text
