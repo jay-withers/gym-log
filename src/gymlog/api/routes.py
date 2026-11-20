@@ -172,18 +172,17 @@ def manifest() -> JSONResponse:
     is no browser chrome, which on a phone is the difference between seeing three
     exercises and seeing five.
 
-    `start_url` points straight at `/strength` rather than the new home page:
-    the phone icon exists for the twice-a-week fast path of logging a set, and
-    a menu screen in front of it would be a tap this manifest exists to save.
+    `start_url` is the home page: the app covers more than strength training
+    now, so it opens on the menu of every section rather than inside one.
     """
     return JSONResponse(
         {
             # `id` pins the installed app's identity apart from `start_url`, so
-            # moving the start page later updates the app rather than forking it.
+            # moving the start page updates the installed app rather than forking it.
             "id": "/",
             "name": "Health",
             "short_name": "Health",
-            "start_url": "/strength",
+            "start_url": "/",
             "scope": "/",
             "display": "standalone",
             "background_color": "#101014",
