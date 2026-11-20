@@ -44,8 +44,10 @@ lint: ## Run every pre-commit hook against every file
 # file, and APP_PASSCODE is read from the environment before Key Vault is ever
 # consulted. Browsers treat localhost as a secure origin, so the session cookie
 # works over plain http here despite being set `Secure`.
-run: ## Serve locally on :8000 against a local log file
-	APP_PASSCODE=$${APP_PASSCODE:-local} uv run gymlog serve --reload
+# PORT= serves elsewhere, so a second worktree's app can run beside this one.
+# Unset or empty means 8000.
+run: ## Serve locally on PORT (default 8000) against a local log file
+	APP_PASSCODE=$${APP_PASSCODE:-local} uv run gymlog serve --reload --port "$(or $(PORT),8000)"
 
 # The local file starts empty, which is the one state the app has least to show:
 # no block, so no session screen, no suggestions and no history. This writes a

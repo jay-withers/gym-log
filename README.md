@@ -220,7 +220,7 @@ make test
 make typecheck    # mypy; CI runs it too
 make e2e          # installs Chromium, then the browser tests in tests/e2e/
 make seed         # a sample log, shaped exactly like the one in blob storage
-make run          # http://localhost:8000, passcode "local"
+make run          # http://localhost:8000 (PORT=8001 for another), passcode "local"
 ```
 
 `make seed` matters more than it sounds: an empty local file leaves the app with
