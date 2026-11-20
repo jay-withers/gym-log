@@ -73,6 +73,8 @@ by tag in `pyproject.toml`'s `[tool.uv.sources]` (the builder image carries
 git for it). Renovate raises the bump, `uv lock` included, like any other.
 
 - `appkit.headers`: security headers and the CSP nonce (`api/main.py`).
+- `appkit.manifest`: the home-screen install manifest (`/manifest.json` in
+  `api/routes.py`), which opens on `/` unless given another `start_url`.
 - `appkit.passcode`: the gate. `api/deps.py` only names the cookie.
 - `appkit.keyvault`: secret resolution. `settings.py` keeps `Settings` and the
   cached `secret`/`optional_secret`/`credential` wrappers the tests clear.

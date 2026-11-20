@@ -18,6 +18,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from appkit import manifest as app_manifest
 from fastapi import APIRouter, Form, Request, Response, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -137,13 +138,8 @@ def login(request: Request, passcode: str = Form(default="")) -> Any:
 # full-bleed with the glyph inside the middle 80%, because the launcher crops it
 # to its own shape. Read once at import: three small files.
 ICON_DIR = PACKAGE_DIR / "icons"
-# (filename, sizes, purpose) for each icon, which the manifest and route share.
-PNG_ICONS = (
-    ("icon-192.png", "192x192", "any"),
-    ("icon-512.png", "512x512", "any"),
-    ("icon-maskable-512.png", "512x512", "maskable"),
-)
-PNG_BYTES = {name: (ICON_DIR / name).read_bytes() for name, _, _ in PNG_ICONS}
+# appkit names the icons, which the manifest and this route share.
+PNG_BYTES = {name: (ICON_DIR / name).read_bytes() for name, _, _ in app_manifest.PNG_ICONS}
 # A week: the icon changes about never.
 ICON_HEADERS = {"Cache-Control": "public, max-age=604800"}
 
@@ -166,32 +162,20 @@ def favicon() -> Response:
 
 @public.get("/manifest.json", include_in_schema=False)
 def manifest() -> JSONResponse:
-    """What lets the phone install this to the home screen.
+    """What lets the phone install this to the home screen, built by appkit:
+    opened on the home page, with `id` pinned to `/`.
 
     `display: standalone` is the point of it — opened from the home screen there
     is no browser chrome, which on a phone is the difference between seeing three
     exercises and seeing five.
-
-    `start_url` is the home page: the app covers more than strength training
-    now, so it opens on the menu of every section rather than inside one.
     """
     return JSONResponse(
-        {
-            # `id` pins the installed app's identity apart from `start_url`, so
-            # moving the start page updates the installed app rather than forking it.
-            "id": "/",
-            "name": "Health",
-            "short_name": "Health",
-            "start_url": "/",
-            "scope": "/",
-            "display": "standalone",
-            "background_color": "#101014",
-            "theme_color": "#101014",
-            "icons": [
-                {"src": f"/icons/{name}", "type": "image/png", "sizes": sizes, "purpose": purpose}
-                for name, sizes, purpose in PNG_ICONS
-            ],
-        }
+        app_manifest.build(
+            name="Health",
+            short_name="Health",
+            colour="#101014",
+            icons=app_manifest.png_icons("/icons"),
+        )
     )
 
 
