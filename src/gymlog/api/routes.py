@@ -1259,26 +1259,58 @@ def _week_label(weeks_ago: int) -> str:
     return f"{weeks_ago} wks ago"
 
 
-@router.get("/insights/strength", response_class=HTMLResponse, include_in_schema=False)
-def strength_insights(request: Request, exercise: str = "") -> Any:
-    log, _etag = store.load()
+# Each strength insight's own page under /insights/strength/<section>, with its
+# heading. The index is a tile per section rather than one long scroll, so the
+# one you want is a tap away and Back returns to the tiles.
+STRENGTH_SECTIONS = {
+    "e1rm": "Estimated 1RM",
+    "volume": "Weekly volume",
+    "stalled": "Stalled",
+    "records": "Records",
+}
+
+
+def _strength_context(log: Any, today: date) -> dict[str, Any]:
     block = log.current_block
-    today = _today()
-    e1rm = _e1rm_by_exercise(log, block)
+    return {
+        "block": block,
+        "adherence": _adherence(log, block, today),
+        "e1rm": _e1rm_by_exercise(log, block),
+        "volume_chart": _volume_chart(log, today),
+        "stalled": _stalled(log, block),
+        "prs": _recent_prs(log, today),
+    }
+
+
+@router.get("/insights/strength", response_class=HTMLResponse, include_in_schema=False)
+def strength_insights(request: Request) -> Any:
+    log, _etag = store.load()
+    return templates.TemplateResponse(
+        request,
+        "insights_strength.html",
+        {**_strength_context(log, _today()), "sections": STRENGTH_SECTIONS},
+    )
+
+
+@router.get("/insights/strength/{section}", response_class=HTMLResponse, include_in_schema=False)
+def strength_insight(request: Request, section: str, exercise: str = "") -> Any:
+    if section not in STRENGTH_SECTIONS:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    log, _etag = store.load()
+    context = _strength_context(log, _today())
+    e1rm = context["e1rm"]
+    # An unknown movement falls back to the first one rather than erroring.
     if exercise not in e1rm:
         exercise = next(iter(e1rm), "")
     return templates.TemplateResponse(
         request,
-        "insights_strength.html",
+        "insights_strength_section.html",
         {
-            "block": block,
-            "adherence": _adherence(log, block, today),
-            "e1rm": e1rm,
+            **context,
+            "section": section,
+            "heading": STRENGTH_SECTIONS[section],
             "exercise": exercise,
             "e1rm_chart": _e1rm_chart(e1rm.get(exercise, [])),
-            "volume_chart": _volume_chart(log, today),
-            "stalled": _stalled(log, block),
-            "prs": _recent_prs(log, today),
         },
     )
 
@@ -1426,8 +1458,14 @@ def _stalled(log: Any, block: Any) -> list[dict[str, Any]]:
     if block is None:
         return []
     out = []
+    # A movement on both of a block's days is one movement, with one last
+    # outing: listed once, or the count on the strength tile doubles.
+    seen: set[str] = set()
     for day in block.days.values():
         for exercise in day.exercises:
+            if exercise.name in seen:
+                continue
+            seen.add(exercise.name)
             previous = log.last_entry(exercise.name)
             if previous is None:
                 continue

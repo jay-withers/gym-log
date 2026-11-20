@@ -192,6 +192,19 @@ document.addEventListener('submit', function (event) {
   track.innerHTML = '<div class="bar"></div>';
   button.insertAdjacentElement('afterend', track);
 });
+
+// A row of chips marked `data-replace` switches what one page shows (a
+// movement, a span, a view). Following one replaces this page in the
+// history rather than adding to it, so the phone's Back button leaves the
+// page instead of stepping back through every chip tapped. A modified click
+// (new tab, new window) is left to the browser.
+document.addEventListener('click', function (event) {
+  var link = event.target.closest('[data-replace] a[href]');
+  if (!link || event.defaultPrevented || event.button !== 0) return;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  window.location.replace(link.href);
+});
 </script>
 </body>
 </html>

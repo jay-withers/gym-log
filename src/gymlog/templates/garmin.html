@@ -9,7 +9,7 @@
 </form>
 <p class="last" style="margin-top:8px">{% if synced_at %}Last synced {{ synced_at }}{% else %}Never synced yet{% endif %}</p>
 
-<div class="chips" style="margin-top:20px">
+<div class="chips" data-replace style="margin-top:20px">
   <a class="chip {% if view == 'activities' %}on{% endif %}" href="/garmin?view=activities">Activities</a>
   <a class="chip {% if view == 'days' %}on{% endif %}" href="/garmin?view=days">Days</a>
 </div>

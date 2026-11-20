@@ -31,6 +31,10 @@ PAGES = [
     "/conditions/new",
     "/insights",
     "/insights/strength",
+    "/insights/strength/e1rm",
+    "/insights/strength/volume",
+    "/insights/strength/stalled",
+    "/insights/strength/records",
     "/insights/fitness",
     "/insights/running",
     "/insights/hr-zones",
@@ -101,3 +105,25 @@ def test_a_new_goal_is_listed_after_a_reload(signed_in: Page) -> None:
 
     page.reload()
     expect(page.get_by_text(title)).to_be_visible()
+
+
+def test_back_leaves_a_page_rather_than_stepping_through_its_chips(signed_in: Page) -> None:
+    """Tapping between a page's chips (movements, slots, spans) swaps the page
+    in place, so the phone's Back goes to where you came from, not through
+    every chip you tried. The history page's slots share the handler with
+    the strength insights' movements."""
+    page = signed_in
+    page.goto("/strength")
+    page.goto("/history/chest")
+    chips = page.locator("[data-replace] a.chip")
+    assert chips.count() >= 3
+    for i in (1, 2):
+        href = chips.nth(i).get_attribute("href")
+        assert href is not None
+        chips.nth(i).click()
+        page.wait_for_url(f"**{href}")
+        chips = page.locator("[data-replace] a.chip")
+
+    page.go_back()
+    page.wait_for_url("**/strength")
+    assert urlparse(page.url).path == "/strength"

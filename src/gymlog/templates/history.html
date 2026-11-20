@@ -4,7 +4,7 @@
 {% block back %}<a class="back" href="/strength"><span class="arrow">&larr;</span> Strength Training</a>{% endblock %}
 {% block body %}
 
-<div class="chips">
+<div class="chips" data-replace>
   {% for s in slots %}
     <a class="chip {% if s == slot %}on{% endif %}" href="/history/{{ s }}">{{ s }}</a>
   {% endfor %}
