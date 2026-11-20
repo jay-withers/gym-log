@@ -50,7 +50,6 @@ from appkit import integrity as kit
 from appkit.backup import Backup, Document
 
 from . import integrity, store
-from .model import Log
 from .settings import secret, settings
 
 # The key prefix under daily/ and monthly/, shared by every app writing to the
@@ -58,8 +57,16 @@ from .settings import secret, settings
 APP = "gym-log"
 
 
+# The bytes the last copy of the log read, for `run` to judge: the log that is
+# in R2, not whatever a session has made of the blob since.
+_copied: list[bytes] = []
+
+
 def _log(raw: bytes) -> None:
-    Log.from_json(raw.decode("utf-8"))
+    """What "restores" means: the copy parses. Only that, so a log that breaks a
+    rule still gets its monthly copy; `run` judges the rules after."""
+    _copied.append(raw)
+    integrity.parse(raw)
 
 
 def _chat(raw: bytes) -> None:
@@ -88,21 +95,18 @@ logger = logging.getLogger(__name__)
 
 
 def run(client: Any | None = None, now: datetime | None = None) -> int:
-    """Back up, then check the log's rules and round trip: 1 if either fails.
+    """Back up, then judge the copied log's rules and round trip: 1 if either fails.
 
     Judged after the daily and any monthly copy are in R2 (copy first, judge
     second), so a log that went bad fires the job-failure alert with every copy
-    safe, and never costs the month its monthly copy. This is the daily
-    integrity check; the selfcheck is the per-deploy one.
+    safe, and never costs the month its monthly copy. This is where a stored
+    rule violation is reported; the deploy selfcheck runs the round trip only.
     """
+    _copied.clear()
     failed = JOB.run(client=client, now=now)
-    try:
-        raw = store.load_raw(store.BLOB_NAME)
-    except Exception as exc:
-        logger.error("integrity: not checked, the log did not read: %s", type(exc).__name__)
-        return 1
-    if raw is None:
-        return failed
+    if not _copied:
+        return failed  # nothing was read (not configured, or the read failed)
+    raw = _copied[0]
     found = kit.problems(raw, integrity.parse, integrity.dump, integrity.check_parsed)
     if found:
         logger.error("integrity: FAIL %s", kit.IntegrityError(found))

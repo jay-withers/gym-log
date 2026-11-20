@@ -137,8 +137,9 @@ def _write(payload: str) -> None:
     store.local_path().write_text(payload, encoding="utf-8")
 
 
-def test_a_stored_log_that_breaks_a_rule_fails_and_names_where(secrets_set, storage_ok, caplog):
-    """After a deploy, against the live log: this rolls the release back."""
+def test_a_stored_rule_violation_does_not_fail_the_deploy(secrets_set, storage_ok, caplog):
+    """A deploy can't change the data; one old bad set mustn't block every
+    release. The nightly backup reports it instead."""
     from gymlog.model import Log
 
     from .factories import block, entry, session
@@ -149,10 +150,8 @@ def test_a_stored_log_that_breaks_a_rule_fails_and_names_where(secrets_set, stor
     )
     _write(bad.to_json())
     with caplog.at_level(logging.INFO):
-        assert selfcheck.run() == 1
-    assert "FAIL integrity gymlog.json: IntegrityError" in caplog.text
-    assert "negative reps" in caplog.text
-    assert "Row" not in caplog.text
+        assert selfcheck.run() == 0
+    assert "selfcheck: ok integrity gymlog.json" in caplog.text
 
 
 def test_a_stored_field_this_release_would_drop_fails(secrets_set, storage_ok, caplog):

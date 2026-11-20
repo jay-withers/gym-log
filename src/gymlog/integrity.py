@@ -9,15 +9,17 @@ wherever it lands. This module is what notices.
 It runs in three places, through jay-withers/appkit's `appkit.integrity`:
 
 - `store.update` refuses a change that adds a problem, before anything is sent.
-- `selfcheck` runs the rules and appkit's round trip against the live log after
-  every deploy, so a release that would drop a stored value is rolled back
-  before it writes.
-- the nightly backup judges them after every copy is in R2.
+- `selfcheck` runs appkit's round trip against the live log after every
+  deploy, so a release that would drop a stored value is rolled back before it
+  writes. Not the rules: a deploy can't change the data, and one old violation
+  would otherwise block every release.
+- the nightly backup judges the copied log's rules and round trip after every
+  copy is in R2, which is where a stored violation is reported.
 
 **Only the impossible is a rule here**: negative reps or load, a load that isn't
 a finite number, a date that doesn't parse, two of one thing. What is merely
 implausible (120 reps, 600 kg) is refused at the form instead (`api/routes.py`),
-so an old typo in the log can't block every deploy.
+so an old typo in the log doesn't fail the backup every night.
 
 **A problem names where, never what.** A session is named by its date and day,
 which is its key (`Log.with_entry`); an entry and a set by their position in it.
@@ -53,7 +55,7 @@ def parse(raw: bytes) -> Parsed:
     `weight`, say) still has them reported as dropped, and needs its first
     write to happen before a release that relies on the new shape.
 
-    The plain model parse: never the backup's checking wrapper, which calls this.
+    The plain model parse, which the backup's restore check also uses.
     """
     stamp = json.loads(raw).get("schema")
     return Log.from_json(raw.decode("utf-8")), stamp

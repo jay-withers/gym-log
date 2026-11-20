@@ -105,11 +105,13 @@ everything: no negative reps or load, no load that isn't a finite number, no
 session date that doesn't parse, one session per date and day, one entry per
 exercise in it, no duplicate ids or Garmin dates. `store.update` refuses a change
 that adds a problem (an old one is tolerated, so the log never goes read-only),
-the selfcheck runs the rules and appkit's round trip against the live log after
-every deploy, and the backup judges them after copying. Only the impossible is
-a rule; the absurd (over `MAX_REPS`, over `MAX_LOAD_KG`) is refused at the form
-in `api/routes.py`, so an old typo can't block a deploy. **A new rule must hold
-for the live log**, or the next deploy's selfcheck fails and rolls back.
+the deploy selfcheck runs appkit's round trip against the live log (will this
+release drop a stored value?) but not the rules, which a deploy can't affect,
+and the nightly backup judges the copied log's rules and round trip. Only the
+impossible is a rule; the absurd (over `MAX_REPS`, over `MAX_LOAD_KG`) is
+refused at the form in `api/routes.py`, so an old typo doesn't fail the backup
+every night. **A new rule should hold for the live log**, or the backup fails
+nightly until the data is fixed.
 Problems name a date, a day and positions, never an exercise or a load: they
 reach Log Analytics. The round trip keeps the stored `schema` stamp
 (`integrity.parse`/`dump`), so bumping `SCHEMA_VERSION` alone is not a reported

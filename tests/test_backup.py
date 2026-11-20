@@ -331,18 +331,30 @@ def test_a_good_log_logs_its_integrity_pass(configured, r2, a_log, caplog):
     assert "integrity: ok gymlog.json" in caplog.text
 
 
-def test_a_log_that_does_not_read_after_the_copy_fails(configured, r2, a_log, monkeypatch, caplog):
-    real = store.load_raw
-    reads = {"n": 0}
+def test_the_verdict_is_on_the_bytes_copied_not_a_later_read(configured, r2, monkeypatch, caplog):
+    """A session saved after the copy must not change what the night reports."""
+    from .factories import block, entry, session
 
-    def flaky(name: str) -> bytes | None:
-        if name == store.BLOB_NAME:
-            reads["n"] += 1
-            if reads["n"] > 1:
-                raise ConnectionError("blob down")
-        return real(name)
+    bad = Log(
+        blocks=(block("2026-09-01"),),
+        sessions=(session("2026-09-15", "2026-09-01", "A", entry("Row", "back", (-1, 50.0))),),
+    )
+    store.local_path().write_bytes(bad.to_json().encode("utf-8"))
+    real_run = backup.JOB.run
 
-    monkeypatch.setattr(store, "load_raw", flaky)
+    def run_then_fix(**kwargs: Any) -> int:
+        failed = real_run(**kwargs)
+        store.local_path().write_bytes(Log().to_json().encode("utf-8"))
+        return failed
+
+    monkeypatch.setattr(backup.JOB, "run", run_then_fix)
     with caplog.at_level(logging.INFO):
         assert backup.run(client=r2, now=MID_MONTH) == 1
-    assert "integrity: not checked, the log did not read: ConnectionError" in caplog.text
+    assert "negative reps" in caplog.text
+
+
+def test_nothing_read_means_nothing_judged(configured, r2, caplog):
+    """A missing log fails the backup itself; there's nothing to judge."""
+    with caplog.at_level(logging.INFO):
+        assert backup.run(client=r2, now=MID_MONTH) == 1
+    assert "integrity:" not in caplog.text
