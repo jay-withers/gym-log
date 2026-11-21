@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from gymlog.model import DEFAULT_SLOTS, Entry, Log, SetLog
+from health.model import DEFAULT_SLOTS, Entry, Log, SetLog
 
 from .factories import (
     achievement,

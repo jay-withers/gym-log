@@ -32,7 +32,7 @@ def browser_type(browser_type: BrowserType) -> BrowserType:
 
 @pytest.fixture(scope="session")
 def base_url(browser_type: BrowserType, tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
-    """pytest-playwright's base URL: gymlog serving a freshly seeded log.
+    """pytest-playwright's base URL: health serving a freshly seeded log.
 
     Takes `browser_type` so a missing Chromium skips before anything starts.
     """
@@ -50,17 +50,17 @@ def base_url(browser_type: BrowserType, tmp_path_factory: pytest.TempPathFactory
         "APPLICATIONINSIGHTS_CONNECTION_STRING": "",
         "CSP_FORM_ACTION": "",
     }
-    gymlog = testing.console_script("gymlog")
+    health = testing.console_script("health")
     seeded = subprocess.run(
-        [gymlog, "seed", "--force"],
+        [health, "seed", "--force"],
         env={k: v for k, v in {**os.environ, **env}.items() if v is not None},
         capture_output=True,
         text=True,
     )
     if seeded.returncode != 0:
-        pytest.fail(f"gymlog seed failed:\n{seeded.stdout}{seeded.stderr}", pytrace=False)
+        pytest.fail(f"health seed failed:\n{seeded.stdout}{seeded.stderr}", pytrace=False)
     with testing.live_server(
-        [gymlog, "serve", "--host", "{host}", "--port", "{port}"], env=env
+        [health, "serve", "--host", "{host}", "--port", "{port}"], env=env
     ) as url:
         yield url
 

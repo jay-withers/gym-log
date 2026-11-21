@@ -16,7 +16,7 @@ import types
 import azure.monitor.opentelemetry
 import pytest
 
-from gymlog import telemetry
+from health import telemetry
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +29,7 @@ def unconfigured(monkeypatch):
 def configured(monkeypatch):
     """A connection string and a fake exporter; yields the calls it received."""
     monkeypatch.setenv("APPLICATIONINSIGHTS_CONNECTION_STRING", "InstrumentationKey=00000000")
-    from gymlog import settings as settings_module
+    from health import settings as settings_module
 
     settings_module.settings.cache_clear()
 
@@ -54,14 +54,14 @@ def test_no_connection_string_disables_telemetry_entirely(monkeypatch):
     assert imported == []
 
 
-def test_only_the_gymlog_logger_is_exported(configured):
+def test_only_the_health_logger_is_exported(configured):
     """The distro attaches to the root logger, which would ship every third-party line.
 
     Container stdout already reaches Log Analytics, so that would be the same
     line paid for twice against a shared cap.
     """
     assert telemetry.configure("serve") is True
-    assert configured[0]["logger_name"] == "gymlog"
+    assert configured[0]["logger_name"] == "health"
 
 
 def test_the_periodic_emissions_are_off(configured):
@@ -77,7 +77,7 @@ def test_a_trace_names_the_build_that_produced_it(configured, monkeypatch):
     telemetry.configure("serve")
 
     attributes = configured[0]["resource"].attributes
-    assert attributes["service.name"] == "gymlog-serve"
+    assert attributes["service.name"] == "health-serve"
     assert attributes["service.version"] == "abc1234"
     assert attributes["deployment.environment"] == "dev"
 

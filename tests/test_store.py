@@ -22,9 +22,9 @@ from azure.core.exceptions import (
     ResourceNotFoundError,
 )
 
-from gymlog import settings as settings_module
-from gymlog import store
-from gymlog.model import Log
+from health import settings as settings_module
+from health import store
+from health.model import Log
 
 from .factories import block, entry, session
 
@@ -57,7 +57,7 @@ def test_a_corrupt_document_raises_rather_than_starting_fresh(monkeypatch, tmp_p
     path = tmp_path / "broken.json"
     path.write_text("{ this is not json", encoding="utf-8")
     monkeypatch.setenv("LOCAL_STATE_PATH", str(path))
-    from gymlog import settings as settings_module
+    from health import settings as settings_module
 
     settings_module.settings.cache_clear()
 
@@ -83,7 +83,7 @@ def test_a_local_write_is_atomic(monkeypatch, tmp_path):
     """
     path = tmp_path / "log.json"
     monkeypatch.setenv("LOCAL_STATE_PATH", str(path))
-    from gymlog import settings as settings_module
+    from health import settings as settings_module
 
     settings_module.settings.cache_clear()
 

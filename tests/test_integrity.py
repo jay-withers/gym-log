@@ -14,8 +14,8 @@ from typing import Any
 import pytest
 from appkit import integrity as kit
 
-from gymlog import integrity, seed
-from gymlog.model import Entry, GarminActivity, GarminDay, Log, SetLog
+from health import integrity, seed
+from health.model import Entry, GarminActivity, GarminDay, Log, SetLog
 
 from .factories import achievement, block, entry, session
 

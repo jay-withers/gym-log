@@ -8,7 +8,9 @@ variable "project_name" {
     # `ca-<project>-<env>` fits the 32 characters container apps allow — the
     # naming module truncates silently rather than failing. At `gymlog` the app
     # is `ca-gymlog-dev`, 13 of 32. Changing this is also how to resolve a clash
-    # on the globally unique Key Vault or storage account name.
+    # on the globally unique Key Vault or storage account name. It stayed
+    # `gymlog` when the repo was renamed to health: changing it recreates every
+    # resource, the storage account holding the log included.
     condition     = can(regex("^[a-z][a-z0-9]{1,14}$", var.project_name))
     error_message = "project_name must be 2-15 lowercase alphanumerics starting with a letter."
   }
@@ -63,7 +65,7 @@ variable "custom_domain_name" {
 # --- the weekly insight email -------------------------------------------------
 
 variable "insight_email_from" {
-  description = "Sender of the weekly insight email, e.g. `Gym log <insights@jaywithers.uk>`. Must be on a domain verified in Resend. The recipient is the Key Vault secret `INSIGHT-EMAIL-TO`, not a variable, so the address stays out of the repository and the state."
+  description = "Sender of the weekly insight email, e.g. `Health <insights@jaywithers.uk>`. Must be on a domain verified in Resend. The recipient is the Key Vault secret `INSIGHT-EMAIL-TO`, not a variable, so the address stays out of the repository and the state."
   type        = string
   default     = ""
 }

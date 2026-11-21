@@ -210,7 +210,7 @@ def _complete(prompt: str) -> str:
 def complete(messages: list[dict[str, str]]) -> str:
     """One DeepSeek chat completion over `messages`, as the assistant's reply text.
 
-    Public because the chat page (gymlog.chat) sends a whole conversation
+    Public because the chat page (health.chat) sends a whole conversation
     through the same call rather than one system-plus-user pair.
     """
     body = json.dumps({"model": MODEL, "messages": messages}).encode("utf-8")

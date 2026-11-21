@@ -33,7 +33,7 @@ COPY src ./src
 # --no-editable matters: without it uv installs the project as a link back to
 # /app/src, and the runtime stage copies only the virtualenv — leaving a .pth
 # pointing at a directory that does not exist there. The failure is a bare
-# "No module named 'gymlog'" from an image whose venv looks complete.
+# "No module named 'health'" from an image whose venv looks complete.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
@@ -47,7 +47,7 @@ FROM ghcr.io/jay-withers/dev-containers/python-app:v0.23.10@sha256:b837d9624fd4d
 # with `denied: permission_denied: write_package` however its `packages: write`
 # permission is declared. It also replaces the label python-app inherits, which
 # would otherwise link this image to dev-containers.
-LABEL org.opencontainers.image.source="https://github.com/jay-withers/gym-log"
+LABEL org.opencontainers.image.source="https://github.com/jay-withers/health"
 
 COPY --from=builder --chown=10001:10001 /app/.venv /app/.venv
 
@@ -73,5 +73,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # only — so that renaming the console script is one atomic change here rather
 # than a change that has to be mirrored in another repository's Terraform. See
 # terraform/main.container-apps.tf for the outage that taught this.
-ENTRYPOINT ["gymlog"]
+ENTRYPOINT ["health"]
 CMD ["serve"]

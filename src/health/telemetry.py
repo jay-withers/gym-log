@@ -15,7 +15,7 @@ cost.
 Two things are deliberately narrower than the distro's defaults, both because the
 shared workspace runs on `daily_quota_gb = 0.15` split across every tenant:
 
-- **Only the `gymlog` logger is exported.** The distro attaches its handler to
+- **Only the `health` logger is exported.** The distro attaches its handler to
   the root logger, which would ship every third-party line to Application
   Insights *as well as* to Log Analytics, where container stdout already lands.
 - **Performance counters and live metrics are off.** Both are periodic emissions
@@ -65,12 +65,12 @@ def configure(role: str) -> bool:
 
     configure_azure_monitor(
         connection_string=connection_string,
-        logger_name="gymlog",
+        logger_name="health",
         enable_live_metrics=False,
         enable_performance_counters=False,
         resource=Resource.create(
             {
-                "service.name": f"gymlog-{role}",
+                "service.name": f"health-{role}",
                 # The immutable image tag, so a trace names the build that
                 # produced it.
                 "service.version": os.environ.get("IMAGE_TAG", "unknown"),

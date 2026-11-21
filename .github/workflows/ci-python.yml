@@ -46,7 +46,7 @@ jobs:
       # how much of the Azure SDK path is mocked. diff-coverage gates only the
       # lines a PR changes, where the cheap way to pass is to test the new
       # code. A test that only asserts a mock still counts, so review tests.
-      coverage: gymlog
+      coverage: health
       coverage-pr-comment: true
       diff-coverage: "80"
       typecheck: mypy

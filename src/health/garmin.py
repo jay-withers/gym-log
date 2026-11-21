@@ -76,7 +76,7 @@ def sync_garmin(
     secret does elsewhere in this app, so the caller sees it and the scheduled
     job exits non-zero rather than reporting a silent, empty sync.
 
-    `days` exists for a one-off wider backfill (`gymlog garmin-sync --days N`),
+    `days` exists for a one-off wider backfill (`health garmin-sync --days N`),
     not for the daily job to vary its own window: a field added to
     `GarminActivity` after activities were already stored (e.g.
     `distance_meters`) leaves those older records stuck at that field's

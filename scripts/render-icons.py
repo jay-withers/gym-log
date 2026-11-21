@@ -3,7 +3,7 @@
 Run once when the icon changes, and commit the PNGs it writes:
 
     uvx --with cairosvg python -I scripts/render-icons.py \
-        src/gymlog/icons '#101014' '#7dd3a0' 'H'
+        src/health/icons '#101014' '#7dd3a0' 'H'
 
 PNG rather than only the SVG because Android Chrome mints its installed app
 (a WebAPK) from a raster icon, and an SVG-only manifest installs inconsistently.

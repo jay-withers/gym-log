@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gymlog.model import (
+from health.model import (
     Achievement,
     Block,
     Condition,

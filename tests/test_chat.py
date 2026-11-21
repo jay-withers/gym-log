@@ -11,8 +11,8 @@ from datetime import date
 
 import pytest
 
-from gymlog import chat
-from gymlog.model import Log
+from health import chat
+from health.model import Log
 
 from .factories import block, condition, entry, exercise, session
 
@@ -25,7 +25,7 @@ def captured(monkeypatch):
         sent.append(messages)
         return "Sounds like a good week."
 
-    monkeypatch.setattr("gymlog.insights.complete", fake_complete)
+    monkeypatch.setattr("health.insights.complete", fake_complete)
     return sent
 
 
@@ -113,7 +113,7 @@ def test_a_failed_call_propagates(monkeypatch):
     def boom(_messages):
         raise OSError("deepseek down")
 
-    monkeypatch.setattr("gymlog.insights.complete", boom)
+    monkeypatch.setattr("health.insights.complete", boom)
     with pytest.raises(OSError):
         chat.send(Log(), (), "hello")
 

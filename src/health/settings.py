@@ -2,7 +2,7 @@
 
 `Settings` is this app's own. Secret resolution comes from jay-withers/appkit
 (`appkit.keyvault`), which replaced the copies of it in market-agent,
-repo-agent, gym-log, finances and career; fix a bug there, once. The wrappers
+repo-agent, health, finances and career; fix a bug there, once. The wrappers
 below bind it to these settings and cache it, so a test can clear them.
 
 Every secret is read from an environment variable first, then `.env`, and only
@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     state_container_url: str = ""
 
     # Where the log goes when no container is configured. Only ever used locally.
-    local_state_path: str = ".gymlog.json"
+    local_state_path: str = ".health.json"
 
     # The passcode gate is on unless explicitly disabled. It defaults *on* so
     # that forgetting to configure it fails closed — this is reachable from the
@@ -77,14 +77,14 @@ class Settings(BaseSettings):
     # to the spreadsheet.
     cookie_max_age_seconds: int = 60 * 60 * 24 * 30
 
-    # The weekly insight email (`gymlog insight --email`, see mailer.py). FROM
+    # The weekly insight email (`health insight --email`, see mailer.py). FROM
     # must be on a domain verified in Resend; the recipient is the secret
     # INSIGHT-EMAIL-TO. PUBLIC_URL, when set, adds a link back to the
     # insights page.
     insight_email_from: str = ""
     public_url: str = ""
 
-    # The nightly off-Azure backup (`gymlog backup`, see backup.py). Only the
+    # The nightly off-Azure backup (`health backup`, see backup.py). Only the
     # backup job is given these. The recipient is the owner's age public key,
     # whose private half never leaves their password manager; the R2 keys and
     # the drill key are secrets, resolved by name in backup.py.

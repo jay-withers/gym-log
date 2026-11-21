@@ -1,7 +1,7 @@
-"""`gymlog backup`: copy the log off Azure, encrypted, and prove the copy restores.
+"""`health backup`: copy the log off Azure, encrypted, and prove the copy restores.
 
 The job itself is jay-withers/appkit's `appkit.backup`, shared with finances
-and career. This module declares what gym-log backs up and how each document is
+and career. This module declares what health backs up and how each document is
 checked to restore; the reasoning below is why the job is shaped as it is.
 
 The log lives in one LRS storage account in one subscription. Versioning, soft
@@ -53,7 +53,9 @@ from . import integrity, store
 from .settings import secret, settings
 
 # The key prefix under daily/ and monthly/, shared by every app writing to the
-# bucket. The repository's name, so a restore knows where to look.
+# bucket. The repository's name until it was renamed to health on 2026-11-21,
+# and deliberately not renamed with it: every copy before then is under
+# gym-log/, and a new prefix would split the history a restore searches.
 APP = "gym-log"
 
 

@@ -10,8 +10,8 @@ from __future__ import annotations
 from hypothesis import given
 from hypothesis import strategies as st
 
-from gymlog.model import Exercise
-from gymlog.progression import suggest
+from health.model import Exercise
+from health.progression import suggest
 
 from .factories import entry, exercise
 

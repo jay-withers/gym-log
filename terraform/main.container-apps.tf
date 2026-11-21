@@ -68,6 +68,8 @@ resource "azurerm_container_app" "this" {
     max_replicas = 1
 
     container {
+      # The Azure name, kept when the repo and CLI became health: renaming it
+      # means a new revision for nothing, and `make logs` names it.
       name   = "gymlog"
       image  = local.image
       cpu    = local.container_cpu

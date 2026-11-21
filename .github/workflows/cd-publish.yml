@@ -22,7 +22,7 @@ name: cd-publish
 # shared workflow once pushed the SHA tag and silently lost the version tag.
 # Check the registry after a release:
 #
-#   gh api user/packages/container/gym-log%2Fgymlog/versions?per_page=3 \
+#   gh api user/packages/container/health%2Fhealth/versions?per_page=3 \
 #     --jq '.[] | "\(.updated_at) \(.metadata.container.tags|join(", "))"'
 on:
   workflow_call:
@@ -59,7 +59,7 @@ jobs:
     uses: jay-withers/workflows/.github/workflows/docker.yml@b9a1e595d7b6ec2d00d6bce65abc7a11c4f319f6 # v1.31.1
     with:
       images: |
-        [{"name": "gymlog", "context": "."}]
+        [{"name": "health", "context": "."}]
       ref: ${{ inputs.version }}
       push: true
       tags: ${{ inputs.version }}
@@ -86,4 +86,4 @@ jobs:
       # Load the home page (the login page) in Chromium during the smoke
       # test: a broken template or a CSP block rolls the release back.
       browser-check: true
-      verify-images: ghcr.io/${{ github.repository }}/gymlog
+      verify-images: ghcr.io/${{ github.repository }}/health

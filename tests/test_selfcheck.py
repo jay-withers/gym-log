@@ -1,4 +1,4 @@
-"""`gymlog selfcheck`, which `make smoke` runs in every job after a deploy.
+"""`health selfcheck`, which `make smoke` runs in every job after a deploy.
 
 It has to fail on exactly what would break a real run, and do nothing else: a
 false failure rolls back a good release, and a side effect would fire on every
@@ -11,8 +11,8 @@ import logging
 
 import pytest
 
-from gymlog import selfcheck, store
-from gymlog.cli import main
+from health import selfcheck, store
+from health.cli import main
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ def test_is_dispatched_from_the_cli(monkeypatch):
 
 
 def test_the_backup_job_also_checks_its_bucket(secrets_set, storage_ok, monkeypatch, caplog):
-    from gymlog import backup
+    from health import backup
 
     calls = []
     monkeypatch.setenv("BACKUP_BUCKET", "test-backups")
@@ -78,7 +78,7 @@ def test_the_backup_job_also_checks_its_bucket(secrets_set, storage_ok, monkeypa
 
 
 def test_the_backup_job_fails_on_an_unset_endpoint(secrets_set, storage_ok, monkeypatch, caplog):
-    from gymlog import backup
+    from health import backup
 
     monkeypatch.setenv("BACKUP_BUCKET", "test-backups")
     monkeypatch.delenv("BACKUP_R2_ENDPOINT")
@@ -95,7 +95,7 @@ def test_settings_that_dont_load_are_reported_not_raised(
 ):
     from functools import cache
 
-    from gymlog import settings as settings_module
+    from health import settings as settings_module
 
     # Cached like the real one, so the suite's teardown can clear it.
     @cache
@@ -109,7 +109,7 @@ def test_settings_that_dont_load_are_reported_not_raised(
 
 
 def test_the_backup_job_fails_without_its_r2_keys(secrets_set, storage_ok, monkeypatch, caplog):
-    from gymlog import backup
+    from health import backup
 
     monkeypatch.setenv("BACKUP_BUCKET", "test-backups")
     monkeypatch.setattr(backup.JOB, "check_bucket", lambda: None)
@@ -140,7 +140,7 @@ def _write(payload: str) -> None:
 def test_a_stored_rule_violation_does_not_fail_the_deploy(secrets_set, storage_ok, caplog):
     """A deploy can't change the data; one old bad set mustn't block every
     release. The nightly backup reports it instead."""
-    from gymlog.model import Log
+    from health.model import Log
 
     from .factories import block, entry, session
 
@@ -157,7 +157,7 @@ def test_a_stored_rule_violation_does_not_fail_the_deploy(secrets_set, storage_o
 def test_a_stored_field_this_release_would_drop_fails(secrets_set, storage_ok, caplog):
     import json
 
-    from gymlog.model import Log
+    from health.model import Log
 
     payload = json.loads(Log().to_json())
     payload["bodyweight_kg"] = 82.5  # a field from some other release
@@ -171,7 +171,7 @@ def test_a_stored_field_this_release_would_drop_fails(secrets_set, storage_ok, c
 def test_a_good_stored_log_passes(secrets_set, storage_ok, caplog):
     from datetime import date
 
-    from gymlog import seed
+    from health import seed
 
     _write(seed.sample_log(date(2026, 9, 20)).to_json())
     with caplog.at_level(logging.INFO):

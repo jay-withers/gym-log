@@ -15,9 +15,9 @@ from datetime import date
 
 import pytest
 
-from gymlog import store, telemetry
-from gymlog.cli import _configure_logging, _terminate, main
-from gymlog.model import Insight, Log
+from health import store, telemetry
+from health.cli import _configure_logging, _terminate, main
+from health.model import Insight, Log
 
 from .factories import block, garmin_activity, garmin_day, garmin_fitness, insight
 
@@ -34,14 +34,14 @@ def test_serve_runs_the_app_with_the_access_log_off(monkeypatch):
     target, kwargs = calls[0]
     # The import string rather than an app object: `--reload` cannot work
     # against one already constructed.
-    assert target == "gymlog.api.main:app"
+    assert target == "health.api.main:app"
     assert kwargs["port"] == 9000
     assert kwargs["host"] == "0.0.0.0"
     assert kwargs["access_log"] is False
 
 
 def test_show_prints_the_document_as_the_blob_holds_it(capsys):
-    """`gymlog show` is the operator's read of the real log, so it must be the real shape."""
+    """`health show` is the operator's read of the real log, so it must be the real shape."""
     original = Log(blocks=(block(),))
     store.save(original)
 
@@ -56,7 +56,7 @@ def test_import_dates_the_block_today_by_default(monkeypatch):
         imported.append({"path": path, "started": started, "name": name})
         return block(started.isoformat())
 
-    monkeypatch.setattr("gymlog.importer.import_workbook", fake_import)
+    monkeypatch.setattr("health.importer.import_workbook", fake_import)
 
     assert main(["import", "Gym_3.xlsx"]) == 0
     assert imported[0]["path"] == "Gym_3.xlsx"
@@ -66,7 +66,7 @@ def test_import_dates_the_block_today_by_default(monkeypatch):
 def test_import_takes_a_start_date_and_a_name(monkeypatch):
     """A block is nearly always imported after its first session, not before it."""
     monkeypatch.setattr(
-        "gymlog.importer.import_workbook",
+        "health.importer.import_workbook",
         lambda path, started, name: block(started.isoformat()),
     )
 
@@ -81,7 +81,7 @@ def test_import_adds_a_block_rather_than_replacing_the_log(monkeypatch):
     """It goes through `store.update`, so an import cannot drop the sessions."""
     store.save(Log(blocks=(block("2026-07-01"),)))
     monkeypatch.setattr(
-        "gymlog.importer.import_workbook",
+        "health.importer.import_workbook",
         lambda path, started, name: block("2026-09-01"),
     )
 
@@ -93,7 +93,7 @@ def test_import_adds_a_block_rather_than_replacing_the_log(monkeypatch):
 
 def test_insight_records_what_generate_insight_returns(monkeypatch):
     generated = insight(id="i1", week_of="2026-09-15")
-    monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: generated)
+    monkeypatch.setattr("health.insights.generate_insight", lambda log: generated)
 
     assert main(["insight"]) == 0
 
@@ -103,8 +103,8 @@ def test_insight_records_what_generate_insight_returns(monkeypatch):
 
 def test_insight_does_not_email_unless_asked(monkeypatch):
     sent: list[Insight] = []
-    monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: insight())
-    monkeypatch.setattr("gymlog.mailer.send_insight", sent.append)
+    monkeypatch.setattr("health.insights.generate_insight", lambda log: insight())
+    monkeypatch.setattr("health.mailer.send_insight", sent.append)
 
     assert main(["insight"]) == 0
 
@@ -114,8 +114,8 @@ def test_insight_does_not_email_unless_asked(monkeypatch):
 def test_insight_email_sends_what_was_recorded(monkeypatch):
     generated = insight(id="i1")
     sent: list[Insight] = []
-    monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: generated)
-    monkeypatch.setattr("gymlog.mailer.send_insight", sent.append)
+    monkeypatch.setattr("health.insights.generate_insight", lambda log: generated)
+    monkeypatch.setattr("health.mailer.send_insight", sent.append)
 
     assert main(["insight", "--email"]) == 0
 
@@ -125,12 +125,12 @@ def test_insight_email_sends_what_was_recorded(monkeypatch):
 def test_insight_is_kept_when_the_email_fails(monkeypatch):
     """The log is the product; a failed send fails the run but loses nothing."""
     generated = insight(id="i1")
-    monkeypatch.setattr("gymlog.insights.generate_insight", lambda log: generated)
+    monkeypatch.setattr("health.insights.generate_insight", lambda log: generated)
 
     def _fail(_insight):
         raise RuntimeError("resend is down")
 
-    monkeypatch.setattr("gymlog.mailer.send_insight", _fail)
+    monkeypatch.setattr("health.mailer.send_insight", _fail)
 
     with pytest.raises(RuntimeError, match="resend is down"):
         main(["insight", "--email"])
@@ -144,7 +144,7 @@ def test_garmin_sync_records_what_sync_garmin_returns(monkeypatch):
     day = garmin_day(date="2026-09-15")
     fitness = garmin_fitness(date="2026-09-15")
     monkeypatch.setattr(
-        "gymlog.garmin.sync_garmin", lambda days=None: ([activity], [day], [fitness])
+        "health.garmin.sync_garmin", lambda days=None: ([activity], [day], [fitness])
     )
 
     assert main(["garmin-sync"]) == 0
@@ -162,7 +162,7 @@ def test_garmin_sync_days_flag_is_passed_through_for_a_one_off_backfill(monkeypa
         seen_days.append(days)
         return [], [], []
 
-    monkeypatch.setattr("gymlog.garmin.sync_garmin", fake_sync_garmin)
+    monkeypatch.setattr("health.garmin.sync_garmin", fake_sync_garmin)
 
     assert main(["garmin-sync", "--days", "30"]) == 0
 
@@ -180,7 +180,7 @@ def test_telemetry_is_flushed_even_when_the_command_fails(monkeypatch):
     flushed: list[bool] = []
     monkeypatch.setattr(telemetry, "flush", lambda: flushed.append(True))
     monkeypatch.setattr(
-        "gymlog.cli._show", lambda: (_ for _ in ()).throw(RuntimeError("blob down"))
+        "health.cli._show", lambda: (_ for _ in ()).throw(RuntimeError("blob down"))
     )
 
     with pytest.raises(RuntimeError):
@@ -220,7 +220,7 @@ def test_sigterm_becomes_an_exception_so_finally_blocks_run(monkeypatch):
 def test_the_chatty_loggers_are_quietened(monkeypatch):
     """They say nothing about a session and are paid for twice — stdout and App Insights."""
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
-    from gymlog import settings as settings_module
+    from health import settings as settings_module
 
     settings_module.settings.cache_clear()
 

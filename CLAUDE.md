@@ -12,6 +12,34 @@ container app on the **shared** Azure Container Apps environment, one Key Vault,
 one managed identity, one storage account. It is the second tenant of
 `jay-withers/azure-container-apps`, after `repo-agent`.
 
+## Names that still say gymlog: leave them
+
+The repo was `gym-log`, and the package and CLI `gymlog`, until 2026-11-21. The
+code, the CLI (`health`) and the image (`ghcr.io/jay-withers/health/health`)
+moved. These did not, because each one names data or live state, and renaming
+it would orphan that:
+
+| Name | Where | What renaming it would do |
+| --- | --- | --- |
+| `project_name = "gymlog"` (`rg-`, `ca-`, `caj-`, `kv-`, `st…gymlog…`) | `terraform/variables.optional.tf` | recreate every Azure resource, the storage account holding the log included |
+| container `gymlog` | `main.container-apps.tf`, `make logs` | a new revision for nothing |
+| state container `gym-log` | `terraform/backends/dev.hcl` | lose the state: it is github-repos' `state_consumers["gym-log"]`, which also names the deploy identity |
+| `BLOB_NAME = "gymlog.json"` | `store.py` | start an empty log beside the real one |
+| backup `APP = "gym-log"` | `backup.py` | split the R2 history across two prefixes |
+| cookie `gymlog_session`, `gymlog:draft:` | `api/deps.py`, `session.html` | sign everyone out and drop unsaved drafts |
+| the two role-assignment `description`s | `main.key-vault.tf`, `main.storage.tf` | replace the assignments, since a description can't change in place |
+| `LEGACY_IMAGE` / `LAST_LEGACY_TAG` | `Makefile` | break a rollback to a release from before the rename, whose image only exists under `gym-log/gymlog` |
+
+What did move, and what that splits:
+
+- Telemetry: the exported logger is now `health`, and App Insights' role
+  name is `health-<role>`, not `gymlog-<role>`. A query for history across
+  the rename has to name both.
+- Local state: running without a blob now uses `.health.json`,
+  `.health.chat.json` and `.health.garmin-session.json`. A clone with the old
+  `.gymlog*.json` files should rename them, or the app starts empty.
+  `.gitignore` still lists the old names, so neither set gets committed.
+
 ## The tenant split — do not undo this
 
 The Container Apps environment is **not** here. It lives in
@@ -67,7 +95,7 @@ defines it.
 
 ## Shared code comes from appkit
 
-The modules career, finances and gym-log used to copy from one another now
+The modules career, finances and health used to copy from one another now
 come from [jay-withers/appkit](https://github.com/jay-withers/appkit), pinned
 by tag in `pyproject.toml`'s `[tool.uv.sources]` (the builder image carries
 git for it). Renovate raises the bump, `uv lock` included, like any other.
@@ -79,11 +107,11 @@ git for it). Renovate raises the bump, `uv lock` included, like any other.
 - `appkit.keyvault`: secret resolution. `settings.py` keeps `Settings` and the
   cached `secret`/`optional_secret`/`credential` wrappers the tests clear.
 - `appkit.backup` and `appkit.selfcheck`: the job and the check loop.
-  `backup.py` and `selfcheck.py` keep what is gym-log's (the documents, the
+  `backup.py` and `selfcheck.py` keep what is this app's (the documents, the
   secrets).
 
 **Fix a bug in those in appkit, with its regression test there**, then bump the
-pin here. appkit's loggers are not `gymlog`, so their lines reach Log Analytics
+pin here. appkit's loggers are not `health`, so their lines reach Log Analytics
 as console logs, not App Insights traces, which keeps telemetry's one-logger
 export rule. `telemetry.py` and `cli.py` are
 still copied from repo-agent, each with a header saying so.
@@ -175,7 +203,7 @@ or a CSP block in the deployed app rolls the release back. It never signs in,
 so the passcode never reaches CI.
 
 `/healthz` and `/readyz` come from `appkit.health` (`api/main.py`'s `_ready`
-is gym-log's readiness read). `/healthz` must keep reporting `version` from
+is this app's readiness read). `/healthz` must keep reporting `version` from
 `IMAGE_TAG`: without it, the smoke test can only infer the new revision is
 serving from `latestReadyRevisionName`, a weaker check meant for rolling back
 to images from before `version` existed.
@@ -195,7 +223,7 @@ market-agent carries the identical ignore.
 
 CI gates two more things, both in `test / Test`: `make typecheck` (mypy over
 `src/` and `tests/`, config in `pyproject.toml`) and diff coverage. At least
-80% of the lines a PR changes in `gymlog` must be run by a test. Total coverage
+80% of the lines a PR changes in `health` must be run by a test. Total coverage
 is reported, never gated, since a floor on it mostly measures how much of the
 Azure SDK path is mocked. Don't meet the diff gate with a test that only
 asserts a mock.
@@ -226,7 +254,7 @@ property test takes no fixtures**.
 
 **Browser tests live in `tests/e2e/`** (Playwright, through
 `appkit.testing`): the real app under uvicorn on a free port, against a log
-`gymlog seed` writes to a temp dir, driven by Chromium. They sign in, open
+`health seed` writes to a temp dir, driven by Chromium. They sign in, open
 every screen in `PAGES`, log a set and add a goal, each checked after a
 reload. An autouse fixture fails any journey that leaves a console error, and
 a CSP block is one, so **an inline script without its nonce fails here**
@@ -290,11 +318,11 @@ every activity it recorded).
   `max_zone_seconds`/`max_zone_low_bpm`; `zone_seconds` stays HRR because the
   insight prompt reads it as HRR.
 - Stored activities keep the zones they were counted with. Changing the
-  maths or the max needs `gymlog garmin-sync --days 90` to recount them.
+  maths or the max needs `health garmin-sync --days 90` to recount them.
 
 ## The backup job: keep these true
 
-`gymlog backup` (backup.py, main.container-apps-job.backup.tf) copies the log
+`health backup` (backup.py, main.container-apps-job.backup.tf) copies the log
 and chat to R2, encrypted with age, and proves each copy decrypts and parses.
 README's Backups section covers setup and restoring.
 

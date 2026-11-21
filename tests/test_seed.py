@@ -13,11 +13,11 @@ from datetime import date
 
 import pytest
 
-from gymlog import store
-from gymlog.cli import main
-from gymlog.model import Log
-from gymlog.progression import suggest
-from gymlog.seed import sample_log
+from health import store
+from health.cli import main
+from health.model import Log
+from health.progression import suggest
+from health.seed import sample_log
 
 TODAY = date(2026, 9, 19)
 
@@ -138,7 +138,7 @@ def test_per_set_targets_are_present_and_not_uniform(log):
 def test_it_refuses_to_run_against_a_real_container(monkeypatch, caplog):
     """The one thing this must never do is replace a real log with invented sessions."""
     monkeypatch.setenv("STATE_CONTAINER_URL", "https://example.blob.core.windows.net/state")
-    from gymlog import settings as settings_module
+    from health import settings as settings_module
 
     settings_module.settings.cache_clear()
 

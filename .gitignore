@@ -48,7 +48,7 @@ node_modules/
 dist/
 
 # Local environment files. Every secret is read from an env var first (see
-# src/gymlog/settings.py), so these hold real values.
+# src/health/settings.py), so these hold real values.
 .env
 .env.*
 # ...but a committed template holds none, and `.env.*` would otherwise swallow
@@ -59,8 +59,13 @@ dist/
 apps/dashboard/dist/
 
 # The local training log, when running without a storage account.
-.gymlog.json
+.health.json
 # The cached Garmin login session that goes with it locally — see store.py.
-.gymlog.garmin-session.json
+.health.garmin-session.json
 # ...and the AI chat conversation — see store.py and chat.py.
+.health.chat.json
+# The same three from before the rename to health, so a clone that still has
+# them never commits one.
+.gymlog.json
+.gymlog.garmin-session.json
 .gymlog.chat.json

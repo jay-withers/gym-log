@@ -10,8 +10,8 @@ import azure.keyvault.secrets
 import pytest
 from azure.core.exceptions import ClientAuthenticationError, ResourceNotFoundError
 
-from gymlog import settings as settings_module
-from gymlog.settings import optional_secret, secret, settings
+from health import settings as settings_module
+from health.settings import optional_secret, secret, settings
 
 
 def test_a_secret_comes_from_the_environment_first(monkeypatch):

@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from gymlog.mailer import RESEND_URL, send_insight
+from health.mailer import RESEND_URL, send_insight
 
 from .factories import insight
 
@@ -33,7 +33,7 @@ def sent(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", _urlopen)
     monkeypatch.setenv("RESEND_API_KEY", "re_test")
     monkeypatch.setenv("INSIGHT_EMAIL_TO", "me@example.com")
-    monkeypatch.setenv("INSIGHT_EMAIL_FROM", "Gym log <insights@example.com>")
+    monkeypatch.setenv("INSIGHT_EMAIL_FROM", "Health <insights@example.com>")
     return requests
 
 
@@ -45,7 +45,7 @@ def test_sends_the_summary_to_the_configured_address(sent):
     assert request.full_url == RESEND_URL
     assert request.get_header("Authorization") == "Bearer re_test"
     assert body == {
-        "from": "Gym log <insights@example.com>",
+        "from": "Health <insights@example.com>",
         "to": ["me@example.com"],
         "subject": "Training insight, week of 2026-10-11",
         "text": "Solid week.",

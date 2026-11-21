@@ -1,4 +1,4 @@
-"""`gymlog selfcheck`: prove a job's container could do a real run, and do nothing.
+"""`health selfcheck`: prove a job's container could do a real run, and do nothing.
 
 After every deploy, `make smoke` (jay-withers/workflows' scripts/smoke.sh)
 starts one run of each job with its args swapped for `selfcheck`. That run

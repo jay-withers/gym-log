@@ -1,4 +1,4 @@
-# gym-log
+# health
 
 A training log for two full-body sessions a week, running on the shared Azure
 Container Apps environment. It replaces a spreadsheet, and it tells you what to
@@ -38,7 +38,7 @@ fell short is exactly the self-deception a single overwritten cell allowed. The
 increment is per-exercise, because 7.5, 55, 24 and 5 all came off the same sheet
 and a cable stack, a machine and a dumbbell rack do not share a step.
 
-`src/gymlog/progression.py` is pure, has no I/O, and is where to look.
+`src/health/progression.py` is pure, has no I/O, and is where to look.
 
 ## Slots, not exercises
 
@@ -119,7 +119,7 @@ Six sections that are not derived from sets and reps:
   default zone settings and resting from Garmin's figure for that day. So the
   watch's own zone setting doesn't matter, and the figures can differ from
   Garmin's. A change to the max in Garmin Connect applies to activities
-  synced after it; `gymlog garmin-sync --days 90` recounts the rest. Each
+  synced after it; `health garmin-sync --days 90` recounts the rest. Each
   zone is shown twice, **HR** (50/60/70/80/90% of max) then **HRR**, counted
   from the same samples.
   **Running Insights** (`/insights/running`) is the distance-focused
@@ -252,7 +252,7 @@ works over plain http there. `httpx` does not, which is why the tests point
 ### Seeding a block
 
 ```bash
-gymlog import Gym_3.xlsx --name "Block 3"    # locally
+health import Gym_3.xlsx --name "Block 3"    # locally
 make import FILE=/path/to/Gym_3.xlsx NAME="Block 3"   # against the real blob
 ```
 
@@ -277,7 +277,7 @@ commit) checks that the app and every job are
 configured with the new tag (the backup job included), that the app's `/healthz` reports it as `version`
 on its default FQDN (allowing five minutes for a cold start), and that
 `/readyz` answers 200. It then starts one run of each job with its args swapped
-for `gymlog selfcheck`, which loads the settings, resolves every secret the
+for `health selfcheck`, which loads the settings, resolves every secret the
 jobs read and reads the log, sending and writing nothing, and waits for both
 runs to succeed. Finally it loads the app's home page in Chromium and fails on
 any console error, so a broken template or a CSP block can't go live. If the deploy or the smoke test fails, the workflow
@@ -345,7 +345,7 @@ Ordering-sensitive:
 
 The log is one blob in one LRS storage account. Versioning, soft delete and
 the delete lock cover a bad write or a slip of the hand, but not losing the
-subscription. So the **backup job** (`gymlog backup`, 02:30 UTC daily) copies
+subscription. So the **backup job** (`health backup`, 02:30 UTC daily) copies
 `gymlog.json` and `chat.json` to the cloudflare repo's R2 bucket
 `jw-app-backups`, encrypted with [age](https://age-encryption.org):
 
@@ -385,7 +385,7 @@ age -d -i ~/backup.key gymlog.json.age > gymlog.json && rm ~/backup.key
 
 `mise exec age@latest -- age …` works where age isn't installed. Before
 uploading the result over a live log, check it reads:
-`LOCAL_STATE_PATH=gymlog.json uv run gymlog show | head`. Then put it back
+`LOCAL_STATE_PATH=gymlog.json uv run health show | head`. Then put it back
 with `az storage blob upload --auth-mode login --overwrite` into the
 container `make show` reads, or into a new storage account after a rebuild.
 
@@ -397,7 +397,7 @@ commit SHA with the tag as a comment. Required checks are set in `github-repos`,
 not here: `pre-commit / Pre-commit`, `test / Test`, `terraform / Terraform`,
 `terraform-plan` and `container-build`. Read them off `gh pr checks` rather
 than inferring them. `test / Test` includes mypy and diff coverage (at least 80%
-of the lines a PR changes in `gymlog` must be run by a test) and the browser
+of the lines a PR changes in `health` must be run by a test) and the browser
 tests in `tests/e2e/`, against a Chromium the workflow installs. `ci-codeql` scans
 the workflows, and code scanning is on, so a new high or critical alert blocks
 the merge.

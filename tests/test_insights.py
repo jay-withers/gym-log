@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from gymlog.insights import BLOCK_ENDING_SOON_WEEKS, _prompt, generate_insight
-from gymlog.model import Log
+from health.insights import BLOCK_ENDING_SOON_WEEKS, _prompt, generate_insight
+from health.model import Log
 
 from .factories import (
     achievement,
@@ -26,7 +26,7 @@ from .factories import (
 
 
 def test_generates_a_new_insight_when_none_exists(monkeypatch):
-    monkeypatch.setattr("gymlog.insights._complete", lambda prompt: "Solid week.")
+    monkeypatch.setattr("health.insights._complete", lambda prompt: "Solid week.")
 
     result = generate_insight(Log(), today=date(2026, 9, 15))
 
@@ -37,7 +37,7 @@ def test_generates_a_new_insight_when_none_exists(monkeypatch):
 
 def test_generates_even_when_the_last_insight_was_just_generated(monkeypatch):
     """No cooldown: running the job (or the CLI) again right away still produces one."""
-    monkeypatch.setattr("gymlog.insights._complete", lambda prompt: "Another one.")
+    monkeypatch.setattr("health.insights._complete", lambda prompt: "Another one.")
     log = Log(insights=(insight(generated_at="2026-09-15"),))
 
     result = generate_insight(log, today=date(2026, 9, 15))

@@ -1,12 +1,27 @@
 TF_DIR := terraform
 ENV ?= dev
 
-IMAGE_REGISTRY ?= ghcr.io/jay-withers/gym-log
+IMAGE_REGISTRY ?= ghcr.io/jay-withers/health
 # Defaults to the local commit, which is what you want when iterating: build,
 # push, and the tag you just built is the one you reference.
 IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
 # `file` means the ?= default fired rather than the caller passing one.
 IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
+# The repo was gym-log until 2026-11-21, and every release image up to v0.51.2
+# was published as ghcr.io/jay-withers/gym-log/gymlog. Packages don't move with
+# a rename, so `make deploy` and `make smoke` resolve one of those release tags
+# to its old image, and a rollback (which runs both) still finds it. Only
+# release tags are mapped: a pre-rename commit tag needs IMAGE_REGISTRY set by
+# hand. Don't re-run cd-publish for a pre-rename tag. It would rebuild under
+# the new name from source that labels the old repo, so use
+# `make deploy IMAGE_TAG=<tag>` instead. Their entrypoint is `gymlog`, which is
+# fine: no workload sets `command`.
+LEGACY_IMAGE := ghcr.io/jay-withers/gym-log/gymlog
+LAST_LEGACY_TAG := v0.51.2
+IS_LEGACY_TAG = $(shell echo '$(IMAGE_TAG)' | grep -qE '^v[0-9]' \
+	&& [ "$$(printf '%s\n' $(LAST_LEGACY_TAG) '$(IMAGE_TAG)' | sort -V | tail -n 1)" = $(LAST_LEGACY_TAG) ] \
+	&& echo yes)
+IMAGE = $(if $(IS_LEGACY_TAG),$(LEGACY_IMAGE),$(IMAGE_REGISTRY)/health)
 
 .DEFAULT_GOAL := help
 
@@ -47,7 +62,7 @@ lint: ## Run every pre-commit hook against every file
 # PORT= serves elsewhere, so a second worktree's app can run beside this one.
 # Unset or empty means 8000.
 run: ## Serve locally on PORT (default 8000) against a local log file
-	APP_PASSCODE=$${APP_PASSCODE:-local} uv run gymlog serve --reload --port "$(or $(PORT),8000)"
+	APP_PASSCODE=$${APP_PASSCODE:-local} uv run health serve --reload --port "$(or $(PORT),8000)"
 
 # The local file starts empty, which is the one state the app has least to show:
 # no block, so no session screen, no suggestions and no history. This writes a
@@ -61,7 +76,7 @@ run: ## Serve locally on PORT (default 8000) against a local log file
 # answer depends on how you got here: `--force` if you ran the CLI, FORCE=1 if
 # you ran make, and make cannot be passed `--force` as a target argument.
 seed: ## Write a sample log to the local file (FORCE=1 replaces an existing one)
-	@STATE_CONTAINER_URL= uv run gymlog seed $(if $(FORCE),--force,) || { \
+	@STATE_CONTAINER_URL= uv run health seed $(if $(FORCE),--force,) || { \
 		echo "hint: make seed FORCE=1   # replaces the existing local log" >&2; \
 		exit 1; }
 
@@ -71,22 +86,22 @@ seed: ## Write a sample log to the local file (FORCE=1 replaces an existing one)
 import: ## Import a block from an .xlsx (FILE=path, NAME=label)
 	@if [ -z "$(FILE)" ]; then echo "error: pass FILE=/path/to/Gym_3.xlsx" >&2; exit 1; fi
 	STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)" \
-		uv run gymlog import "$(FILE)" --name "$(NAME)"
+		uv run health import "$(FILE)" --name "$(NAME)"
 
 show: ## Print the deployed training log as JSON
 	STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)" \
-		uv run gymlog show
+		uv run health show
 
 # `--platform linux/amd64` is not optional. Container Apps runs amd64 only and
 # this dev host is arm64, so a native build deploys an image that crash-loops
 # with an exec format error and no other clue.
 build: ## Build the image for linux/amd64 (set IMAGE_TAG, defaults to the git SHA)
 	docker buildx build --platform linux/amd64 --load \
-		-t $(IMAGE_REGISTRY)/gymlog:$(IMAGE_TAG) .
+		-t $(IMAGE_REGISTRY)/health:$(IMAGE_TAG) .
 
 push: ## Push the image to ghcr.io (needs write:packages)
 	gh auth token | docker login ghcr.io -u $$(gh api user --jq .login) --password-stdin
-	docker push $(IMAGE_REGISTRY)/gymlog:$(IMAGE_TAG)
+	docker push $(IMAGE_REGISTRY)/health:$(IMAGE_TAG)
 
 # A bare `make deploy` is a hard error, unlike build/push. Those default the tag
 # to the local git SHA, which is what you want when iterating. Deploying is
@@ -101,13 +116,13 @@ deploy: ## Roll an image tag onto the app and every job (IMAGE_TAG required)
 	az containerapp update \
 		--name "$$(terraform -chdir=$(TF_DIR) output -raw container_app_name)" \
 		--resource-group "$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
-		--image $(IMAGE_REGISTRY)/gymlog:$(IMAGE_TAG) \
+		--image $(IMAGE):$(IMAGE_TAG) \
 		--set-env-vars IMAGE_TAG=$(IMAGE_TAG) \
 		STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)"
 	az containerapp job update \
 		--name "$$(terraform -chdir=$(TF_DIR) output -raw container_app_job_name)" \
 		--resource-group "$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
-		--image $(IMAGE_REGISTRY)/gymlog:$(IMAGE_TAG) \
+		--image $(IMAGE):$(IMAGE_TAG) \
 		--set-env-vars IMAGE_TAG=$(IMAGE_TAG) \
 		STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)" \
 		INSIGHT_EMAIL_FROM="$$(terraform -chdir=$(TF_DIR) output -raw insight_email_from)" \
@@ -115,13 +130,13 @@ deploy: ## Roll an image tag onto the app and every job (IMAGE_TAG required)
 	az containerapp job update \
 		--name "$$(terraform -chdir=$(TF_DIR) output -raw container_app_job_garmin_name)" \
 		--resource-group "$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
-		--image $(IMAGE_REGISTRY)/gymlog:$(IMAGE_TAG) \
+		--image $(IMAGE):$(IMAGE_TAG) \
 		--set-env-vars IMAGE_TAG=$(IMAGE_TAG) \
 		STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)"
 	az containerapp job update \
 		--name "$$(terraform -chdir=$(TF_DIR) output -raw container_app_job_backup_name)" \
 		--resource-group "$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
-		--image $(IMAGE_REGISTRY)/gymlog:$(IMAGE_TAG) \
+		--image $(IMAGE):$(IMAGE_TAG) \
 		--set-env-vars IMAGE_TAG=$(IMAGE_TAG) \
 		STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)" \
 		BACKUP_BUCKET="$$(terraform -chdir=$(TF_DIR) output -raw backup_bucket)" \
@@ -137,7 +152,7 @@ deployed-tag: ## Print the image tag live on the app
 		--name "$$(terraform -chdir=$(TF_DIR) output -raw container_app_name)" \
 		--resource-group "$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
 		--query 'properties.template.containers[0].image' -o tsv \
-		| sed -n 's|^$(IMAGE_REGISTRY)/gymlog:||p'
+		| sed -n -e 's|^$(IMAGE_REGISTRY)/health:||p' -e 's|^$(LEGACY_IMAGE):||p'
 
 # The smoke test is jay-withers/workflows' scripts/smoke.sh, fetched at the
 # commit cd-publish pins container-apps-deploy.yml to: one copy for every app
@@ -157,7 +172,7 @@ smoke: ## Check IMAGE_TAG is live and ready on the app, and selfcheck every job 
 	curl -fsSL --retry 3 -o "$$script" "$(SMOKE_SH_URL)" || { echo "smoke: can't fetch $(SMOKE_SH_URL)" >&2; exit 1; }; \
 	bash "$$script" $(IMAGE_TAG) \
 		"$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
-		$(IMAGE_REGISTRY)/gymlog \
+		$(IMAGE) \
 		app:"$$(terraform -chdir=$(TF_DIR) output -raw container_app_name)" \
 		job:"$$(terraform -chdir=$(TF_DIR) output -raw container_app_job_name)" \
 		job:"$$(terraform -chdir=$(TF_DIR) output -raw container_app_job_garmin_name)" \
@@ -185,13 +200,13 @@ secrets: ## Print the az commands that populate this project's Key Vault
 
 insight: ## Generate a weekly insight against the real blob (needs DEEPSEEK-API-KEY in Key Vault)
 	STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)" \
-		uv run gymlog insight
+		uv run health insight
 
 # Same STATE_CONTAINER_URL= pattern as `seed`: the local file, never the real
 # log. `secret()` still resolves DEEPSEEK_API_KEY from the environment first
 # (see settings.py), so this needs no Key Vault to actually call DeepSeek.
 insight-local: ## Generate a weekly insight against the local log (needs DEEPSEEK_API_KEY)
-	STATE_CONTAINER_URL= uv run gymlog insight
+	STATE_CONTAINER_URL= uv run health insight
 
 # DAYS= widens the trailing window past GARMIN_SYNC_DAYS for a one-off
 # backfill — e.g. after a field is added to GarminActivity, the daily job's
@@ -199,13 +214,13 @@ insight-local: ## Generate a weekly insight against the local log (needs DEEPSEE
 # that field existed.
 garmin-sync: ## Sync the trailing GARMIN_SYNC_DAYS from Garmin against the real blob (DAYS=N to widen, needs GARMIN-EMAIL/PASSWORD in Key Vault)
 	STATE_CONTAINER_URL="$$(terraform -chdir=$(TF_DIR) output -raw state_container_url)" \
-		uv run gymlog garmin-sync $(if $(DAYS),--days $(DAYS))
+		uv run health garmin-sync $(if $(DAYS),--days $(DAYS))
 
 # Same STATE_CONTAINER_URL= pattern as `insight-local`: the local file, never
 # the real log, and GARMIN_EMAIL/GARMIN_PASSWORD resolve from the environment
 # first, so this needs no Key Vault either.
 garmin-sync-local: ## Sync the trailing GARMIN_SYNC_DAYS from Garmin against the local log (DAYS=N to widen, needs GARMIN_EMAIL/GARMIN_PASSWORD)
-	STATE_CONTAINER_URL= uv run gymlog garmin-sync $(if $(DAYS),--days $(DAYS))
+	STATE_CONTAINER_URL= uv run health garmin-sync $(if $(DAYS),--days $(DAYS))
 
 init: ## terraform init, without configuring the state backend
 	terraform -chdir=$(TF_DIR) init -backend=false

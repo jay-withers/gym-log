@@ -10,8 +10,8 @@ from appkit import headers
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import gymlog
-from gymlog.api.main import create_app
+import health
+from health.api.main import create_app
 
 
 @pytest.fixture
@@ -105,7 +105,7 @@ def test_form_action_defaults_to_self(client):
 
 TEMPLATES = sorted(
     p
-    for p in (Path(gymlog.__file__).parent / "templates").rglob("*.html")
+    for p in (Path(health.__file__).parent / "templates").rglob("*.html")
     if "email" not in p.parts
 )
 
