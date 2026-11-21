@@ -1,4 +1,4 @@
-# The nightly off-Azure backup (`gymlog backup`, src/gymlog/backup.py): an
+# The nightly off-Azure backup (`health backup`, src/health/backup.py): an
 # age-encrypted copy of the log in the cloudflare repo's R2 bucket, downloaded
 # again and decrypted with the drill key on every run to prove it restores.
 #

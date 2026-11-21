@@ -13,7 +13,7 @@ from collections.abc import Iterator
 import pytest
 from hypothesis import HealthCheck, settings
 
-from gymlog import settings as settings_module
+from health import settings as settings_module
 
 # Property tests (adapted from finances' conftest). `make test` locally runs
 # Hypothesis' default 100 examples; CI (CI=true) runs 1000. No deadline: a

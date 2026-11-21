@@ -1,4 +1,4 @@
-"""`gymlog backup`: the nightly encrypted copy to R2, and its proof that it restores.
+"""`health backup`: the nightly encrypted copy to R2, and its proof that it restores.
 
 R2 is an in-memory fake with the four S3 calls the job makes. The age keys are
 real, so a test that passes here has actually encrypted and decrypted.
@@ -15,10 +15,10 @@ import pyrage
 import pytest
 from pyrage import x25519
 
-from gymlog import backup, store
-from gymlog import settings as settings_module
-from gymlog.cli import main
-from gymlog.model import Log
+from health import backup, store
+from health import settings as settings_module
+from health.cli import main
+from health.model import Log
 
 OWNER = x25519.Identity.generate()
 DRILL = x25519.Identity.generate()

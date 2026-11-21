@@ -55,5 +55,7 @@ resource "azurerm_role_assignment" "deployer_secrets_officer" {
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = each.value
   principal_type       = "User"
-  description          = "Sets gym-log secret values by hand; see the gym-log README"
+  # Still says gym-log, the repo's old name: a role assignment's description
+  # can't change in place, and a replacement isn't worth a word.
+  description = "Sets gym-log secret values by hand; see the gym-log README"
 }

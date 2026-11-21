@@ -42,11 +42,11 @@ BLOB_NAME = "gymlog.json"
 
 # A cached Garmin login session (garth's OAuth tokens), reused across syncs so
 # the job does not have to re-authenticate with a password every run — see
-# gymlog.garmin. A second, small blob in the same container; no ETag dance, no
+# health.garmin. A second, small blob in the same container; no ETag dance, no
 # new IAM: the identity's container-scoped role already covers any blob name.
 GARMIN_SESSION_BLOB_NAME = "garmin-session.json"
 
-# The AI chat conversation — see gymlog.chat. Kept out of the log document on
+# The AI chat conversation — see health.chat. Kept out of the log document on
 # purpose: it is conversation, not training record, so it should neither grow
 # the one document this app cannot afford to lose nor race it for its ETag.
 CHAT_BLOB_NAME = "chat.json"
@@ -198,7 +198,7 @@ _LOCAL_SUFFIXES = {CHAT_BLOB_NAME: ".chat.json", GARMIN_SESSION_BLOB_NAME: ".gar
 def load_raw(name: str) -> bytes | None:
     """A document's bytes exactly as stored, or None if it has never been written.
 
-    For the backup (gymlog.backup), which must copy what is there rather than
+    For the backup (health.backup), which must copy what is there rather than
     what this version of the model would write back. Only absence is
     tolerated, as everywhere else in this module.
     """

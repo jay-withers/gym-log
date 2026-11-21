@@ -54,7 +54,7 @@ def _ready() -> None:
 def create_app() -> FastAPI:
     cfg = settings()
     app = FastAPI(
-        title="gym-log",
+        title="health",
         description="Twice-weekly full-body training log.",
         lifespan=lifespan,
         # No interactive docs: this serves HTML to one person, and an OpenAPI

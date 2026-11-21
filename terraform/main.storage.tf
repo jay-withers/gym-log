@@ -122,7 +122,7 @@ resource "azurerm_role_assignment" "identity_log_contributor" {
 }
 
 # The administrators can read and edit the log by hand — which is what
-# `gymlog import` and `gymlog show` do, running locally against the real blob.
+# `health import` and `health show` do, running locally against the real blob.
 resource "azurerm_role_assignment" "deployer_log_contributor" {
   for_each = toset(var.key_vault_administrator_object_ids)
 
@@ -130,5 +130,7 @@ resource "azurerm_role_assignment" "deployer_log_contributor" {
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = each.value
   principal_type       = "User"
-  description          = "Reads and edits the training log by hand (gymlog import/show)"
+  # Still names the CLI's old name: a role assignment's description can't
+  # change in place.
+  description = "Reads and edits the training log by hand (gymlog import/show)"
 }

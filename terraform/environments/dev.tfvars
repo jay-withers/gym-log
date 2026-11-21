@@ -2,7 +2,7 @@ environment = "dev"
 
 custom_domain_name = "health.jaywithers.uk"
 
-insight_email_from = "Gym log <insights@jaywithers.uk>"
+insight_email_from = "Health <insights@jaywithers.uk>"
 
 # The cloudflare repo's backup bucket, and the owner's age public key (its
 # private half is in their password manager, nowhere else).

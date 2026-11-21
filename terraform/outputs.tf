@@ -59,7 +59,7 @@ output "identity_client_id" {
 # What `make deploy` pushes onto the running revision, because `common_env` sits
 # under `ignore_changes` and Terraform will therefore never update it itself.
 output "state_container_url" {
-  description = "Blob container holding the training log, for `make deploy` and for `gymlog import` run locally."
+  description = "Blob container holding the training log, for `make deploy` and for `health import` run locally."
   value       = "${azurerm_storage_account.log.primary_blob_endpoint}${azurerm_storage_container.log.name}"
 }
 

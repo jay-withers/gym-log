@@ -418,10 +418,10 @@ class Insight:
 
 @dataclass(frozen=True)
 class GarminActivity:
-    """One Garmin-logged activity, synced by `gymlog.garmin.sync_garmin`.
+    """One Garmin-logged activity, synced by `health.garmin.sync_garmin`.
 
     `zone_seconds` is time in each heart rate reserve zone, counted by
-    `gymlog.garmin._zones` from the activity's heart rate samples — there is
+    `health.garmin._zones` from the activity's heart rate samples — there is
     no whole-day equivalent, so heart rate zones are always scoped to a
     workout. Empty rather than missing when that failed, so a partial sync
     still keeps the activity itself.
@@ -559,7 +559,7 @@ class GarminFitness:
 
     Unlike `GarminDay`'s steps/resting-HR/sleep/HRV, which Garmin genuinely
     answers per historical date, these two fields are read as Garmin's latest
-    reading rather than one for a given date — see `gymlog.garmin._fitness`.
+    reading rather than one for a given date — see `health.garmin._fitness`.
     So this is only ever created once per sync, for the day the sync actually
     ran, never backfilled for the rest of the trailing window the way a
     `GarminDay` is. A real trend still builds up over time, just from this

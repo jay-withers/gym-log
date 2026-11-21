@@ -1,5 +1,5 @@
 [project]
-name = "gymlog"
+name = "health"
 version = "0.1.0"
 description = "Twice-weekly full-body training log, with progression suggestions"
 requires-python = ">=3.12"
@@ -8,7 +8,7 @@ requires-python = ">=3.12"
 # model, the store and the progression rule, so splitting them would mean three
 # builds of near-identical layers.
 dependencies = [
-  # Shared with career, finances and gym-log: security headers, the passcode
+  # Shared with career, finances and health: security headers, the passcode
   # gate, secret resolution, the backup and selfcheck (jay-withers/appkit).
   # Installed from a git tag, set in [tool.uv.sources] below.
   "appkit[azure,backup,web]",
@@ -52,7 +52,7 @@ dev = [
 # What the Dockerfile's ENTRYPOINT resolves to. Terraform sets no `command`, so
 # this name lives in exactly one place.
 [project.scripts]
-gymlog = "gymlog.cli:main"
+health = "health.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -66,7 +66,7 @@ build-backend = "hatchling.build"
 appkit = { git = "https://github.com/jay-withers/appkit", tag = "v0.7.0" }
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/gymlog"]
+packages = ["src/health"]
 
 [tool.ruff]
 line-length = 100

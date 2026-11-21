@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from gymlog import garmin, store
+from health import garmin, store
 
 
 class _FakeInnerClient:

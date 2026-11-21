@@ -21,7 +21,7 @@ from datetime import date
 
 import pytest
 
-from gymlog.importer import (
+from health.importer import (
     _column,
     _rep_range,
     _rep_targets,
@@ -160,7 +160,7 @@ def test_a_workbook_with_too_many_sheets_is_refused(monkeypatch):
     session, which is worse than refusing the file.
     """
     monkeypatch.setattr(
-        "gymlog.importer.read_workbook",
+        "health.importer.read_workbook",
         lambda _path: {"Mon": [[]], "Wed": [[]], "Fri": [[]]},
     )
     with pytest.raises(ValueError, match="worksheets"):
@@ -168,7 +168,7 @@ def test_a_workbook_with_too_many_sheets_is_refused(monkeypatch):
 
 
 def test_an_empty_workbook_is_refused(monkeypatch):
-    monkeypatch.setattr("gymlog.importer.read_workbook", lambda _path: {})
+    monkeypatch.setattr("health.importer.read_workbook", lambda _path: {})
     with pytest.raises(ValueError, match="no worksheets"):
         import_workbook("whatever.xlsx")
 

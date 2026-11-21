@@ -1,4 +1,4 @@
-"""What a person does with gym-log, in a real browser."""
+"""What a person does with health, in a real browser."""
 
 from __future__ import annotations
 

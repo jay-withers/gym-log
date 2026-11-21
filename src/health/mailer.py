@@ -1,6 +1,6 @@
 """Email the weekly insight, through Resend.
 
-Only the scheduled run sends (`gymlog insight --email`, from the Azure insight
+Only the scheduled run sends (`health insight --email`, from the Azure insight
 job). The web app's "generate now" button doesn't: whoever pressed
 it is already looking at the result.
 
@@ -49,7 +49,7 @@ def send_insight(insight: Insight) -> None:
             "Authorization": f"Bearer {secret('RESEND-API-KEY')}",
             # Resend sits behind Cloudflare, which rejects urllib's default
             # `Python-urllib/3.x` User-Agent with a 403 before Resend sees it.
-            "User-Agent": "gymlog",
+            "User-Agent": "health",
             # A rerun of the same insight (systemd retrying, a hand rerun after
             # a timeout that actually delivered) can't send it twice.
             "Idempotency-Key": f"insight-{insight.id}",

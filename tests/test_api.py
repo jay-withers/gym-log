@@ -10,10 +10,10 @@ from fastapi.testclient import TestClient
 from hypothesis import example, given
 from hypothesis import strategies as st
 
-from gymlog import chat, store
-from gymlog import settings as settings_module
-from gymlog.api.main import create_app
-from gymlog.api.routes import (
+from health import chat, store
+from health import settings as settings_module
+from health.api.main import create_app
+from health.api.routes import (
     _chosen_range,
     _fitness_chart,
     _hours_label,
@@ -24,7 +24,7 @@ from gymlog.api.routes import (
     _ticks,
     _trends,
 )
-from gymlog.model import Block, Day, Log, SetLog
+from health.model import Block, Day, Log, SetLog
 
 from .factories import (
     block,
@@ -596,7 +596,7 @@ def test_an_unticked_untimed_finisher_is_not_recorded(client, seeded):
     ],
 )
 def test_the_time_field_takes_what_a_phone_keyboard_makes_easy(typed, expected):
-    from gymlog.api.routes import _seconds
+    from health.api.routes import _seconds
 
     assert _seconds(typed) == expected
 
@@ -669,6 +669,18 @@ def test_falling_short_still_shows_on_the_stripped_card(client, seeded):
 
 
 # --- the draft held on the phone ---------------------------------------------
+
+
+def test_the_draft_keeps_its_key_from_before_the_rename(client, seeded):
+    """A draft on the phone is stored under `gymlog:draft:<form action>`.
+
+    The app was gym-log until 2026-11-21. A new key would leave every draft
+    typed before a release unread, which loses the sets it held.
+    """
+    login(client)
+    assert (
+        "var key = 'gymlog:draft:' + form.getAttribute('action');" in client.get("/session/A").text
+    )
 
 
 def test_the_form_reports_that_nothing_is_logged_yet(client, seeded):
@@ -855,7 +867,7 @@ def test_every_page_says_how_to_get_started_before_the_first_import(client):
     for path in ("/strength", "/block"):
         response = client.get(path)
         assert response.status_code == 200
-        assert "gymlog import" in response.text
+        assert "health import" in response.text
 
 
 def test_rotating_with_no_block_to_rotate_goes_home(client):
@@ -1502,7 +1514,7 @@ def test_ai_insights_page_when_empty(client, seeded):
 def test_generate_insight_now_calls_deepseek_and_redirects_back(client, seeded, monkeypatch):
     """The button's route, not the scheduled job — mocked the same way test_cli.py mocks it."""
     monkeypatch.setattr(
-        "gymlog.insights.generate_insight",
+        "health.insights.generate_insight",
         lambda log: insight(summary="Fresh from the button."),
     )
     login(client)
@@ -1541,7 +1553,7 @@ def test_chat_is_behind_the_gate(client):
 
 def test_sending_a_chat_message_saves_both_sides_and_redirects_back(client, seeded, monkeypatch):
     login(client)
-    monkeypatch.setattr("gymlog.insights.complete", lambda messages: "Rest up tonight.")
+    monkeypatch.setattr("health.insights.complete", lambda messages: "Rest up tonight.")
 
     response = client.post("/chat", data={"message": "Legs are sore"})
 
@@ -1555,7 +1567,7 @@ def test_sending_a_chat_message_saves_both_sides_and_redirects_back(client, seed
 def test_a_blank_chat_message_is_not_sent(client, seeded, monkeypatch):
     login(client)
     monkeypatch.setattr(
-        "gymlog.insights.complete", lambda messages: pytest.fail("should not be called")
+        "health.insights.complete", lambda messages: pytest.fail("should not be called")
     )
 
     response = client.post("/chat", data={"message": "   "})
@@ -1570,7 +1582,7 @@ def test_a_failed_chat_reply_is_a_502_and_saves_nothing(client, seeded, monkeypa
     def boom(_messages):
         raise OSError("deepseek down")
 
-    monkeypatch.setattr("gymlog.insights.complete", boom)
+    monkeypatch.setattr("health.insights.complete", boom)
 
     response = client.post("/chat", data={"message": "hello"})
 
@@ -2163,7 +2175,7 @@ def test_garmin_page_when_empty(client, seeded):
 
 def test_sync_garmin_now_calls_garmin_and_redirects_back(client, seeded, monkeypatch):
     synced_activity = garmin_activity(id="a1", activity_type="swimming")
-    monkeypatch.setattr("gymlog.garmin.sync_garmin", lambda: ([synced_activity], [], []))
+    monkeypatch.setattr("health.garmin.sync_garmin", lambda: ([synced_activity], [], []))
     login(client)
 
     response = client.post("/garmin/sync", follow_redirects=False)
@@ -2181,7 +2193,7 @@ def test_sync_garmin_now_reports_a_friendly_error_when_garmin_is_unreachable(
     def _boom() -> tuple[list, list, list]:
         raise RuntimeError("Garmin said no")
 
-    monkeypatch.setattr("gymlog.garmin.sync_garmin", _boom)
+    monkeypatch.setattr("health.garmin.sync_garmin", _boom)
     login(client)
 
     response = client.post("/garmin/sync")
@@ -2199,7 +2211,7 @@ def test_request_values_cannot_forge_log_lines():
     Without it an exercise named "Squat\\nINFO recorded Deadlift" would write a
     second, forged-looking entry into the logs.
     """
-    from gymlog.api.routes import _loggable
+    from health.api.routes import _loggable
 
     assert _loggable("Squat\r\nINFO forged") == "SquatINFO forged"
     assert _loggable("2026-10-14") == "2026-10-14"
@@ -2390,7 +2402,7 @@ def test_fitness_insights_glance_shows_body_battery_readiness_and_load(client, s
 
 
 def test_load_balance_bands():
-    from gymlog.api.routes import _load_balance
+    from health.api.routes import _load_balance
 
     def level(acute, chronic):
         return _load_balance(garmin_fitness(acute_load=acute, chronic_load=chronic))
@@ -2403,7 +2415,7 @@ def test_load_balance_bands():
 
 
 def test_intensity_minutes_count_this_calendar_week_including_today():
-    from gymlog.api.routes import _intensity_week
+    from health.api.routes import _intensity_week
 
     today = date(2026, 10, 23)  # a Friday
     log = Log(
@@ -2490,14 +2502,14 @@ def _strength_log(today: date) -> Log:
 
 
 def test_e1rm_is_epley_and_zero_for_an_unloaded_set():
-    from gymlog.api.routes import _e1rm
+    from health.api.routes import _e1rm
 
     assert _e1rm(SetLog(reps=8, weight=105.0)) == pytest.approx(133.0)
     assert _e1rm(SetLog(reps=10, weight=0.0)) == 0.0
 
 
 def test_e1rm_by_exercise_is_the_current_block_only_in_slot_order():
-    from gymlog.api.routes import _e1rm_by_exercise
+    from health.api.routes import _e1rm_by_exercise
 
     log = _strength_log(date(2026, 10, 23))
     by_exercise = _e1rm_by_exercise(log, log.current_block)
@@ -2507,7 +2519,7 @@ def test_e1rm_by_exercise_is_the_current_block_only_in_slot_order():
 
 
 def test_e1rm_never_joins_two_movements_sharing_a_slot():
-    from gymlog.api.routes import _e1rm_by_exercise
+    from health.api.routes import _e1rm_by_exercise
 
     started = "2026-10-05"
     log = Log(
@@ -2521,7 +2533,7 @@ def test_e1rm_never_joins_two_movements_sharing_a_slot():
 
 
 def test_volume_is_reps_times_weight_per_calendar_week():
-    from gymlog.api.routes import _volume_chart
+    from health.api.routes import _volume_chart
 
     today = date(2026, 10, 23)
     chart = _volume_chart(_strength_log(today), today)
@@ -2532,7 +2544,7 @@ def test_volume_is_reps_times_weight_per_calendar_week():
 
 
 def test_adherence_counts_this_blocks_sessions_against_its_days():
-    from gymlog.api.routes import _adherence
+    from health.api.routes import _adherence
 
     today = date(2026, 10, 23)
     log = _strength_log(today)
@@ -2548,7 +2560,7 @@ def test_adherence_counts_this_blocks_sessions_against_its_days():
 
 
 def test_stalled_uses_the_session_screens_rule():
-    from gymlog.api.routes import _stalled
+    from health.api.routes import _stalled
 
     log = _strength_log(date(2026, 10, 23))
     stalled = _stalled(log, log.current_block)
@@ -2560,7 +2572,7 @@ def test_a_movement_on_both_days_stalls_once():
     """One movement has one last outing: listed once, not once per day."""
     from dataclasses import replace
 
-    from gymlog.api.routes import _stalled
+    from health.api.routes import _stalled
 
     log = _strength_log(date(2026, 10, 23))
     current = log.current_block
@@ -2572,7 +2584,7 @@ def test_a_movement_on_both_days_stalls_once():
 
 
 def test_recent_prs_beat_every_earlier_session_across_blocks():
-    from gymlog.api.routes import _recent_prs
+    from health.api.routes import _recent_prs
 
     today = date(2026, 10, 23)
     prs = _recent_prs(_strength_log(today), today)
@@ -2843,7 +2855,7 @@ def test_a_write_the_store_refuses_is_a_422(client, seeded, monkeypatch):
     """The backstop: a route bug the form checks missed is refused at save."""
     login(client)
     monkeypatch.setattr(
-        "gymlog.integrity.check",
+        "health.integrity.check",
         lambda log: ["sessions (date 2026-09-15, day A): recorded 2 times"] if log.sessions else [],
     )
     response = client.post(
@@ -2855,7 +2867,7 @@ def test_a_write_the_store_refuses_is_a_422(client, seeded, monkeypatch):
 
 def test_the_form_stops_the_same_typos_before_they_are_sent(client, seeded):
     """The browser's limits match the server's, so a typo rarely reaches a 422."""
-    from gymlog.api.routes import MAX_LOAD_KG, MAX_REPS
+    from health.api.routes import MAX_LOAD_KG, MAX_REPS
 
     login(client)
     page = client.get("/session/A").text

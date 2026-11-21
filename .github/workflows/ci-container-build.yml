@@ -70,7 +70,7 @@ jobs:
     uses: jay-withers/workflows/.github/workflows/docker.yml@b9a1e595d7b6ec2d00d6bce65abc7a11c4f319f6 # v1.31.1
     with:
       images: |
-        [{"name": "gymlog", "context": "."}]
+        [{"name": "health", "context": "."}]
       failure-issue: ${{ github.event_name != 'pull_request' }}
 
   # The required status check ("container-build"). Skipped counts as success,

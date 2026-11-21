@@ -1,4 +1,4 @@
-"""One entrypoint — `gymlog serve|import|show|seed|insight|garmin-sync|backup|selfcheck`.
+"""One entrypoint — `health serve|import|show|seed|insight|garmin-sync|backup|selfcheck`.
 
 `serve` is the workload; `import` and `show` are operator commands that run
 against the real blob, so they need `STATE_CONTAINER_URL` and a credential with
@@ -34,7 +34,7 @@ def _configure_logging() -> None:
 
     The Container Apps environment already ships stdout to Log Analytics, where
     `daily_quota_gb = 0.15` is shared with every other tenant on the platform.
-    `telemetry.configure()` then exports this same `gymlog` logger to Application
+    `telemetry.configure()` then exports this same `health` logger to Application
     Insights when a connection string is present, so a line logged here is paid
     for twice — keep it that way round rather than logging more because one of
     the two destinations happens to be quiet.
@@ -66,7 +66,7 @@ def _terminate(signum: int, _frame: object) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="gymlog")
+    parser = argparse.ArgumentParser(prog="health")
     sub = parser.add_subparsers(dest="command", required=True)
 
     serve = sub.add_parser("serve", help="run the web application")
@@ -162,7 +162,7 @@ def _serve(args: argparse.Namespace) -> int:
     import uvicorn
 
     uvicorn.run(
-        "gymlog.api.main:app",
+        "health.api.main:app",
         host=args.host,
         port=args.port,
         reload=args.reload,
@@ -182,7 +182,7 @@ def _import(args: argparse.Namespace) -> int:
 
     log = store.update(lambda current: current.with_block(block))
     counts = ", ".join(f"{k}: {len(d.exercises)}" for k, d in sorted(block.days.items()))
-    logging.getLogger("gymlog").info(
+    logging.getLogger("health").info(
         "imported block %s (%s) — %s; %d block(s) now recorded",
         block.id,
         block.name,
@@ -205,7 +205,7 @@ def _seed(args: argparse.Namespace) -> int:
     from .seed import sample_log
 
     if settings().state_container_url:
-        logging.getLogger("gymlog").error(
+        logging.getLogger("health").error(
             "refusing to seed: STATE_CONTAINER_URL is set, and this would overwrite "
             "the real log with invented sessions. Run it without that variable."
         )
@@ -213,14 +213,14 @@ def _seed(args: argparse.Namespace) -> int:
 
     path = store.local_path()
     if path.exists() and not args.force:
-        logging.getLogger("gymlog").error(
+        logging.getLogger("health").error(
             "refusing to seed: %s already exists. Pass --force to replace it.", path
         )
         return 1
 
     log = sample_log()
     store.save(log)
-    logging.getLogger("gymlog").info(
+    logging.getLogger("health").info(
         "seeded %s — %d block(s), %d session(s)", path, len(log.blocks), len(log.sessions)
     )
     return 0
@@ -241,7 +241,7 @@ def _insight(email: bool = False) -> int:
     log, _etag = store.load()
     insight = generate_insight(log)
     store.update(lambda current: current.with_insight(insight))
-    logging.getLogger("gymlog").info("recorded insight for week of %s", insight.week_of)
+    logging.getLogger("health").info("recorded insight for week of %s", insight.week_of)
 
     # Saved first: a failed send must not lose the insight, but it still fails
     # the run, so the timer's unit shows it rather than the week going quiet.
@@ -249,7 +249,7 @@ def _insight(email: bool = False) -> int:
         from .mailer import send_insight
 
         send_insight(insight)
-        logging.getLogger("gymlog").info("emailed insight for week of %s", insight.week_of)
+        logging.getLogger("health").info("emailed insight for week of %s", insight.week_of)
     return 0
 
 
@@ -268,7 +268,7 @@ def _garmin_sync(days: int | None = None) -> int:
             activities, days_synced, keep_since, synced_at, fitness
         )
     )
-    logging.getLogger("gymlog").info(
+    logging.getLogger("health").info(
         "synced %d activities, %d days from garmin", len(activities), len(days_synced)
     )
     return 0
